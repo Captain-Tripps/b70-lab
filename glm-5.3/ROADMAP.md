@@ -43,18 +43,30 @@ benchmark. Full detail remains in [HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-
 | quality | `squal.py` 4/4 pass |
 | speed | `sbench.py --n 512 --rounds 2 --long 30000`: **mean decode 25.0 tok/s** (rounds 2+, 7 replies, range 19.9-29.2); long read 31,066 prompt tokens in 145 s = 214 tok/s prompt; decode right after the 31k prompt: 15.4 tok/s (depth penalty, baseline for the Depth scoreboard) |
 
-B0 proves the 128k configuration lives on the degraded host with the heartbeat on. The live llama-swap GLM entry
-still lacks the heartbeat; patching it requires a llama-swap restart, which is gated on the operator's stated
-downtime tolerance for the eight served models.
+B0 proves the 128k configuration lives on the degraded host with the heartbeat on. The heartbeat has since been
+added to the live llama-swap GLM entry (2026-10-21, operator-approved): llama-swap runs `--watch-config`
+(poll 2 s), so the edit hot-reloaded with **zero downtime** - no restart was ever needed. Backup:
+`config.windows.yaml.bak-20261021`. All 21 model entries now carry the heartbeat.
+
+### Hill climb from B0 (2026-10-21, A/B/B/A closed)
+
+Full log: [HILLCLIMB-2026-10-21.md](./HILLCLIMB-2026-10-21.md). Headlines:
+
+- Decode is **flat at 25.0 +- 0.3 tok/s** across KV quant, MTP n6, `-t 32`, pipeline queue 8, and ub arms;
+  B0 repeat at close measured 25.1 (no drift). These knobs are exhausted; the plateau is structural.
+- **Prompt rate is not flat: `-ub 1024` gives 214 -> 259 tok/s (+21%), 31k ttft 146 s -> 120 s**, quality
+  4/4, no decode cost. Peak card 30.22 GB under the 32 GB cliff. The old config comment "ub 1024 spills,
+  prompts 20x slower" did **not** reproduce on build 251 at this `-ts` - folklore, treat comments as hypotheses.
+- Recommended production change (pending operator go): live GLM entry `-ub 512` -> `-ub 1024`, applied the
+  same hot-reload way; fallback `-ub 768` (234 tok/s, 2.6 GB more headroom) if any future change eats the margin.
+- Heartbeat validated at campaign scale: 300 s zero-request soak on eight runs, every one answered in 0.5 s
+  with flat VRAM.
 
 ### Revised immediate lane
 
-1. B0 confirmed at **25.0 tok/s** with `squal` 4/4 and idle survival. Next: add
-   `GGML_SYCL_IDLE_HEARTBEAT_SEC=30` to the live llama-swap GLM entry (requires a llama-swap restart and reload of
-   all eight served models; gated on operator go-ahead).
-2. Resume the hill climb from B0 as the baseline: per-card `-ts` search that keeps every card inside dedicated
-   VRAM, `-ub` A/B, MTP policy arms. Heartbeat on and warm keepalive in **every** arm; one variable per arm;
-   A/B/B/A ordering.
+1. ~~Heartbeat into the live llama-swap GLM entry~~ **done** (hot-reload via `--watch-config`, no restart).
+2. ~~Hill climb from B0: `-ub` A/B, MTP policy arms~~ **done** (see campaign above). Pending operator go:
+    production `-ub 1024` patch + fix the stale ub-1024 comment in the config.
 3. No kernel work, no ESIMD debate, no upstream bisect until the CPU replacement lands and the memory inventory is
    restated.
 4. Every benchmark starts from an idle-machine manifest. `bench/arm.ps1` now enforces the preflight
