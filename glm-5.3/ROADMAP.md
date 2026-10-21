@@ -1,5 +1,8 @@
 # GLM-5.3 on 4× B70: Hill-Climbing Roadmap
 
+**New session? Start at [HANDOFF-2026-10-21.md](./HANDOFF-2026-10-21.md)** - state of the world, next steps in
+order, tool md5s, and the gotcha list in one page.
+
 ## Current checkpoint — updated 2026-10-21 (later)
 
 **Read first: the machine changed underneath the 2026-10-20 sprint.** The earlier checkpoint in this file and
