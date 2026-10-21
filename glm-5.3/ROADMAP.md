@@ -1,5 +1,9 @@
 # GLM-5.3 on 4× B70: Hill-Climbing Roadmap
 
+## Current checkpoint
+
+The first execution sprint is recorded in [HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-20.md). The key finding is an approximately 99 GB first-request host working-set cliff: `r67c` is viable at 16k with `-b 512 -ub 128` (23.4 tok/s), while the staged current-upstream build regresses and fails the same watchdog gate. Treat memory attribution and the build-702→739 bisect as the active lane before further kernel work.
+
 This roadmap starts from the measured `g10` / rebased `r67c` state in
 [`b70-lab/glm-5.3`](https://github.com/Captain-Tripps/b70-lab/tree/main/glm-5.3): Maya-M, 4× Arc Pro B70,
 128k context, one expert layer on CPU, about 24–25 tok/s on prose, 33–35 tok/s on copy-heavy edits, and
