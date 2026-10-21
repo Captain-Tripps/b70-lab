@@ -1,55 +1,77 @@
 # GLM-5.3 on 4× B70: Hill-Climbing Roadmap
 
-## Current checkpoint — updated 2026-10-21
+## Current checkpoint — updated 2026-10-21 (later)
 
-The first execution sprint is recorded in [HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-20.md).
-That document remains the detailed experiment log, but the following corrections and later findings supersede its
-working diagnosis.
+**Read first: the machine changed underneath the 2026-10-20 sprint.** The earlier checkpoint in this file and
+[HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-20.md) blamed a build/launch regression for the first-request memory
+deaths. That conclusion is contaminated; the section below supersedes it.
 
-### Verified findings
+### Environment correction — the "memory regression" was hardware plus idle demotion
 
-- The known-good `r67c` result remains the best validated arm: 16k context, `-b 512 -ub 128`, semantic quality
-  passing, and 23.4 tok/s mean decode on the fixed two-round benchmark.
-- The staged current build (`b739`, commit `429852e27`) fails the DIO first-request memory gate at the same 16k
-  settings: approximately 118.1 GB private bytes, 98.3 GB working set, and 4.94 GB available when the watchdog kills
-  it.
-- A minimal current-upstream build (`b735`, commit `909ca928e`) reproduces that first-request failure at
-  approximately 118.1 GB private bytes and 97.0 GB working set. This makes the newer upstream base or runtime
-  residency behavior more suspicious than the later MTP patch stack, but it is not yet a completed source bisect.
-- Reverting upstream ESIMD restoration (#30239), or disabling ESIMD at runtime, made load residency worse. ESIMD is
-  therefore not the root cause by itself and currently helps the model fit farther into initialization.
-- The attempted reordered-`GET_ROWS` (#30430) isolation on October 21 is invalid: Strata had auto-started and was
-  consuming about 63 GB of host RAM. Do not use that result.
-- The host-memory cliff is sensitive to machine noise. With Strata stopped, a DIO arm was still killed during load
-  at 4.87 GB available, 109.4 GB private bytes, and 92.9 GB working set. No A/B result is valid unless the starting
-  process list and available RAM are captured and identical.
-- `--load-mode none` is a verified operational fallback for the current `b739/429852e27` runtime at 16k:
-  the first request returned HTTP 200, produced the exact requested answer, decoded at 17.18 tok/s, processed the
-  short prompt at 1.22 tok/s, accepted 7 of 10 drafted tokens, and remained healthy. It is stable enough for
-  diagnosis but is not a performance winner.
-- Runtime directory names are not trustworthy identifiers. A directory labeled `r67` reported fingerprint
-  `b739-429852e27`. Every arm must record `llama-server --version`, the API fingerprint, and hashes of
-  `llama-server.exe`, `ggml-sycl.dll`, `llama.dll`, and `llama-server-impl.dll` before launch.
-- Old source commit `14897007d` was reconstructed and built with oneAPI 2026 after applying only its required
-  compile repairs. It is staged as `master-797de63-r67-rebuilt-current-toolchain`, but it has not received a valid
-  clean-memory benchmark.
+- `WHEA-Logger` Id 22 ("A fatal hardware error has occurred. Component: Memory, Error Source: BOOT, Error Type: 15")
+  fires on **every boot** of GPU-BOX: 10/14 four times, then 10/17, 10/19, 10/21. The fault is on the CPU socket;
+  reseating DIMMs did nothing and a replacement CPU is on order.
+- Host RAM inventory changed mid-sprint: 7×16 GB Micron down to 6×16 GB Kingston DDR4-2133, 95.9 GB visible
+  (was ~112). Any A/B across that boundary compares two different machines.
+- Therefore: `b739`-fails-vs-`r67c`-passes, the `b735` suspicion, the ESIMD attribution, and the planned 32-commit
+  upstream bisect are all **void**. Do not bisect until the hardware baseline is restated.
+- Prime suspect for the first-request memory cliff is the documented idle-VRAM demotion in
+  [hardware-and-windows-notes.md](../hardware-and-windows-notes.md): ~70 s after a llama-server idles, the Arc
+  driver pulls its VRAM into system RAM at ~1 GB/s until the RAM watchdog kills it. Bench arms idled between load
+  and the first quality request and died; the production GLM entry survived because live traffic kept it warm.
+  - The live llama-swap config has 20 heartbeat entries and the GLM entry was the **only** model missing
+    `GGML_SYCL_IDLE_HEARTBEAT_SEC=30`.
+  - The recorded "167 s cold first-request page-in" is the demotion signature.
+  - "98 GB working set / 118 GB private bytes" mixes commit charge with residency: a healthy arm shows 123 GB
+    private bytes over a 4.5 GB working set. Private bytes is not a valid kill metric.
+
+Facts from the earlier checkpoint that are **not** invalidated by this, and stay in force: runtime directory names
+lie (fingerprint before launch, every time); Strata auto-starting mid-run contaminated at least one arm (capture an
+idle-machine manifest); `--load-mode none` exists as a stability fallback at 16k (~17 tok/s, not a winner); the
+rebuilt old-source tree `master-797de63-r67-rebuilt-current-toolchain` is staged but has never had a clean-memory
+benchmark. Full detail remains in [HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-20.md) under its contamination notice.
+
+### B0 — first valid arm under the corrected theory (2026-10-21)
+
+| item | value |
+|---|---|
+| runtime | staged `g10` on disk: `llama-server.exe` md5 `4a2aaefcc5337a2cc62a0e3b76339555`, `ggml-sycl.dll` md5 `62b6397beff0ff54bc1f8c2c4db1ac07`; version banner says build 251 commit `4cc67bb7f` — the directory name (`master-66041e-b70dsv4-g10`) lies, per the standing rule |
+| config | Maya-M IQ2_S, `-c 131072`, `-ts 26.3,23.8,22.8,27.1`, `-b 2048 -ub 512`, `-fa on`, DIO, MTP `draft-mtp n=4 p_min=0.75`, `blk\.44\.ffn_.*_exps\.weight=CPU`, `GGML_SYCL_IDLE_HEARTBEAT_SEC=30`, port 9071 (not the live 9061 proxy) |
+| load | ~8.5 min on the degraded 96 GB box; 105.3 GB on-card within 45 s of launch |
+| steady state | VRAM 114.6 GB total / 28.9 GB max card; working set 4.5 GB; ~76 GB host RAM free |
+| idle soak | 300 s with zero requests: VRAM flat at 114.58 GB, first request after idle answered in **0.5 s** |
+| quality | `squal.py` 4/4 pass |
+| speed | `sbench.py --n 512 --rounds 2 --long 30000`: **mean decode 25.0 tok/s** (rounds 2+, 7 replies, range 19.9-29.2); long read 31,066 prompt tokens in 145 s = 214 tok/s prompt; decode right after the 31k prompt: 15.4 tok/s (depth penalty, baseline for the Depth scoreboard) |
+
+B0 proves the 128k configuration lives on the degraded host with the heartbeat on. The live llama-swap GLM entry
+still lacks the heartbeat; patching it requires a llama-swap restart, which is gated on the operator's stated
+downtime tolerance for the eight served models.
 
 ### Revised immediate lane
 
-1. Inventory and hash every staged runtime; identify the genuine archived build-702 artifacts.
-2. Capture an idle-machine manifest and require enough host-memory margin to remain above the 6 GB watchdog floor.
-3. Run only the archived build-702 versus rebuilt-old-source A/B, with identical DLL sets and launch arguments.
-4. If rebuilt old source regresses, isolate compiler/runtime artifacts before touching upstream source.
-5. If rebuilt old source passes, resume a source bisect between `797de63b2` and `3bb63cbcb`.
-6. Do not begin new kernel work until this attribution is complete.
+1. B0 confirmed at **25.0 tok/s** with `squal` 4/4 and idle survival. Next: add
+   `GGML_SYCL_IDLE_HEARTBEAT_SEC=30` to the live llama-swap GLM entry (requires a llama-swap restart and reload of
+   all eight served models; gated on operator go-ahead).
+2. Resume the hill climb from B0 as the baseline: per-card `-ts` search that keeps every card inside dedicated
+   VRAM, `-ub` A/B, MTP policy arms. Heartbeat on and warm keepalive in **every** arm; one variable per arm;
+   A/B/B/A ordering.
+3. No kernel work, no ESIMD debate, no upstream bisect until the CPU replacement lands and the memory inventory is
+   restated.
+4. Every benchmark starts from an idle-machine manifest. `bench/arm.ps1` now enforces the preflight
+   (no resident server, adapters under 1 GB, RAM margin), fingerprints the runtime before launch, samples
+   PDH counters during the run, and locks one arm per tag.
 
 ### Agent operating rules learned
 
 - Never infer activity from a launched PID; verify the process, endpoint health, and watchdog log.
 - Never report a benchmark while an unrelated model server is resident.
-- Do not shut down WSL after launching a Windows child from that session; it terminates the child and invalidates the
-  run.
+- Do not shut down WSL after launching a Windows child from that session; WMI process creation
+  (`Invoke-CimMethod Win32_Process Create`) survives session teardown, an SSH child does not.
 - Keep one experiment active at a time and publish a result only after survival, correctness, and fingerprint checks.
+- A failed launch's watchdog/wrapper can outlive the arm and write to the next run's record files. Arm tags are
+  locked per process (`<tag>.lock`); `bench/kill-arm.ps1 -Tag <tag>` stops all of an arm's processes.
+- Before believing any memory number on this box: check `WHEA-Logger` Id 22 and installed-RAM count. They changed
+  under the experiment without any software touch.
 
 This roadmap starts from the measured `g10` / rebased `r67c` state in
 [`b70-lab/glm-5.3`](https://github.com/Captain-Tripps/b70-lab/tree/main/glm-5.3): Maya-M, 4× Arc Pro B70,

@@ -14,6 +14,14 @@ load and my RAM watchdog killed the server. Observed for llama.cpp's Flash-Next,
   when no graph has run for 30 s ([llama.cpp-sycl/fork/misc/patch_idle_heartbeat.py](llama.cpp-sycl/fork/misc/patch_idle_heartbeat.py)).
   With it: 5+ minutes idle, RAM flat, first request after idle 1-3 s.
 - Driver 8805 when found; not re-checked without the heartbeat on 8976.
+- Re-validated 2026-10-21 on driver 8976 with the 105 GB GLM-5.3 Maya-M arm (4 cards, 128k context, 96 GB host
+  RAM): a 300 s idle soak with the heartbeat on held dedicated VRAM dead flat (114.58 GB total) with a working set
+  of 4.5 GB, and the first request after idle answered in 0.5 s. Without the heartbeat, the same class of arm paid a
+  167 s page-in on its first request after idle ([glm-5.3/HILLCLIMB-2026-10-20.md](glm-5.3/HILLCLIMB-2026-10-20.md)).
+  The heartbeat string is present in `ggml-sycl.dll` of every runtime I checked; it costs nothing to set.
+- Gotcha that survived three days of debugging: on GPU-BOX, 19 of 20 llama-swap model entries set
+  `GGML_SYCL_IDLE_HEARTBEAT_SEC=30`; exactly one did not - the production GLM entry - and that was the model that
+  kept dying. Grep your config before blaming the next build.
 
 ## Silent spill into system RAM when a config does not fit
 
@@ -29,6 +37,28 @@ load and my RAM watchdog killed the server. Observed for llama.cpp's Flash-Next,
 - Per-process VRAM: `Get-Counter '\GPU Process Memory(*)\Dedicated Usage'`.
 - llama.cpp's automatic fit can over-project and pack cards lopsided; check per-card memory after load and look for
   `fit_params` in the server log. For big multi-card models I pin placement with `-fit off -ngl 99 -ts ...`.
+
+## Private bytes is not physical RAM
+
+- A perfectly healthy GLM arm sat at 123 GB of **private bytes** while its physical working set was 4.5 GB and
+  76 GB of host RAM was free. llama.cpp's big multi-card allocations reserve address space against GPU memory, so
+  commit charge balloons with no RAM behind it. Reading private bytes as "memory used" fails healthy runs; an
+  earlier watchdog design did exactly that and burned a week of A/B tests on it.
+- Judge an arm by: available physical RAM, the process **working set**, and per-adapter dedicated VRAM from
+  `Get-Counter '\GPU Adapter Memory(*)\Dedicated Usage'`. If dedicated VRAM total collapses while the server is
+  idle, that is driver demotion, not a leak.
+
+## WHEA Id 22 on every boot - degraded memory path (2026-10-21)
+
+- GPU-BOX logs `WHEA-Logger` Id 22, "A fatal hardware error has occurred. Component: Memory, Error Source: BOOT,
+  Error Type: 15" on **every boot** (four times on Oct 14, again Oct 17, 19, 21). Reseating DIMMs did nothing; the
+  fault is on the CPU socket, and a replacement CPU is on order.
+- Visible RAM dropped from 128 GB (7x16 Micron) to 95.9 GB (6x16 Kingston `36ASF2G72PZ-2G1A2` DDR4-2133). WMI on
+  this board reports `DeviceLocator` "DIMM 0" for everything and blank `SMBIOSMemoryHandle`, so you cannot map
+  sticks to channels from WMI - believe the count, not the labels.
+- Any build A/B that crosses that boundary is comparing two different machines. This single fact invalidated the
+  "memory regression" hunt recorded in [glm-5.3/ROADMAP.md](glm-5.3/ROADMAP.md). Check `WHEA-Logger` and installed
+  RAM **before** believing any memory cliff on this box.
 
 ## Building llama.cpp SYCL on Windows
 

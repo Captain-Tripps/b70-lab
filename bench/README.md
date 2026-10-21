@@ -15,6 +15,53 @@ Both talk to any OpenAI-compatible server (llama-server, Strata, ...) and need o
 Note: the published `sbench.py` uses a different fiction prompt than the one behind the 2026-10-16 numbers in this
 repo (the original prompt was replaced). The other six prompts are the same; expect the fiction number to move a bit.
 
+## Arm runner: `arm.ps1` + `kill-arm.ps1`
+
+`arm.ps1` starts one llama.cpp arm on the Windows host with preflight, runtime fingerprinting, PDH sampling and a
+RAM-floor watchdog, and writes every record into `%USERPROFILE%\AI\logs\arms\<tag>.*`. It runs on Windows
+(from WSL use `cmd.exe /c "powershell.exe ..."` or a UNC path), and must be launched so session teardown cannot
+kill it — create it through WMI:
+
+```powershell
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+  CommandLine = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\AI\arms\launch-b0.ps1' }
+```
+
+```powershell
+arm.ps1 -Runtime <runtime dir> -ArgsFile <server args file> -Port 9071 -Tag <tag>
+        [-Env NAME=VALUE ...] [-MinFreeGB 8] [-DemoteGB 60] [-LoadTimeoutMin 45]
+        [-IdleSoakSec 300] [-WatchMin 0] [-DryRun]
+```
+
+- Preflight refuses to start when a `llama-server`/Strata is resident, any adapter holds >1 GB dedicated VRAM, or
+  free RAM is under `MinFreeGB + 65`. Use `-DryRun` to see the preflight result and the parsed argv without
+  loading anything.
+- The args file lists server arguments (whitespace-split; quoted runs stay one token). `-m` is resolved and the
+  model file checked **before** a 100 GB load begins.
+- Fingerprints (`llama-server --version` plus hashes of exe and DLLs) are written to `record.md` before launch.
+  Runtime directory names are never used as identifiers - two directories have lied about their build.
+- The watcher samples every few seconds into `ledger.csv`: free RAM, server working set **and** private bytes,
+  total/max per-adapter dedicated VRAM (`\GPU Adapter Memory(*)\Dedicated Usage`), `/health` status. It kills the
+  arm below `-MinFreeGB` available RAM and logs when idle VRAM collapses under `-DemoteGB` (demotion signature).
+- `-IdleSoakSec N` idles N seconds with zero requests after the first answer, then probes again. ~1 s post-idle
+  answer means the heartbeat is holding; tens of seconds means the driver demoted VRAM to RAM. This is the phase
+  that turns "did the heartbeat work?" into a number.
+- One arm per tag: a `<tag>.lock` file prevents two arms writing the same records (that happened once; the ledger
+  was unreadable). Stop an arm with `kill-arm.ps1 -Tag <tag>`; it stops wrapper, child and watchdog, and
+  deliberately never kills a llama-swap production server.
+- With the arm up, run `squal.py` and then `sbench.py` **from Windows** against `http://127.0.0.1:<port> arm` -
+  the server binds loopback only, so WSL python cannot reach it.
+
+Windows gotchas that cost real debugging time, now encoded in the scripts:
+
+- `llama-server --version` writes to **stderr**; under PS 5.1 with `$ErrorActionPreference='Stop'`, native stderr
+  through `2>&1` becomes a terminating error. `arm.ps1` runs under `Continue` with explicit guards instead.
+- Output of Windows `.exe`s piped through WSL often vanishes; redirect into a file on `C:\` and `cat` it in a
+  separate command.
+- `-f` format strings blow up when the template contains `$_`; use concatenation for templates.
+- SSH/SFTP data transfers to GPU-BOX stall; pipe base64 via stdin (`echo <b64> | base64 -d > file`).
+- A line starting with `'@` inside a PowerShell `@'...'@` here-string silently ends the string.
+
 ## Rules I learned the hard way
 
 - **One harness per comparison.** The same Flash-Next server reads ~45 tok/s on one harness and ~61 on another.

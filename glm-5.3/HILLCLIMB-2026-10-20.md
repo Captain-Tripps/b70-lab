@@ -1,5 +1,14 @@
 # GLM-5.3 Hill-Climb Checkpoint — 2026-10-20
 
+> **Contamination notice (2026-10-21, later):** the "memory regression" working diagnosis in this document is
+> **environmental, not software**. GPU-BOX had logged a fatal WHEA memory error (Id 22) on every boot, visible host
+> RAM dropped from ~112 GB to 95.9 GB during the sprint, and the arms idled between load and first request, which
+> triggers documented idle-VRAM demotion into system RAM at ~1 GB/s (see
+> [hardware-and-windows-notes.md](../hardware-and-windows-notes.md)). The `b739`-fails vs `r67c`-passes contrast
+> and the 167 s "cold page-in" are artifacts of those two causes. The private-bytes figures below are commit
+> charge, not resident RAM. Read the current checkpoint in [ROADMAP.md](./ROADMAP.md) before reusing anything here.
+> The `r67c` 16k 23.4 tok/s result was measured warm under load and remains the reference until re-measured.
+
 ## Outcome
 
 The first sprint found an operational memory cliff before any kernel comparison could be trusted.
