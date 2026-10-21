@@ -47,8 +47,18 @@ arm.ps1 -Runtime <runtime dir> -ArgsFile <server args file> -Port 9071 -Tag <tag
   answer means the heartbeat is holding; tens of seconds means the driver demoted VRAM to RAM. This is the phase
   that turns "did the heartbeat work?" into a number.
 - One arm per tag: a `<tag>.lock` file prevents two arms writing the same records (that happened once; the ledger
-  was unreadable). Stop an arm with `kill-arm.ps1 -Tag <tag>`; it stops wrapper, child and watchdog, and
-  deliberately never kills a llama-swap production server.
+  was unreadable). Once the endpoint appears, `arm.ps1` records the arm's own `llama-server` PID in `pids.txt`
+  (`server=<pid>` + `port=<port>` lines) after verifying it by command line **and** executable path under the arm's
+  runtime dir, so `kill-arm.ps1 -Tag <tag>` tears down the whole arm - wrapper, child, watchdog, server - in one
+  command. The kill is conditional: the recorded PID must still be `llama-server.exe` (PID-reuse guard) and still
+  carry the arm's `--port` (rebound/recycled guard). A server that was never recorded - the llama-swap production
+  service, or an arm from the old pids.txt format - is reported and left alone; use `kill-port-server.ps1`
+  explicitly for those. `find-arm-server.ps1` holds the discovery helper (`Get-ArmServerProcess -Runtime -Port`);
+  deploy it next to `arm.ps1`.
+- `test-arm-teardown.ps1` is the regression suite for all of the above: it builds a mock "server" (a tiny csc.exe-
+  compiled exe that sleeps forever and accepts any argv) and asserts recorded servers die, unrecorded ones never
+  do, recycled PIDs are untouchable, and legacy pids.txt files hold the handle. Run it after any change to the
+  kill/discovery path; it touches no real server and finishes in seconds.
 - With the arm up, run `squal.py` and then `sbench.py` **from Windows** against `http://127.0.0.1:<port> arm` -
   the server binds loopback only, so WSL python cannot reach it.
 
@@ -61,6 +71,10 @@ Windows gotchas that cost real debugging time, now encoded in the scripts:
 - `-f` format strings blow up when the template contains `$_`; use concatenation for templates.
 - SSH/SFTP data transfers to GPU-BOX stall; pipe base64 via stdin (`echo <b64> | base64 -d > file`).
 - A line starting with `'@` inside a PowerShell `@'...'@` here-string silently ends the string.
+- For test fixtures that need a fake long-running exe: renaming `ping.exe` does not work (exits on unknown
+  switches) and neither does renaming `powershell.exe` (can't find its assemblies outside its home dir - the
+  process dies instantly with no error window). Compile a 6-line mock with
+  `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` instead.
 
 ## Rules I learned the hard way
 

@@ -33,6 +33,7 @@ param(
 # promotes into a terminating error. Every real failure here is an explicit guard below.
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'find-arm-server.ps1')   # deploy this file next to arm.ps1
 $exe = Join-Path $Runtime 'llama-server.exe'
 if (-not (Test-Path -LiteralPath $exe)) { Write-Warning "no llama-server.exe under $Runtime"; exit 3 }
 if (-not (Test-Path -LiteralPath $ArgsFile)) { Write-Warning "no args file: $ArgsFile"; exit 3 }
@@ -228,6 +229,26 @@ $watcher = Start-Process -FilePath 'powershell.exe' `
     "child=$($child.Id)"
     "watcher=$($watcher.Id)"
 ) | Set-Content -LiteralPath (& $path 'pids.txt') -Encoding UTF8
+
+# --- record the arm's llama-server PID so kill-arm tears the whole arm down in one step ---------
+# The server is the child's child, invisible to pids.txt until it exists. Find it by its own
+# command line: the --port the argv actually carries (the args file wins over -Port, per the
+# warning above), plus an executable-path check under $Runtime so a production llama-swap
+# server can never be recorded as ours even if someone sets the arm's port to 9061.
+$serverPort = if ($portIdx -ge 0) { $argv[$portIdx + 1] } else { "$Port" }
+$foundServer = $null
+$swFind = [System.Diagnostics.Stopwatch]::StartNew()
+while (-not $foundServer -and $swFind.Elapsed.TotalSeconds -lt 60) {
+    $foundServer = Get-ArmServerProcess -Runtime $Runtime -Port ([int]$serverPort)
+    if (-not $foundServer) { Start-Sleep -Seconds 2 }
+}
+if ($foundServer) {
+    @("server=$($foundServer.Id)", "port=$serverPort") |
+        Add-Content -LiteralPath (& $path 'pids.txt') -Encoding UTF8
+} else {
+    "server=? arm llama-server not found within 60 s; kill-arm will hold its handle" |
+        Add-Content -LiteralPath (& $path 'pids.txt') -Encoding UTF8
+}
 
 # --- hold the endpoint warm while it loads: a request in flight prevents idle demotion --------
 "ts,probe,elapsed_s" | Add-Content -LiteralPath (& $path 'probe.csv')

@@ -444,6 +444,32 @@ That order should expose a realistic next target quickly: roughly 27–30 tok/s 
 quality loss would be an excellent near-term result. Beyond that, further gains probably require a materially better
 IQ2_S expert kernel or successful model-specific multi-GPU execution.
 
+## Skills to account for (agent process discipline)
+
+Which process skills fire at which lane phase - logged 2026-10-21 after the hill-climb campaign so the next
+session does not re-learn this by pain:
+
+| Skill | Where it fires in this lab |
+|---|---|
+| brainstorming | Before designing any new lane or backlog item (the ranked table above) - before touching code or ROADMAP |
+| writing-plans | Turning a hypothesis block (the template above) into an executable session plan |
+| executing-plans / subagent-driven-development | Running a plan inline vs. dispatching independent pieces (forensics vs. arm execution parallelize well; GPU arms do not) |
+| test-driven-development | Every code change, scripts included. Tonight's example: the kill-arm teardown patch was written against a failing mock-server regression suite (`bench/test-arm-teardown.ps1`, 7 cases) before the patch existed |
+| systematic-debugging | Any perf anomaly or crash. The model case: the 2026-10-14→21 "regression" was forensics-first (WHEA Id 22 on every boot), which killed a 32-commit bisect that was dead on arrival |
+| verification-before-completion | Every gate claim gets the actual command output in the log - md5 pairs after deploys, 7/7 test runs, idle manifests - before anything is written as done |
+| requesting-code-review / receiving-code-review | Before merging a fork/kernel patch into the b70dsv4 line, and when responding to review on kernel work |
+| using-git-worktrees | Parallel fork work (e.g. an ESIMD rebase while the current build must stay bootable for serving) |
+| finishing-a-development-branch | When a kernel candidate clears its full matrix and needs integrating into the lab fork |
+
+Candidate custom skills (write with writing-skills only once the procedure has stabilized in the docs):
+
+- **bench-arm**: the per-arm procedure as a checklist - idle manifest → unload `ttl: 0` GLM if live traffic may
+  load it → detached launch via `Win32_Process Create` → poll for `record.md` → `squal.py` → `sbench.py` →
+  `kill-arm.ps1` → re-verify idle. Every step is currently prose in this repo; a missed unload silently poisons
+  an arm and burns the 30-minute window it occupied.
+- **hill-climb-campaign**: A/B/B/A scheduling, go/stop gates, ledger and record formats, the "speed number only
+  counts after squal" rule. The campaign log (`HILLCLIMB-2026-10-21.md`) is the reference implementation.
+
 ## Sources used
 
 - [GLM-5.3 lab notes](https://github.com/Captain-Tripps/b70-lab/tree/main/glm-5.3)

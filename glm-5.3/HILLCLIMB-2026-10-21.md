@@ -79,5 +79,23 @@ and CPU-side parallelism, not bigger/faster weights:
   (its redirect file absent). One interop command per ssh call, or verify and retry.
 - `arm.ps1` writes `<tag>.ledger.csv` / `<tag>.record.md` / `<tag>.pids.txt` flat in the log dir; do not
   construct `probe.csv`-style paths from B0 folklore.
-- `kill-arm.ps1 -Tag <tag>` deliberately leaves the arm's `llama-server` running (production-safe);
-  pair it with `kill-port-server.ps1 -PortPattern <port>` to free the GPUs between arms.
+- `kill-arm.ps1 -Tag <tag>` used to deliberately leave the arm's `llama-server` running (production-safe);
+  teardown required a second, fragile `kill-port-server.ps1 -PortPattern <port>` step. Fixed same evening,
+  see below - teardown is now one command.
+
+## Same-evening follow-up: atomic arm teardown (TDD)
+
+The two-step teardown (`kill-arm.ps1` then `kill-port-server.ps1`) was the last fragile part of the arm
+procedure. Now:
+
+- `arm.ps1` records the arm's own server in `pids.txt` (`server=<pid>`, `port=<port>`), discovered via
+  `Get-ArmServerProcess` (`bench/find-arm-server.ps1`): command line must carry the arm's `--port` **and**
+  the executable must live under the arm's runtime dir, so a production llama-swap server can never be
+  recorded as ours even under a port collision.
+- `kill-arm.ps1` stops that server only after re-verifying the recorded PID is still `llama-server.exe`
+  (PID-reuse guard) and still on the arm's port (recycled/rebound guard). Unrecorded servers - production,
+  or arms from the old file format - are reported and left alone.
+- Regression suite: `bench/test-arm-teardown.ps1`, 7 cases, written failing first against a compiled mock
+  server (csc.exe; renamed ping.exe and powershell.exe both die as mocks - logged in bench/README.md).
+  7/7 green; all four scripts parse clean; deployed to GPU-BOX md5-exact; `-DryRun` smoke on GPU-BOX green
+  (build 251, commit 4cc67bb7f; box verified idle-clean, 81.5 GB free, all adapters ~0 GB).
