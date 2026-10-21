@@ -1,8 +1,55 @@
 # GLM-5.3 on 4× B70: Hill-Climbing Roadmap
 
-## Current checkpoint
+## Current checkpoint — updated 2026-10-21
 
-The first execution sprint is recorded in [HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-20.md). The key finding is an approximately 99 GB first-request host working-set cliff: `r67c` is viable at 16k with `-b 512 -ub 128` (23.4 tok/s), while the staged current-upstream build regresses and fails the same watchdog gate. Treat memory attribution and the build-702→739 bisect as the active lane before further kernel work.
+The first execution sprint is recorded in [HILLCLIMB-2026-10-20.md](./HILLCLIMB-2026-10-20.md).
+That document remains the detailed experiment log, but the following corrections and later findings supersede its
+working diagnosis.
+
+### Verified findings
+
+- The known-good `r67c` result remains the best validated arm: 16k context, `-b 512 -ub 128`, semantic quality
+  passing, and 23.4 tok/s mean decode on the fixed two-round benchmark.
+- The staged current build (`b739`, commit `429852e27`) fails the DIO first-request memory gate at the same 16k
+  settings: approximately 118.1 GB private bytes, 98.3 GB working set, and 4.94 GB available when the watchdog kills
+  it.
+- A minimal current-upstream build (`b735`, commit `909ca928e`) reproduces that first-request failure at
+  approximately 118.1 GB private bytes and 97.0 GB working set. This makes the newer upstream base or runtime
+  residency behavior more suspicious than the later MTP patch stack, but it is not yet a completed source bisect.
+- Reverting upstream ESIMD restoration (#30239), or disabling ESIMD at runtime, made load residency worse. ESIMD is
+  therefore not the root cause by itself and currently helps the model fit farther into initialization.
+- The attempted reordered-`GET_ROWS` (#30430) isolation on October 21 is invalid: Strata had auto-started and was
+  consuming about 63 GB of host RAM. Do not use that result.
+- The host-memory cliff is sensitive to machine noise. With Strata stopped, a DIO arm was still killed during load
+  at 4.87 GB available, 109.4 GB private bytes, and 92.9 GB working set. No A/B result is valid unless the starting
+  process list and available RAM are captured and identical.
+- `--load-mode none` is a verified operational fallback for the current `b739/429852e27` runtime at 16k:
+  the first request returned HTTP 200, produced the exact requested answer, decoded at 17.18 tok/s, processed the
+  short prompt at 1.22 tok/s, accepted 7 of 10 drafted tokens, and remained healthy. It is stable enough for
+  diagnosis but is not a performance winner.
+- Runtime directory names are not trustworthy identifiers. A directory labeled `r67` reported fingerprint
+  `b739-429852e27`. Every arm must record `llama-server --version`, the API fingerprint, and hashes of
+  `llama-server.exe`, `ggml-sycl.dll`, `llama.dll`, and `llama-server-impl.dll` before launch.
+- Old source commit `14897007d` was reconstructed and built with oneAPI 2026 after applying only its required
+  compile repairs. It is staged as `master-797de63-r67-rebuilt-current-toolchain`, but it has not received a valid
+  clean-memory benchmark.
+
+### Revised immediate lane
+
+1. Inventory and hash every staged runtime; identify the genuine archived build-702 artifacts.
+2. Capture an idle-machine manifest and require enough host-memory margin to remain above the 6 GB watchdog floor.
+3. Run only the archived build-702 versus rebuilt-old-source A/B, with identical DLL sets and launch arguments.
+4. If rebuilt old source regresses, isolate compiler/runtime artifacts before touching upstream source.
+5. If rebuilt old source passes, resume a source bisect between `797de63b2` and `3bb63cbcb`.
+6. Do not begin new kernel work until this attribution is complete.
+
+### Agent operating rules learned
+
+- Never infer activity from a launched PID; verify the process, endpoint health, and watchdog log.
+- Never report a benchmark while an unrelated model server is resident.
+- Do not shut down WSL after launching a Windows child from that session; it terminates the child and invalidates the
+  run.
+- Keep one experiment active at a time and publish a result only after survival, correctness, and fingerprint checks.
 
 This roadmap starts from the measured `g10` / rebased `r67c` state in
 [`b70-lab/glm-5.3`](https://github.com/Captain-Tripps/b70-lab/tree/main/glm-5.3): Maya-M, 4× Arc Pro B70,
