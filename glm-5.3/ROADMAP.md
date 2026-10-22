@@ -12,7 +12,7 @@ deaths. That conclusion is contaminated; the section below supersedes it.
 ### Environment correction — the "memory regression" was hardware plus idle demotion
 
 - `WHEA-Logger` Id 22 ("A fatal hardware error has occurred. Component: Memory, Error Source: BOOT, Error Type: 15")
-  fires on **every boot** of GPU-BOX: 10/14 four times, then 10/17, 10/19, 10/21. The fault is on the CPU socket;
+  fires on **every boot** of the bench box: 10/14 four times, then 10/17, 10/19, 10/21. The fault is on the CPU socket;
   reseating DIMMs did nothing and a replacement CPU is on order.
 - Host RAM inventory changed mid-sprint: 7×16 GB Micron down to 6×16 GB Kingston DDR4-2133, 95.9 GB visible
   (was ~112). Any A/B across that boundary compares two different machines.

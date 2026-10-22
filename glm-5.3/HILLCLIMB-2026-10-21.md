@@ -15,7 +15,7 @@ All arms on the degraded host (96 GB visible, WHEA Id 22 every boot, one CPU soc
 
 All arms: g10 runtime, Maya-M IQ2_S, `-c 131072 -ts 26.3,23.8,22.8,27.1 -b 2048 -ub 512 -fa on`,
 DIO, MTP `draft-mtp` (unless noted), blk.44 experts on CPU, heartbeat 30.
-Log dir on GPU-BOX: `%USERPROFILE%\AI\logs\arms\<tag>.*`.
+Log dir on the bench box: `<LOGDIR>\<tag>.*`.
 
 | tag | variable | mean decode (r2+) | after 31k prompt | prompt tok/s | squal | soak | VRAM total / max card | verdict |
 |---|---|---|---|---|---|---|---|---|
@@ -68,7 +68,7 @@ and CPU-side parallelism, not bigger/faster weights:
 
 ## Production action taken this session (operator-approved)
 
-- `C:\llama-swap\config.windows.yaml`: added `GGML_SYCL_IDLE_HEARTBEAT_SEC=30` to the GLM entry (was the only
+- `<LLAMA_SWAP_DIR>\config.windows.yaml`: added `GGML_SYCL_IDLE_HEARTBEAT_SEC=30` to the GLM entry (was the only
   one of 21 without it). Backup: `config.windows.yaml.bak-20261021`. Applied **without restart**:
   llama-swap runs `--watch-config` (poll 2 s); log confirmed `configuration reloaded`. The model picks the
   heartbeat up on its next load.
@@ -97,7 +97,7 @@ procedure. Now:
   or arms from the old file format - are reported and left alone.
 - Regression suite: `bench/test-arm-teardown.ps1`, 7 cases, written failing first against a compiled mock
   server (csc.exe; renamed ping.exe and powershell.exe both die as mocks - logged in bench/README.md).
-  7/7 green; all four scripts parse clean; deployed to GPU-BOX md5-exact; `-DryRun` smoke on GPU-BOX green
+  7/7 green; all four scripts parse clean; deployed to the bench box md5-exact; `-DryRun` smoke there green
   (build 251, commit 4cc67bb7f; box verified idle-clean, 81.5 GB free, all adapters ~0 GB).
 
 ## Late follow-up: arm self-teardown (HANDOFF next step 1, TDD)

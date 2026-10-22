@@ -27,7 +27,7 @@ param(
     [string[]]$Env = @(),
     [int]$Port = 9061,
     [Parameter(Mandatory = $true)][string]$Tag,
-    [string]$LogDir = "%USERPROFILE%\AI\logs\arms",
+    [string]$LogDir = '',             # default: <scripts dir>\..\logs\arms (resolved below)
     [double]$MinFreeGB = 8,
     [double]$DemoteGB = 60,
     [int]$LoadTimeoutMin = 45,
@@ -48,6 +48,8 @@ param(
     [switch]$NoAutoTeardown,
     [switch]$DryRun
 )
+# $PSScriptRoot is not reliably set inside param() defaults under Windows PowerShell 5.1.
+if (-not $LogDir) { $LogDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\logs\arms')) }
 
 # Deliberately NOT 'Stop': this script drives native commands (llama-server) and long waits, and
 # in PowerShell 5.1 a native command's stderr under 2>&1 becomes an ErrorRecord that 'Stop'

@@ -18,20 +18,22 @@ repo (the original prompt was replaced). The other six prompts are the same; exp
 ## Arm runner: `arm.ps1` + `kill-arm.ps1`
 
 `arm.ps1` starts one llama.cpp arm on the Windows host with preflight, runtime fingerprinting, PDH sampling and a
-RAM-floor watchdog, and writes every record into `%USERPROFILE%\AI\logs\arms\<tag>.*`. It runs on Windows
+RAM-floor watchdog, and writes every record into `<LOGDIR>\<tag>.*`. `<LOGDIR>` defaults to `..\logs\arms` next to the
+scripts' folder (e.g. scripts in `<ROOT>\arms\`, logs in `<ROOT>\logs\arms\`); pass `-LogDir` to both
+`arm.ps1` and `kill-arm.ps1` to put it elsewhere. It runs on Windows
 (from WSL use `cmd.exe /c "powershell.exe ..."` or a UNC path), and must be launched so session teardown cannot
 kill it — create it through WMI:
 
 ```powershell
 Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-  CommandLine = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\AI\arms\launch-b0.ps1' }
+  CommandLine = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File <ROOT>\arms\launch-b0.ps1' }
 ```
 
 ```powershell
 arm.ps1 -Runtime <runtime dir> -ArgsFile <server args file> -Port 9071 -Tag <tag>
         [-Env NAME=VALUE ...] [-MinFreeGB 8] [-DemoteGB 60] [-LoadTimeoutMin 45]
         [-IdleSoakSec 300] [-WatchMin 0] [-TeardownHoldMin 90] [-NoAutoTeardown]
-        [-MaxAdapterGB 1] [-HeadroomGB 65] [-DryRun]
+        [-MaxAdapterGB 1] [-HeadroomGB 65] [-LogDir <dir>] [-DryRun]
 ```
 
 **Lifecycle: the arm tears itself down.** After `record.md` is written (always first, failure paths included)
@@ -89,7 +91,7 @@ Windows gotchas that cost real debugging time, now encoded in the scripts:
 - Output of Windows `.exe`s piped through WSL often vanishes; redirect into a file on `C:\` and `cat` it in a
   separate command.
 - `-f` format strings blow up when the template contains `$_`; use concatenation for templates.
-- SSH/SFTP data transfers to GPU-BOX stall; pipe base64 via stdin (`echo <b64> | base64 -d > file`).
+- SSH/SFTP data transfers to the bench box stall; pipe base64 via stdin (`echo <b64> | base64 -d > file`).
 - A line starting with `'@` inside a PowerShell `@'...'@` here-string silently ends the string.
 - For test fixtures that need a fake long-running exe: renaming `ping.exe` does not work (exits on unknown
   switches) and neither does renaming `powershell.exe` (can't find its assemblies outside its home dir - the

@@ -19,7 +19,7 @@ load and my RAM watchdog killed the server. Observed for llama.cpp's Flash-Next,
   of 4.5 GB, and the first request after idle answered in 0.5 s. Without the heartbeat, the same class of arm paid a
   167 s page-in on its first request after idle ([glm-5.3/HILLCLIMB-2026-10-20.md](glm-5.3/HILLCLIMB-2026-10-20.md)).
   The heartbeat string is present in `ggml-sycl.dll` of every runtime I checked; it costs nothing to set.
-- Gotcha that survived three days of debugging: on GPU-BOX, 19 of 20 llama-swap model entries set
+- Gotcha that survived three days of debugging: on the bench box, 19 of 20 llama-swap model entries set
   `GGML_SYCL_IDLE_HEARTBEAT_SEC=30`; exactly one did not - the production GLM entry - and that was the model that
   kept dying. Grep your config before blaming the next build.
 
@@ -50,7 +50,7 @@ load and my RAM watchdog killed the server. Observed for llama.cpp's Flash-Next,
 
 ## WHEA Id 22 on every boot - degraded memory path (2026-10-21)
 
-- GPU-BOX logs `WHEA-Logger` Id 22, "A fatal hardware error has occurred. Component: Memory, Error Source: BOOT,
+- The bench box logs `WHEA-Logger` Id 22, "A fatal hardware error has occurred. Component: Memory, Error Source: BOOT,
   Error Type: 15" on **every boot** (four times on Oct 14, again Oct 17, 19, 21). Reseating DIMMs did nothing; the
   fault is on the CPU socket, and a replacement CPU is on order.
 - Visible RAM dropped from 128 GB (7x16 Micron) to 95.9 GB (6x16 Kingston `36ASF2G72PZ-2G1A2` DDR4-2133). WMI on

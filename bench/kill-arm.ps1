@@ -6,8 +6,10 @@
 # still holding the GPUs.
 param(
     [Parameter(Mandatory = $true)][string]$Tag,
-    [string]$LogDir = "%USERPROFILE%\AI\logs\arms"
+    [string]$LogDir = ''   # default: <scripts dir>\..\logs\arms
 )
+# $PSScriptRoot is not reliably set inside param() defaults under Windows PowerShell 5.1.
+if (-not $LogDir) { $LogDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\logs\arms')) }
 
 $pidsFile = Join-Path $LogDir "$Tag.pids.txt"
 $lockFile = Join-Path $LogDir "$Tag.lock"
