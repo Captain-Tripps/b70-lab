@@ -128,6 +128,6 @@ Result: `bench/test-arm-teardown.ps1` 17/17 green locally (314 s), zero leftover
 against the draft: 10a, 10b, 12a, 13a, 13b failed as expected (plus three test-harness bugs fixed: missing
 `tt8.args`, cases 3-4 stand-ins blocking preflight, empty `ExitCode` from `Start-Process -PassThru`).
 md5: `arm.ps1` `f55faebf1e169174701f3a929522d6da`, `test-arm-teardown.ps1` `7e35a61434409f293fc0a8fb79131f99`;
-`kill-arm.ps1` and `find-arm-server.ps1` unchanged. **Not yet deployed to the bench box**; the deployed
-`arm.ps1` (`637785a9...`) still has the empty-`server=` bug, so run `kill-port-server.ps1` after `kill-arm.ps1`
-until the new one is deployed.
+`kill-arm.ps1` and `find-arm-server.ps1` unchanged. Deployed to the bench box md5-exact (old `arm.ps1` kept
+as `arm.ps1.bak-20261021`); `-DryRun` smoke on the B0 args green (build 251, 81 GB free, adapters ~0 GB,
+"auto-teardown ON ... hold 90 min"). No GPU arm has run on it yet - the first real arm is the live check.
