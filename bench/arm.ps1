@@ -13,6 +13,14 @@
 #     -CommandLine 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\...\arm.ps1 ...'"
 #
 # Arguments one per line in -ArgsFile (no shell quoting needed; they are splatted).
+#
+# Lifecycle since 2026-10-21: the arm tears ITSELF down. record.md is ALWAYS written first
+# (failure paths included - the handoff reads it), then the endpoint is held warm for
+# -TeardownHoldMin (default 90; early release on <logdir>\<tag>.benchdone) so an external
+# bench can use the warm model, then the arm stops its own child/watchdog/server with the
+# same pid-reuse + --port guards as kill-arm.ps1. The GPUs are freed even if nobody remembers
+# to run kill-arm. -NoAutoTeardown restores the old stay-up behavior; kill-arm still works in
+# both modes.
 param(
     [Parameter(Mandatory = $true)][string]$Runtime,
     [Parameter(Mandatory = $true)][string]$ArgsFile,
@@ -25,6 +33,19 @@ param(
     [int]$LoadTimeoutMin = 45,
     [int]$WatchMin = 0,
     [int]$IdleSoakSec = 240,
+    # Preflight strictness, exposed as parameters so the mock-driven e2e tests
+    # (test-arm-teardown.ps1) can run on any dev box. GPU-BOX runs the strict defaults:
+    # adapters above -MaxAdapterGB GB of resident VRAM mean the box is not idle, and the
+    # box needs MinFreeGB + -HeadroomGB free because Maya-M peaks ~100 GB over the floor.
+    [double]$MaxAdapterGB = 1.0,
+    [double]$HeadroomGB = 65,
+    # Auto-teardown: after record.md is written, hold the endpoint up this long for external
+    # benches (squal/sbench), release early on <logdir>\<tag>.benchdone, then stop the arm's
+    # own child/watchdog/server so the GPUs are freed without waiting on the operator.
+    # -NoAutoTeardown restores the old stay-up behavior (kill-arm.ps1 then does the stopping).
+    # Whatever happens, record.md is written BEFORE anything is stopped.
+    [int]$TeardownHoldMin = 90,
+    [switch]$NoAutoTeardown,
     [switch]$DryRun
 )
 
@@ -58,6 +79,56 @@ if (Test-Path -LiteralPath $lockFile) {
 }
 $PID | Set-Content -LiteralPath $lockFile -Encoding ASCII
 
+# --- teardown state + one teardown path for every exit path --------------------------------------
+# The default behavior (2026-10-21): the arm frees the GPUs itself - the old "leave it up and
+# hope someone runs kill-arm" contract held the four cards hostage to operator memory. The
+# order inside Stop-ArmRun is sacred: record.md FIRST (failure paths included - the handoff
+# reads it), then stop what this run started. -NoAutoTeardown restores the stay-up contract
+# for benches that want the warm endpoint; kill-arm.ps1 then does the stopping.
+$script:armChildPid = 0
+$script:armWatcherPid = 0
+$script:armServerPid = 0
+$script:armServerPort = "$Port"
+$script:armRecordPath = Join-Path $LogDir "$Tag.record.md"
+$script:armTornDown = $false
+
+function Stop-ArmRun {
+    param([string]$Why)
+    if ($script:armTornDown) { return }
+    $script:armTornDown = $true
+    if (-not (Test-Path -LiteralPath $script:armRecordPath)) {
+        # Belt and braces: the handoff must never face a dead arm with no record. Every real
+        # exit path writes record.md before calling this; if something exotic skipped it,
+        # write a minimal one now rather than stop processes silently.
+        @(
+            "# arm record: $Tag", "", "- ABORTED before the normal record: $Why",
+            "- torn down at: $(Get-Date -Format 's')"
+        ) | Set-Content -LiteralPath $script:armRecordPath -Encoding UTF8
+    }
+    "teardown ($Why): stopping the arm's own child/watchdog/server..."
+    $notePath = & $path 'teardown.log'
+    Stop-ArmOwnedServer -ServerPid $script:armServerPid -ServerPort $script:armServerPort `
+        -ChildPid $script:armChildPid -NotePath $notePath
+    foreach ($p in @($script:armChildPid, $script:armWatcherPid)) {
+        if ($p -le 0) { continue }
+        $proc = Get-Process -Id $p -ErrorAction SilentlyContinue
+        if ($proc) {
+            Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+            "$(Get-Date -Format 'HH:mm:ss') stopped pid $p ($($proc.Name))" | Add-Content -LiteralPath $notePath -Encoding UTF8
+        }
+    }
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
+    "teardown: GPUs released; kill-arm no longer needed for $Tag."
+}
+
+# Any terminating error from here on still releases the GPUs (errors before this point started
+# no processes, so there is nothing to leak).
+trap {
+    Write-Warning "arm $Tag hit: $($_.Exception.Message)"
+    Stop-ArmRun -Why "uncaught error: $($_.Exception.Message)"
+    exit 3
+}
+
 function Get-FreeGB {
     return [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 2)
 }
@@ -67,6 +138,41 @@ function Get-AdapterVRAM {
         $byName[$s.InstanceName] = [math]::Round($s.CookedValue / 1GB, 2)
     }
     return $byName
+}
+
+# Stop the arm's llama-server, re-verified before any kill, exactly like kill-arm.ps1: the pid
+# must still BE a llama-server.exe (a recycled pid is never touched) and its command line must
+# still carry the arm's --port (someone else's server on our port is never touched). With no
+# recorded pid (discovery never succeeded) the fallback is parentage: llama-server processes
+# whose DIRECT parent is the arm's child script are processes this arm started; production
+# llama-swap servers are children of the service and can never match.
+function Stop-ArmOwnedServer {
+    param([int]$ServerPid, [string]$ServerPort, [int]$ChildPid, [string]$NotePath)
+    function Note { param([string]$m) "$((Get-Date -Format 'HH:mm:ss')) $m" | Add-Content -LiteralPath $NotePath -Encoding UTF8 }
+    if ($ServerPid -gt 0) {
+        $proc = Get-Process -Id $ServerPid -ErrorAction SilentlyContinue
+        if (-not $proc) { Note "server pid $ServerPid already gone" }
+        elseif ($proc.Name -ne 'llama-server') { Note "REFUSED server pid ${ServerPid}: process is '$($proc.Name)', not llama-server (pid reuse?)" }
+        else {
+            $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$ServerPid" -ErrorAction SilentlyContinue).CommandLine
+            if (-not ($cmd -match ('-port\s+' + [regex]::Escape($ServerPort) + '\b'))) {
+                Note "REFUSED server pid ${ServerPid}: command line no longer carries --port ${ServerPort}: $cmd"
+            }
+            else {
+                Stop-Process -Id $ServerPid -Force -ErrorAction SilentlyContinue
+                Note "stopped server pid $ServerPid (guards passed)"
+            }
+        }
+    }
+    else {
+        $orphans = @(Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" |
+            Where-Object { $_.ParentProcessId -eq $ChildPid })
+        foreach ($o in $orphans) {
+            Stop-Process -Id $o.ProcessId -Force -ErrorAction SilentlyContinue
+            Note "stopped unrecorded llama-server pid $($o.ProcessId) (direct child of arm child pid $ChildPid)"
+        }
+        if ($orphans.Count -eq 0) { Note 'no unrecorded llama-server children of the arm child found' }
+    }
 }
 
 # --- identity: directory names lie, hashes do not ---------------------------------------------
@@ -90,7 +196,7 @@ if (-not $version) { $version = '(--version produced no output)' }
 $freeStart = Get-FreeGB
 $resident = @(Get-Process | Where-Object { $_.Name -match 'llama-server|strata' })
 $adaptersAtIdle = Get-AdapterVRAM
-$adaptersBusy = @($adaptersAtIdle.GetEnumerator() | Where-Object { $_.Value -gt 1.0 })
+$adaptersBusy = @($adaptersAtIdle.GetEnumerator() | Where-Object { $_.Value -gt $MaxAdapterGB })
 if ($resident.Count -gt 0) {
     Write-Warning "refusing to run: another inference server is resident ($($resident.Name -join ', '))"
     exit 3
@@ -99,8 +205,8 @@ if ($adaptersBusy.Count -gt 0) {
     Write-Warning "refusing to run: adapters already hold >1 GB of VRAM ($($adaptersBusy.Value -join ' GB, '))"
     exit 3
 }
-if ($freeStart -lt ($MinFreeGB + 65)) {
-    Write-Warning "refusing to run: only $freeStart GB free, Maya-M needs roughly 100 GB of headroom"
+if ($freeStart -lt ($MinFreeGB + $HeadroomGB)) {
+    Write-Warning "refusing to run: only $freeStart GB free, need $MinFreeGB GB floor plus $HeadroomGB GB headroom"
     exit 3
 }
 
@@ -207,6 +313,11 @@ if ($DryRun) {
     "  runtime: $Runtime"
     "  version: $version"
     "  watcher would run $WatchMin min, floor $MinFreeGB GB available, demotion threshold $DemoteGB GB"
+    if ($NoAutoTeardown) {
+        "  auto-teardown OFF (-NoAutoTeardown): after record.md the arm stays up indefinitely; stop it with kill-arm.ps1 -Tag $Tag"
+    } else {
+        "  auto-teardown ON: after record.md, hold ${TeardownHoldMin} min (early release on $(Join-Path $LogDir "$Tag.benchdone")), then stop child/watchdog/server"
+    }
     exit 0
 }
 
@@ -214,13 +325,21 @@ $child = Start-Process -FilePath 'powershell.exe' `
     -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $childScript) `
     -WorkingDirectory $Runtime -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (& $path 'out.log') -RedirectStandardError (& $path 'err.log')
+# stdout/stderr MUST be redirected: a watcher started without redirection can inherit the
+# invoker's stdout handle, and then anything that captures arm.ps1's output (test suites,
+# ssh pipelines) waits for an EOF that never comes while the watcher lives. The watcher's
+# real reporting goes through -Ledger/-KillLog files anyway; these two files only ever
+# catch PowerShell's own error output.
 $watcher = Start-Process -FilePath 'powershell.exe' `
     -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watchScript,
         '-Ledger', (& $path 'ledger.csv'), '-KillLog', (& $path 'watchdog.log'), '-Port', $Port,
         '-MinFreeGB', $MinFreeGB, '-DemoteGB', $DemoteGB, '-MaxMin', $WatchMin) `
-    -WindowStyle Hidden -PassThru
+    -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput (& $path 'watcher.out.log') -RedirectStandardError (& $path 'watcher.err.log')
 
 "$(Get-Date -Format 's') arm=$Tag childPID=$($child.Id) watchdogPID=$($watcher.Id) port=$Port freeStartGB=$freeStart"
+$script:armChildPid = $child.Id
+$script:armWatcherPid = $watcher.Id
 
 # So an arm can be stopped cleanly from one command. Both PIDs are recorded; the watcher is what
 # enforces the RAM floor, so leaving it behind would silently remove the guard.
@@ -236,17 +355,22 @@ $watcher = Start-Process -FilePath 'powershell.exe' `
 # warning above), plus an executable-path check under $Runtime so a production llama-swap
 # server can never be recorded as ours even if someone sets the arm's port to 9061.
 $serverPort = if ($portIdx -ge 0) { $argv[$portIdx + 1] } else { "$Port" }
+$script:armServerPort = "$serverPort"
 $foundServer = $null
 $swFind = [System.Diagnostics.Stopwatch]::StartNew()
 while (-not $foundServer -and $swFind.Elapsed.TotalSeconds -lt 60) {
     $foundServer = Get-ArmServerProcess -Runtime $Runtime -Port ([int]$serverPort)
-    if (-not $foundServer) { Start-Sleep -Seconds 2 }
+    if (-not $foundServer) {
+        if (-not (Get-Process -Id $child.Id -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Seconds 2
+    }
 }
 if ($foundServer) {
+    $script:armServerPid = $foundServer.Id
     @("server=$($foundServer.Id)", "port=$serverPort") |
         Add-Content -LiteralPath (& $path 'pids.txt') -Encoding UTF8
 } else {
-    "server=? arm llama-server not found within 60 s; kill-arm will hold its handle" |
+    "server=? arm llama-server not found within 60 s; auto-teardown will stop it by parentage, kill-arm will hold its handle" |
         Add-Content -LiteralPath (& $path 'pids.txt') -Encoding UTF8
 }
 
@@ -266,9 +390,13 @@ while ((Get-Date) -lt $deadline) {
     catch {
         "$((Get-Date -Format 'HH:mm:ss')),waiting,$([math]::Round($sw.Elapsed.TotalSeconds, 1))" | Add-Content -LiteralPath (& $path 'probe.csv')
         Start-Sleep -Seconds 20
+        if (-not (Get-Process -Id $child.Id -ErrorAction SilentlyContinue)) {
+            "child script exited while waiting; probe loop stops early" | Add-Content -LiteralPath (& $path 'probe.csv')
+            break
+        }
     }
 }
-"$((Get-Date -Format 'HH:mm:ss')),ready,$([math]::Round($sw.Elapsed.TotalSeconds, 1))" | Add-Content -LiteralPath (& $path 'probe.csv')
+"$((Get-Date -Format 'HH:mm:ss')),$(if ($ready) { 'ready' } else { 'not-ready' }),$([math]::Round($sw.Elapsed.TotalSeconds, 1))" | Add-Content -LiteralPath (& $path 'probe.csv')
 
 $alive = Get-Process -Name llama-server -ErrorAction SilentlyContinue
 $freeNow = Get-FreeGB
@@ -326,6 +454,36 @@ if ($IdleSoakSec -gt 0 -and $alive) {
     (($finger.GetEnumerator() | ForEach-Object { "$($_.Key): $($_.Value)" }) -join "`n")
     '```'
 ) | Set-Content -LiteralPath (& $path 'record.md') -Encoding UTF8
+
+# --- record.md is on disk: the handoff can read it. Now the teardown gate. -----------------------
+# Order rule from the glm-5.3 handoff: a dead arm still gets its record; stopping anything is
+# only allowed after the record above has been written. The exit-code lines below the gate
+# keep their documented meanings (0 answered, 2 never answered, 4 died after answering).
+if ($NoAutoTeardown) {
+    $srvDesc = if ($script:armServerPid -gt 0) { "server=$($script:armServerPid)" } else { 'server=?' }
+    "AUTO-TEARDOWN OFF: $Tag left up (child=$($child.Id) watcher=$($watcher.Id) $srvDesc port=$serverPort); the GPUs stay allocated."
+    "  Bench it, then release with: powershell.exe -File $(Join-Path $LogDir 'kill-arm.ps1') -Tag $Tag -LogDir $LogDir"
+}
+else {
+    if ($ready) {
+        $benchdoneFile = Join-Path $LogDir "$Tag.benchdone"
+        "READY after $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s. Auto-teardown armed: holding 127.0.0.1:$serverPort for $TeardownHoldMin min so an external bench can use the warm model; write $benchdoneFile to release early; then child/watchdog/server stop automatically."
+        $holdSw = [System.Diagnostics.Stopwatch]::StartNew()
+        $holdEnd = (Get-Date).AddMinutes($TeardownHoldMin)
+        $holdReason = 'hold window expired'
+        while ((Get-Date) -lt $holdEnd) {
+            if (Test-Path -LiteralPath $benchdoneFile) { $holdReason = 'benchdone marker seen'; break }
+            if (-not (Get-Process -Id $child.Id -ErrorAction SilentlyContinue)) { $holdReason = 'child already exited'; break }
+            Start-Sleep -Seconds 15
+        }
+        "HOLD ENDED: $holdReason after $([math]::Round($holdSw.Elapsed.TotalSeconds)) s."
+    }
+    else {
+        $holdReason = 'not-ready'
+        "Auto-teardown: not-ready arm, skipping the bench hold; releasing what this run started."
+    }
+    Stop-ArmRun -Why "auto-teardown ($holdReason)"
+}
 
 if (-not $ready) { Write-Warning "endpoint never answered within $LoadTimeoutMin min"; exit 2 }
 if (-not $alive) { Write-Warning "server died after first answer; see $(Join-Path $LogDir "$Tag.watchdog.log")"; exit 4 }
