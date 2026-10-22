@@ -3,6 +3,16 @@
 **New session? Start at [HANDOFF-2026-10-21.md](./HANDOFF-2026-10-21.md)** - state of the world, next steps in
 order, tool md5s, and the gotcha list in one page.
 
+## Checkpoint 2026-10-22 - rank 2 closed: all experts on GPU (placement A), now production
+
+The tensor/allocation ledger ([LEDGER-2026-10-22.md](./LEDGER-2026-10-22.md)) showed ~9.4 GiB free across the four
+cards against 2.41 GiB needed for layer 44's experts: a granularity problem, not a capacity one. Cutting card
+boundaries between a layer's expert tensors (`-ts` + two `-ot` rules, no extra crossings) brings every expert back
+to VRAM: **+9.6% decode, +5% prompt, same quality, 1.30 GiB peak margin** (A/B/A). Same MTP acceptance and tokens
+per step; the CPU layer simply cost 8.3 ms of a 102.5 ms verify step. Live since 2026-10-22 08:42 CT. **B0 for
+every later arm is placement A.** Rank 3 (one-layer mixed quant) loses its original purpose - it was the way to
+make that layer fit - and drops down the backlog.
+
 ## Current checkpoint — updated 2026-10-21 (later)
 
 **Read first: the machine changed underneath the 2026-10-20 sprint.** The earlier checkpoint in this file and
