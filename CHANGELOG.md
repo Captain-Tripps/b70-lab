@@ -3,6 +3,16 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-22
+- Mistral-Small-3.2-24B (the only 2-card tensor-split entry) switched live to r67c + PR #30956.
+  [PR30956-2026-10-21.md](llama.cpp-sycl/PR30956-2026-10-21.md).
+- Qwen3.8-27B 2-card `-sm tensor` + PR #30956 vs layer split (MTP, A/B/B/A): prompt read equal, decode -18%; both
+  entries stay on layer split. [PR30956-qwen27-2026-10-22.md](llama.cpp-sycl/PR30956-qwen27-2026-10-22.md).
+- New working page on the tensor-split decode gap: llama-bench by batch size shows tensor split 19-33% slower than
+  layer at 1-8 tokens with or without #30956 (the PR only helps pp512); ~40 ms per forward lost to the split vs an
+  ideal ~28 ms. Theory (host waits per all-reduce), candidate fixes and an MTP A/B method.
+  [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md).
+
 ## 2026-10-21
 - Tested upstream PR #30956 (fast 2-device `-sm tensor` exchange) on r67c: correct on Windows Level Zero (ub-4
   perplexity bit-identical); Mistral-Small-24B tensor split prompt read +14%, decode +2%; gpt-oss-120b tensor prompt

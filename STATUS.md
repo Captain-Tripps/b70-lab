@@ -20,6 +20,9 @@ predicted the garbage easily, and acceptance inflated tok/s (96.6 "tok/s" that m
 
 | Item | Model | Gain / loss (numbers) | Status | Date | Details |
 |---|---|---|---|---|---|
+| Tensor-split decode gap (2 cards, small batches) | Qwen3.8-27B Q8_0 | llama-bench pp1 / pp5 / pp8 / tg: tensor -19% / -27% / -33% / -21% vs layer, PR #30956 no change at 1-8 tokens; ~40 ms per forward lost to the split; fix under investigation | measured | 2026-10-22 | [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md) |
+| `-sm tensor` + PR #30956 for Qwen3.8-27B (MTP) | Qwen3.8-27B Q8_0 / UD-Q6_K_XL | prompt read -1% / -2%, decode -18% vs layer split | rejected | 2026-10-22 | [PR30956-qwen27](llama.cpp-sycl/PR30956-qwen27-2026-10-22.md) |
+| Upstream PR #30956 (fast tensor-split exchange) | Mistral-Small-3.2-24B Q8_0 (2 cards tensor) | prompt read +14%, decode +2%, ub-4 perplexity bit-identical | live | 2026-10-22 | [PR30956](llama.cpp-sycl/PR30956-2026-10-21.md) |
 | Fork rebased onto upstream (r67c), more entries | Qwen3.8-27B Q8_0 / Q6_K, DeepSeek V4 no-draft / DSpark+lookup, Flash-Next MTP+lookup | 27B decode +3% / +6%, prompt +23% / +11%, perplexity equal; DeepSeek prompt +43% / +37%; Flash-Next lookup decode +14%; answers correct | live | 2026-10-18 | [rebase notes](llama.cpp-sycl/REBASE-2026-10-17.md) |
 | SYCL f16 MUL_MAT on a padded row view (test-backend-ops `k_v` cases) | - | 32 cases wrong (ERR ~1-2) on r52, r66 and r67c alike; not hit by the models tested (FA on) | open bug | 2026-10-18 | [rebase notes](llama.cpp-sycl/REBASE-2026-10-17.md) |
 | SYCL SWIGLU_OAI advertised for f16 but kernel asserts f32 | - | test-backend-ops aborted; fixed locally by limiting support to f32 (gpt-oss uses f32) | fixed (locally) | 2026-10-18 | [rebase notes](llama.cpp-sycl/REBASE-2026-10-17.md) |
