@@ -55,33 +55,52 @@ llama-bench ... -p 1,5 -n 32 -d 32768 -r 3
   One candidate: the all-reduce switches from the FP32 path to the BF16 path at 32K elements (hidden size 5120 x 7+
   tokens crosses it), adding two kernels per all-reduce. Unmeasured.
 
-## Working theory (not yet proven)
+## Measurement 2: where the ~40 ms goes (2026-10-22, env-gated timers in a local build)
 
-In upstream `ggml_sycl_comm_exchange` (`ggml/src/ggml-sycl/ggml-sycl.cpp`) every all-reduce does
-`e0.wait(); e1.wait();` on the host after the device-to-host copies. The queues are in-order, so each wait drains
-everything queued on both cards; the host then has to submit the uploads and the next layer's kernels into empty
-queues. A dense 27B model does about two all-reduces per layer, so a decode step stalls the pipeline on the order of
-a hundred times. With big batches the kernels are long and the stalls are amortised; with 1-8 tokens the exchanged
-data is tiny (tens of KB) and the stalls dominate. That would also explain why the bandwidth improvements help prompt
-speed but not decode.
+**The first theory (host waits in the exchange) was wrong. The gap is kernel launch on a single host thread.**
+
+Per forward at pp1, median of 100 forwards (tensor 71.4 ms, layer 55.7 ms):
+
+| host time, tensor split pp1 | ms per forward |
+|---|---:|
+| launching kernels, card 0 then card 1 on the same thread | 21.2 + 20.3 = **41.5** |
+| inside the all-reduce (128 per forward = 2 per layer x 64 layers, ~186 us each) | 23.7 |
+| of which host waits | 18.5 (mostly the GPU finishing the kernels launched just before; the copies themselves wait ~2.4 ms) |
+| other (graph prep, outputs) | ~6 |
+
+- With tensor split each card runs every layer: ~4,000 compute nodes per card per forward at ~5 us per launch. With
+  layer split each card launches ~2,000 nodes and the launch time hides behind GPU time; with tensor split the
+  end-of-forward sync waits ~0 ms, i.e. **the GPUs sit idle waiting for the host to launch work.**
+- pp1 and pp5 use the FP32 all-reduce path; pp8 crosses the 32K-element threshold to the BF16 path (~1.5 ms more per
+  forward).
+
+Bounds (timing experiments that deliberately produce wrong results):
+
+| test | layer | tensor | tensor, copies kept but no host waits | tensor, no all-reduce at all |
+|---|---:|---:|---:|---:|
+| pp1 | 17.94 | 14.00 | 18.00 | 20.8-21.4 |
+| pp5 | 84.39 | 65.00 | 84.88 | 96.5-98.7 |
+| pp8 | 131.90 | 103.40 | 130.84 | 148-153 |
+| tg32 | 17.99 | 14.59 | 19.22 | 20.4-22.0 |
+
+Removing every host wait only brings tensor to **parity** with layer at 1-8 tokens. Even a free all-reduce gives
+only +16-19% at pp1, because ~44 ms per forward of pure launch time remains.
 
 ## Candidate fixes
 
-| idea | status |
+| idea | result on this machine (Windows, Level Zero) |
 |---|---|
-| Replace the host waits with `ext_oneapi_submit_barrier` on each queue (proposed by @92es on #30358, 2026-10-22) | MTP acceptance identical in his first run; speed not yet reported. Open questions below |
-| One SYCL context spanning both devices, so the upload on one queue can `depends_on` the peer's download event | not tried |
-| `host_task` hand-off instead of a blocking wait on the submitting thread | not tried |
+| Two staging slots, drop the upload waits (ordering kept by the next call's download waits) | +1-2%, noise level |
+| `host_task` hand-off instead of a blocking wait | **-25%**: a pending host_task routes later launches through the DPC++ scheduler (13 us per node) |
+| `ext_oneapi_submit_barrier` on each queue with the peer's download event (proposed by @92es on #30358) | **aborts on the first all-reduce** (0xC0000409, "Abort was called at 3440 line"): here the two devices are in separate SYCL contexts and the barrier rejects the other context's event. Probably fine where both queues share one context (likely on Linux); even then the bound above caps the gain at about layer parity on this machine |
+| One SYCL context spanning both devices | not built; capped at layer parity by the bound |
+| **Launch each card's subgraph from its own host thread** (the lever the numbers point to) | **hangs** after a few all-reduces: the known Level Zero two-thread launch deadlock ([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)), still present on driver 32.0.101.8976. Rough ceiling if it worked: launch 41.5 -> ~21 ms, pp1 ~20-23 tok/s (estimate) |
+| SYCL graph replay per subgraph (cuts per-node launch cost) | graph mode currently exits/crashes; would also need up to 128 cached executable graphs per card |
+| Fewer nodes via fusion | not tried |
 
-Open questions for the barrier approach:
-
-1. The two queues sit in separate SYCL contexts. Does a barrier on q0 that depends on an event from q1 run on the
-   device, or does the DPC++ runtime turn it into a host-side wait internally? Time it.
-2. If any host wait remains per exchange (for example on the uploads), the pipeline still drains once per all-reduce.
-3. If all waits are gone, the pinned staging buffers are reused by the next all-reduce: the next download on one card
-   can overwrite a buffer the other card is still uploading from (write-after-read). Needs double buffering or a
-   cross-queue dependency. A short MTP run rarely hits this; check with perplexity at ub 4 *and* ub 512 plus a long
-   decode compared with a stock build.
+If you test the barrier approach where it does run, please check correctness with perplexity at ub 4 *and* ub 512
+plus a long greedy decode against a stock build (a write-after-read race on reused staging buffers would show up
+there, not in a short MTP run), and post your OS, driver, and whether `q0->get_context() == q1->get_context()`.
 
 ## How to A/B MTP stably (answer to a question on #30358)
 
@@ -95,7 +114,8 @@ Open questions for the barrier approach:
 
 ## Next steps
 
-- Time the two host waits per forward (env-gated timer, local build) to confirm or reject the theory.
-- If confirmed, test the barrier patch and the alternatives above with the same table, plus the correctness checks.
-- Go line for adopting tensor split for 2-card dense models: tensor pp1 and pp5 at least 20% faster than layer, with
-  bit-identical perplexity at ub 4.
+- On Windows Level Zero, 2-card tensor-split decode is host-launch-bound; exchange/bandwidth fixes (#30956, the
+  2-buffer patch, barriers) cannot beat layer split at 1-8 tokens here. Layer split stays the choice for decode.
+- Unblockers worth watching: a driver fix for the two-thread launch deadlock (then per-card launch threads), and working
+  SYCL graph replay.
+- Numbers from Linux / single-context setups very welcome, especially the per-forward launch time.
