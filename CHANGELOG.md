@@ -3,6 +3,12 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-21
+- Tested upstream PR #30956 (fast 2-device `-sm tensor` exchange) on r67c: correct on Windows Level Zero (ub-4
+  perplexity bit-identical); Mistral-Small-24B tensor split prompt read +14%, decode +2%; gpt-oss-120b tensor prompt
+  +5%, decode equal (3-card layer split still ~2x faster). Found: `GGML_SYCL_PIPELINE=1` + `-sm tensor` makes gpt-oss
+  emit garbage (not the PR). [llama.cpp-sycl/PR30956-2026-10-21.md](llama.cpp-sycl/PR30956-2026-10-21.md).
+
 ## 2026-10-18
 - r67c also live for DeepSeek V4 (no draft; DSpark + lookup), Qwen3.8-27B Q8_0 and Q6_K, and Flash-Next MTP + lookup;
   answer checks pass on every switched entry. Only GLM-5.3 and the plain Flash-Next MTP entry stay on older runtimes.
