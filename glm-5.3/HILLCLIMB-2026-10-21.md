@@ -131,3 +131,20 @@ md5: `arm.ps1` `f55faebf1e169174701f3a929522d6da`, `test-arm-teardown.ps1` `7e35
 `kill-arm.ps1` and `find-arm-server.ps1` unchanged. Deployed to the bench box md5-exact (old `arm.ps1` kept
 as `arm.ps1.bak-20261021`); `-DryRun` smoke on the B0 args green (build 251, 81 GB free, adapters ~0 GB,
 "auto-teardown ON ... hold 90 min"). No GPU arm has run on it yet - the first real arm is the live check.
+
+### Live check: B0 arm with self-teardown (2026-10-21, 21:58-22:07)
+
+First real GPU arm on the new `arm.ps1` (B0 args, build 251, heartbeat 30, tag `b0-selfteardown`, hold 30 min).
+Box idle-clean before (0 servers, adapters ~0 GB, 80.9 GB free, llama-swap running nothing; the agent
+gateway that could call bench-box models was stopped for the run).
+
+- `pids.txt` recorded `server=<pid>` + `port=9078` - the empty-`server=` bug is gone on real hardware.
+- Ready after ~100 s (warm file cache), 300 s idle soak answered in 0.6 s, VRAM 114.6 GB flat across the soak.
+- `squal.py` output identical to the B0 baseline's (json/math/count).
+- `benchdone` written at 22:07:00; teardown log 22:07:07: `stopped server pid ... (guards passed)`, child and
+  watchdog stopped, lock removed, wrapper exited. After: 0 llama-server, adapters ~0 GB, 80.8 GB free.
+- Gotcha: the WSL clock on the bench box runs ~75 s ahead of Windows. Compare arm timestamps with Windows-side
+  times (`Get-Date` / file mtimes), never WSL `date`, or a correct release looks like an early one.
+
+One clean arm, not yet a campaign: HANDOFF step 4 (deprecate `kill-port-server.ps1` for arms) still waits for
+a full campaign with zero teardown misses.
