@@ -99,3 +99,35 @@ procedure. Now:
   server (csc.exe; renamed ping.exe and powershell.exe both die as mocks - logged in bench/README.md).
   7/7 green; all four scripts parse clean; deployed to GPU-BOX md5-exact; `-DryRun` smoke on GPU-BOX green
   (build 251, commit 4cc67bb7f; box verified idle-clean, 81.5 GB free, all adapters ~0 GB).
+
+## Late follow-up: arm self-teardown (HANDOFF next step 1, TDD)
+
+`arm.ps1` now frees the GPUs itself. Order is fixed: `record.md` first, then (ready arms only) a warm hold of
+`-TeardownHoldMin` (default 90 min; `<tag>.benchdone` releases it within ~15 s), then it stops its own child,
+watchdog and recorded server with the kill-arm guards and removes its lock. `-NoAutoTeardown` keeps the old
+stay-up behaviour for `kill-arm.ps1`. Built on an uncommitted first draft from another agent; writing the e2e
+tests against the real `arm.ps1` surfaced four pre-existing bugs, each now pinned by a case:
+
+- **`server=` was always empty.** `arm.ps1` read `.Id` off the CIM object `Get-ArmServerProcess` returns (it
+  only has `.ProcessId`). Every arm since the atomic-teardown patch recorded `server=` with no PID, so
+  `kill-arm.ps1` never stopped an arm server - the 7 kill-arm cases fed it hand-written pids files and could not
+  see this. (case10a)
+- **The watchdog targeted the biggest llama-server on the box**, not the arm's. A production server that loaded
+  mid-arm with a bigger working set would have been the one killed. It is now limited to servers under the
+  arm's runtime dir; `$alive` likewise means the arm's own server. (case13b)
+- **Watchdog kills were invisible in the record**; `record.md` now carries a `watchdog events:` line. (case13a)
+- **A stale `<tag>.benchdone`** from an earlier same-tag run would have ended a new hold instantly; it is
+  removed at start. (case12a)
+
+Also found: piping `arm.ps1`'s output hangs whenever the arm stays up, because `Start-Process -Redirect*`
+inherits the caller's stdout into the child and its llama-server (the first suite run hung at case10 for this
+reason; the draft's watcher redirect made it worse and is reverted). The suite now captures arm output through
+files; bench/README.md lists it under gotchas.
+
+Result: `bench/test-arm-teardown.ps1` 17/17 green locally (314 s), zero leftover processes. Red run first
+against the draft: 10a, 10b, 12a, 13a, 13b failed as expected (plus three test-harness bugs fixed: missing
+`tt8.args`, cases 3-4 stand-ins blocking preflight, empty `ExitCode` from `Start-Process -PassThru`).
+md5: `arm.ps1` `f55faebf1e169174701f3a929522d6da`, `test-arm-teardown.ps1` `7e35a61434409f293fc0a8fb79131f99`;
+`kill-arm.ps1` and `find-arm-server.ps1` unchanged. **Not yet deployed to the bench box**; the deployed
+`arm.ps1` (`637785a9...`) still has the empty-`server=` bug, so run `kill-port-server.ps1` after `kill-arm.ps1`
+until the new one is deployed.

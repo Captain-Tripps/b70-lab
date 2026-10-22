@@ -34,7 +34,7 @@ param(
     [int]$WatchMin = 0,
     [int]$IdleSoakSec = 240,
     # Preflight strictness, exposed as parameters so the mock-driven e2e tests
-    # (test-arm-teardown.ps1) can run on any dev box. GPU-BOX runs the strict defaults:
+    # (test-arm-teardown.ps1) can run on any dev box. The bench box runs the strict defaults:
     # adapters above -MaxAdapterGB GB of resident VRAM mean the box is not idle, and the
     # box needs MinFreeGB + -HeadroomGB free because Maya-M peaks ~100 GB over the floor.
     [double]$MaxAdapterGB = 1.0,
@@ -78,6 +78,15 @@ if (Test-Path -LiteralPath $lockFile) {
     Remove-Item -LiteralPath $lockFile -Force
 }
 $PID | Set-Content -LiteralPath $lockFile -Encoding ASCII
+
+# A benchdone marker can only mean "the bench of THIS run is finished". One left over from an
+# earlier run of the same tag (re-runs after a failure reuse tags) would end this run's hold
+# before anyone benched it, so it goes now, while we hold the tag lock.
+$benchdoneFile = & $path 'benchdone'
+if (Test-Path -LiteralPath $benchdoneFile) {
+    Write-Warning "removing stale benchdone marker from an earlier '$Tag' run ($benchdoneFile)"
+    Remove-Item -LiteralPath $benchdoneFile -Force
+}
 
 # --- teardown state + one teardown path for every exit path --------------------------------------
 # The default behavior (2026-10-21): the arm frees the GPUs itself - the old "leave it up and
@@ -269,13 +278,16 @@ $childLines += '& $exe @tokens *>&1'
 Set-Content -LiteralPath $childScript -Value $childLines -Encoding UTF8
 
 $watchLines = @(
-    ('param([string]$Ledger, [string]$KillLog, [int]$Port, [double]$MinFreeGB, [double]$DemoteGB, [int]$MaxMin, [string]$ArgsFile)')
+    ('param([string]$Ledger, [string]$KillLog, [int]$Port, [double]$MinFreeGB, [double]$DemoteGB, [int]$MaxMin, [string]$Runtime)')
+    '# Only the llama-server started from THIS arm''s runtime dir is ours to sample and kill. The old'
+    '# "biggest llama-server on the box" pick would shoot a production llama-swap server that loaded'
+    '# mid-arm (bigger working set) and leave the arm running. case13b guards this.'
     '$end = (Get-Date).AddMinutes($MaxMin)'
     '$peakVram = 0.0; $demoteNoted = $false'
     '"ts,free_gb,server_ws_gb,server_private_gb,vram_total_gb,vram_max_card_gb,health" | Add-Content -LiteralPath $Ledger'
     'while ((Get-Date) -lt $end) {'
     '    $free = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 2)'
-    '    $p = Get-Process -Name llama-server -ErrorAction SilentlyContinue | Sort-Object WorkingSet64 -Descending | Select-Object -First 1'
+    '    $p = Get-Process -Name llama-server -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ($Runtime + "\*") } | Sort-Object WorkingSet64 -Descending | Select-Object -First 1'
     '    $ws = if ($p) { [math]::Round($p.WorkingSet64 / 1GB, 2) } else { 0 }'
     '    $priv = if ($p) { [math]::Round($p.PrivateMemorySize64 / 1GB, 2) } else { 0 }'
     '    $ded = @{}'
@@ -293,7 +305,7 @@ $watchLines = @(
     '        "demotion detected: adapter VRAM fell from $peakVram GB to $total GB" | Add-Content -LiteralPath $KillLog'
     '    }'
     '    if ($p -and $free -lt $MinFreeGB) {'
-    '        "watchdog: available RAM fell to $free GB (floor $MinFreeGB) - killing arm" | Add-Content -LiteralPath $KillLog'
+    '        "watchdog: available RAM fell to $free GB (floor $MinFreeGB) - killing arm server pid $($p.Id)" | Add-Content -LiteralPath $KillLog'
     '        Stop-Process -Id $p.Id -Force'
     '        break'
     '    }'
@@ -325,17 +337,17 @@ $child = Start-Process -FilePath 'powershell.exe' `
     -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $childScript) `
     -WorkingDirectory $Runtime -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (& $path 'out.log') -RedirectStandardError (& $path 'err.log')
-# stdout/stderr MUST be redirected: a watcher started without redirection can inherit the
-# invoker's stdout handle, and then anything that captures arm.ps1's output (test suites,
-# ssh pipelines) waits for an EOF that never comes while the watcher lives. The watcher's
-# real reporting goes through -Ledger/-KillLog files anyway; these two files only ever
-# catch PowerShell's own error output.
+# Handle inheritance, measured 2026-10-21: Start-Process WITH -Redirect* creates the process with
+# bInheritHandles, so it inherits arm.ps1's own stdout. The child above needs its redirect (out.log
+# / err.log), so it - and the llama-server under it - holds the invoker's pipe while it lives;
+# never capture arm.ps1's output through a pipe when the arm stays up (-NoAutoTeardown), use a
+# file. The watcher is started WITHOUT redirection (ShellExecute, nothing inherited) so it adds
+# no second holder; its reporting goes to -Ledger/-KillLog anyway.
 $watcher = Start-Process -FilePath 'powershell.exe' `
     -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watchScript,
         '-Ledger', (& $path 'ledger.csv'), '-KillLog', (& $path 'watchdog.log'), '-Port', $Port,
-        '-MinFreeGB', $MinFreeGB, '-DemoteGB', $DemoteGB, '-MaxMin', $WatchMin) `
-    -WindowStyle Hidden -PassThru `
-    -RedirectStandardOutput (& $path 'watcher.out.log') -RedirectStandardError (& $path 'watcher.err.log')
+        '-MinFreeGB', $MinFreeGB, '-DemoteGB', $DemoteGB, '-MaxMin', $WatchMin, '-Runtime', $Runtime) `
+    -WindowStyle Hidden -PassThru
 
 "$(Get-Date -Format 's') arm=$Tag childPID=$($child.Id) watchdogPID=$($watcher.Id) port=$Port freeStartGB=$freeStart"
 $script:armChildPid = $child.Id
@@ -366,8 +378,11 @@ while (-not $foundServer -and $swFind.Elapsed.TotalSeconds -lt 60) {
     }
 }
 if ($foundServer) {
-    $script:armServerPid = $foundServer.Id
-    @("server=$($foundServer.Id)", "port=$serverPort") |
+    # Get-ArmServerProcess returns a CIM Win32_Process: the PID is .ProcessId. (.Id is $null on
+    # it - reading .Id is how every arm up to 2026-10-21 wrote an empty "server=" line and
+    # kill-arm silently never stopped a single arm server. case10a guards this.)
+    $script:armServerPid = [int]$foundServer.ProcessId
+    @("server=$($script:armServerPid)", "port=$serverPort") |
         Add-Content -LiteralPath (& $path 'pids.txt') -Encoding UTF8
 } else {
     "server=? arm llama-server not found within 60 s; auto-teardown will stop it by parentage, kill-arm will hold its handle" |
@@ -398,7 +413,10 @@ while ((Get-Date) -lt $deadline) {
 }
 "$((Get-Date -Format 'HH:mm:ss')),$(if ($ready) { 'ready' } else { 'not-ready' }),$([math]::Round($sw.Elapsed.TotalSeconds, 1))" | Add-Content -LiteralPath (& $path 'probe.csv')
 
-$alive = Get-Process -Name llama-server -ErrorAction SilentlyContinue
+# "Alive" means THIS arm's server, not any llama-server: a production server that loaded mid-arm
+# must not make a dead arm look healthy.
+$alive = if ($script:armServerPid -gt 0) { Get-Process -Id $script:armServerPid -ErrorAction SilentlyContinue }
+         else { Get-Process -Name llama-server -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ($Runtime + '\*') } }
 $freeNow = Get-FreeGB
 $dedNow = Get-AdapterVRAM
 $dedText = ($dedNow.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Key)=$($_.Value)GB" })
@@ -429,6 +447,7 @@ if ($IdleSoakSec -gt 0 -and $alive) {
     }
     $soakNote = "answered in $soakAnswerSec s after ${IdleSoakSec}s idle"
 }
+$watchdogLines = @(Get-Content -LiteralPath (& $path 'watchdog.log') -ErrorAction SilentlyContinue | Where-Object { $_ -match '\S' })
 
 @(
     "# arm record: $Tag"
@@ -444,6 +463,9 @@ if ($IdleSoakSec -gt 0 -and $alive) {
     "- version: $version"
     "- env: $(if ($Env.Count) { $Env -join '  ' } else { '(none)' })"
     "- watchdog: kills below $MinFreeGB GB available; demotion noted above $DemoteGB GB of VRAM loss"
+    # If the watchdog acted (RAM-floor kill, demotion), the record must say so: a record that
+    # only reads "ready=False" sends the next agent hunting for a load bug that is not there.
+    $(if ($watchdogLines.Count) { "- watchdog events: $($watchdogLines -join ' | ')" } else { '- watchdog events: none' })
     ""
     'launch arguments:'
     '```'
@@ -466,7 +488,6 @@ if ($NoAutoTeardown) {
 }
 else {
     if ($ready) {
-        $benchdoneFile = Join-Path $LogDir "$Tag.benchdone"
         "READY after $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s. Auto-teardown armed: holding 127.0.0.1:$serverPort for $TeardownHoldMin min so an external bench can use the warm model; write $benchdoneFile to release early; then child/watchdog/server stop automatically."
         $holdSw = [System.Diagnostics.Stopwatch]::StartNew()
         $holdEnd = (Get-Date).AddMinutes($TeardownHoldMin)

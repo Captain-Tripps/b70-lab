@@ -30,8 +30,19 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 ```powershell
 arm.ps1 -Runtime <runtime dir> -ArgsFile <server args file> -Port 9071 -Tag <tag>
         [-Env NAME=VALUE ...] [-MinFreeGB 8] [-DemoteGB 60] [-LoadTimeoutMin 45]
-        [-IdleSoakSec 300] [-WatchMin 0] [-DryRun]
+        [-IdleSoakSec 300] [-WatchMin 0] [-TeardownHoldMin 90] [-NoAutoTeardown]
+        [-MaxAdapterGB 1] [-HeadroomGB 65] [-DryRun]
 ```
+
+**Lifecycle: the arm tears itself down.** After `record.md` is written (always first, failure paths included)
+a ready arm holds its endpoint warm for `-TeardownHoldMin` minutes so `squal.py`/`sbench.py` can use it, then
+stops its own child, watchdog and recorded server with the same guards as `kill-arm.ps1`, and drops its lock.
+Write `<logdir>\<tag>.benchdone` when the bench is finished to release it within ~15 s; a marker left over from
+an earlier run of the same tag is deleted at start, so it can never cut a new run short. A not-ready arm (never
+answered, or killed by the watchdog) skips the hold and tears down right after its record. `-NoAutoTeardown`
+restores the stay-up behaviour; `kill-arm.ps1 -Tag <tag>` stops it then, and still works in both modes.
+`-MaxAdapterGB`/`-HeadroomGB` exist only so the mock suite can pass preflight on a dev box - keep the defaults
+on the bench machine.
 
 - Preflight refuses to start when a `llama-server`/Strata is resident, any adapter holds >1 GB dedicated VRAM, or
   free RAM is under `MinFreeGB + 65`. Use `-DryRun` to see the preflight result and the parsed argv without
@@ -55,10 +66,16 @@ arm.ps1 -Runtime <runtime dir> -ArgsFile <server args file> -Port 9071 -Tag <tag
   service, or an arm from the old pids.txt format - is reported and left alone; use `kill-port-server.ps1`
   explicitly for those. `find-arm-server.ps1` holds the discovery helper (`Get-ArmServerProcess -Runtime -Port`);
   deploy it next to `arm.ps1`.
+- The watchdog only samples and kills a `llama-server` whose executable lives under the arm's runtime dir; a
+  production server that loads mid-arm is never its target. Watchdog events are copied into `record.md`.
 - `test-arm-teardown.ps1` is the regression suite for all of the above: it builds a mock "server" (a tiny csc.exe-
-  compiled exe that sleeps forever and accepts any argv) and asserts recorded servers die, unrecorded ones never
-  do, recycled PIDs are untouchable, and legacy pids.txt files hold the handle. Run it after any change to the
-  kill/discovery path; it touches no real server and finishes in seconds.
+  compiled exe that accepts any argv, optionally answers HTTP on `--serve <port>`) and asserts recorded servers
+  die, unrecorded ones never do, recycled PIDs are untouchable, legacy pids.txt files hold the handle, and - by
+  running the real `arm.ps1` end to end - that the arm records its real server PID, holds and self-tears-down,
+  honours fresh (not stale) `benchdone` markers, and on a watchdog kill writes the record before tearing down
+  while a production stand-in survives. 17 cases, ~5 min (one case sits out a 1-minute hold). It touches no
+  real server, but its e2e cases need a box with **no** llama-server running (preflight refuses otherwise).
+  Set `ARM_TEST_PROBE_PORT` if 9077 is taken.
 - With the arm up, run `squal.py` and then `sbench.py` **from Windows** against `http://127.0.0.1:<port> arm` -
   the server binds loopback only, so WSL python cannot reach it.
 
@@ -66,6 +83,9 @@ Windows gotchas that cost real debugging time, now encoded in the scripts:
 
 - `llama-server --version` writes to **stderr**; under PS 5.1 with `$ErrorActionPreference='Stop'`, native stderr
   through `2>&1` becomes a terminating error. `arm.ps1` runs under `Continue` with explicit guards instead.
+- Never capture `arm.ps1` output through a pipe (`& arm.ps1 | Out-String`, an ssh pipeline) when the arm can
+  stay up: `Start-Process -Redirect*` creates the child with handle inheritance, so the child and its
+  llama-server hold the caller's stdout and the pipe never reaches EOF. Redirect to a file instead.
 - Output of Windows `.exe`s piped through WSL often vanishes; redirect into a file on `C:\` and `cat` it in a
   separate command.
 - `-f` format strings blow up when the template contains `$_`; use concatenation for templates.

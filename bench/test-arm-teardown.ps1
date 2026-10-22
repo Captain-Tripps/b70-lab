@@ -67,6 +67,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 class ArmMockServer {
+    static byte[] ballast;
     static void Main(string[] args) {
         foreach (var a in args) Console.WriteLine("mock-arg:" + a);
         // arm.ps1 fingerprint step runs `<exe> --version` synchronously; a sleep-forever mock
@@ -75,6 +76,16 @@ class ArmMockServer {
         int servePort = -1;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == "--serve") servePort = int.Parse(args[i + 1]);
+        // --alloc-mb N: touch N MB so this mock has the biggest working set on the box. The
+        // old watchdog killed "the largest llama-server", which is how a production server
+        // that loaded mid-arm would have been shot; case13 uses this to make that deterministic.
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--alloc-mb") {
+                var blob = new byte[int.Parse(args[i + 1]) * 1024 * 1024];
+                for (int j = 0; j < blob.Length; j += 4096) blob[j] = 1;
+                GC.KeepAlive(blob);
+                ballast = blob;
+            }
         if (servePort > 0) Serve(servePort);
         while (true) Thread.Sleep(100000);
     }
@@ -182,10 +193,10 @@ Stop-Process -Id $prodSrv.Id -Force -ErrorAction SilentlyContinue
 # arm.ps1 must free the GPUs itself after its record is written - "without waiting on the
 # operator" - using the same guards as kill-arm (recorded PID re-verified as llama-server.exe
 # still carrying the arm's --port). These cases run the REAL arm.ps1 (bench/ copy, the same
-# bytes that deploy to GPU-BOX) against the csc mock. The mock answers chat completions over
+# bytes that deploy to the bench box) against the csc mock. The mock answers chat completions over
 # loopback (--serve <port>) so the load probe goes ready without a model, and an arm run costs
 # seconds instead of a 45-minute load.
-# Preflight is machine-strict on GPU-BOX (refuses a dirty box: resident servers, adapters above
+# Preflight is machine-strict on the bench box (refuses a dirty box: resident servers, adapters above
 # 1 GB, free RAM under MinFreeGB+65). The mock cases run on whatever dev box has the repo, so
 # arm.ps1 exposes -MaxAdapterGB and -HeadroomGB; the tests pass permissive values and the
 # production defaults stay strict.
@@ -232,21 +243,46 @@ function Wait-ArmGone { param([string]$Tag, [int]$TimeoutSec)
 }
 function Invoke-Arm { param([string[]]$Extra)
     # One arm run against the copy of arm.ps1 in this directory; returns the raw transcript.
-    # Native stderr from arm.ps1 must not become a terminating error (top of this suite is
-    # 'Stop'); arm.ps1 itself runs under Continue for the same reason (PS 5.1 + native stderr).
-    $ErrorActionPreference = 'Continue'
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $armScript @Extra 2>&1 | Out-String
+    # The transcript goes through FILES, never a pipe: arm.ps1 starts its child with redirected
+    # output, and Start-Process then creates it with handle inheritance - the child (and the
+    # llama-server under it) inherit arm.ps1's own stdout. When the arm stays up
+    # (-NoAutoTeardown) a piped caller (`& arm.ps1 | Out-String`, an ssh pipeline) waits for an
+    # EOF that only comes when the server dies: the suite hung forever at case10 this way.
+    $tagIdx = [Array]::IndexOf($Extra, '-Tag')
+    $t = if ($tagIdx -ge 0) { $Extra[$tagIdx + 1] } else { 'arm' }
+    $p = Start-ArmAsync -Tag $t -Extra $Extra
+    if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; return "(arm.ps1 did not exit within 240 s)" }
+    $o = Get-Content -Raw -LiteralPath (Join-Path $logDir "$t.stdout.txt") -ErrorAction SilentlyContinue
+    $e = Get-Content -Raw -LiteralPath (Join-Path $logDir "$t.stderr.txt") -ErrorAction SilentlyContinue
+    "$o$e"
 }
-function Common-ArmArgs { param([string]$Tag)
+function Common-ArmArgs { param([string]$Tag, [string]$MinFreeGB = '0', [string]$HeadroomGB = '0')
     @(
         '-Runtime', $rtArm
         '-ArgsFile', (Join-Path $logDir "$Tag.args")
         '-Port', "$probePort"
         '-Tag', $Tag
         '-LogDir', $logDir
-        '-MinFreeGB', '0', '-MaxAdapterGB', '999', '-HeadroomGB', '0'
+        # colon form: under -File a bare "-999999" token would parse as a parameter name
+        "-MinFreeGB:$MinFreeGB", '-MaxAdapterGB', '999', "-HeadroomGB:$HeadroomGB"
         '-LoadTimeoutMin', '1', '-IdleSoakSec', '0'
     )
+}
+function Start-ArmAsync { param([string]$Tag, [string[]]$Extra)
+    # Same run as Invoke-Arm, but detached so the test can act WHILE the arm is up (write a
+    # marker mid-hold, start a production stand-in mid-load). Returns the arm's process.
+    $argLine = (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $armScript) + $Extra |
+        ForEach-Object { '"' + $_ + '"' }) -join ' '
+    $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argLine -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput (Join-Path $logDir "$Tag.stdout.txt") `
+        -RedirectStandardError (Join-Path $logDir "$Tag.stderr.txt")
+    $null = $p.Handle   # .NET quirk: without touching Handle now, ExitCode reads back empty later
+    $p
+}
+function Wait-File { param([string]$Path, [int]$TimeoutSec)
+    $end = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $end) { if (Test-Path -LiteralPath $Path) { return $true }; Start-Sleep -Milliseconds 250 }
+    return $false
 }
 function Write-ServingArgs { param([string]$Tag)
     # --port is what arm.ps1 discovers and guards by; --serve is what makes the mock bind so
@@ -257,7 +293,13 @@ function Write-ServingArgs { param([string]$Tag)
     )
 }
 
+# The kill-arm cases leave their production/legacy stand-ins up (case5 needs them). arm.ps1's
+# preflight rightly refuses to start next to ANY resident llama-server, so clear them first.
+foreach ($m in $prod, $legacy) { if ($m) { Stop-Process -Id $m.Id -Force -ErrorAction SilentlyContinue } }
+Clear-RuntimeMocks
+
 # --- case 8: arm.ps1 must accept the preflight overrides (DryRun passes on a busy box) -----------
+Write-ServingArgs -Tag 'tt8'
 $dryOut = Invoke-Arm -Extra ((Common-ArmArgs 'tt8') + @('-DryRun'))
 if ($dryOut -match 'DRY RUN: preflight passed') { $results += 'PASS case8_arm_accepts_maxadaptergb_headroomb_preflight_overrides' }
 else { $results += "FAIL case8_arm_accepts_maxadaptergb_headroomb_preflight_overrides: no dry-run pass on this box. Output: $dryOut" }
@@ -295,6 +337,17 @@ $elapsed10 = [math]::Round(((Get-Date) - $t10).TotalSeconds)
 $srvId10 = 0
 foreach ($l in (Get-Content -LiteralPath (Join-Path $logDir 'tt10.pids.txt') -ErrorAction SilentlyContinue)) {
     if ($l -match '^\s*server=(\d+)\s*$') { $srvId10 = [int]$Matches[1] }
+}
+# case 10a: the recorded server= must be the real PID of the arm's llama-server. Before this
+# case existed, arm.ps1 wrote "server=" with an EMPTY value (it read .Id off the CIM object
+# Get-ArmServerProcess returns, which only has .ProcessId), so kill-arm never had a server to
+# stop - every arm on the bench box leaked its llama-server to the operator.
+$srv10 = if ($srvId10 -gt 0) { Get-CimInstance Win32_Process -Filter "ProcessId=$srvId10" } else { $null }
+if ($srv10 -and $srv10.ExecutablePath -like ($rtArm + '\*')) {
+    $results += 'PASS case10a_arm_records_real_server_pid_in_pids_txt'
+} else {
+    $pidsText10 = (Get-Content -LiteralPath (Join-Path $logDir 'tt10.pids.txt') -ErrorAction SilentlyContinue) -join ' | '
+    $results += "FAIL case10a_arm_records_real_server_pid_in_pids_txt: pids.txt = $pidsText10"
 }
 $up10 = ($srvId10 -gt 0) -and (Get-Process -Id $srvId10 -ErrorAction SilentlyContinue) -and (Test-PortOpen $probePort)
 if ($up10) {
@@ -335,31 +388,78 @@ if (Test-PortOpen $probePort) {
     Clear-RuntimeMocks
 }
 
-# --- case 12: a benchdone marker releases the hold window early -----------------------------------
+# --- case 12: a benchdone marker releases the hold early - but only a FRESH one -------------------
 # Bench finished? touch <tag>.benchdone and the arm exits within its poll interval (<=15 s)
-# instead of idling out the full hold on a warm GPU nobody is using.
+# instead of idling out the full hold on a warm GPU nobody is using. A marker left over from an
+# earlier run of the same tag (re-runs after a failure reuse tags) must NOT end the new run's
+# hold before anyone has benched it: the arm clears it at start. So: plant a stale marker, see
+# the arm still holding 20 s after its record, then write a fresh marker and see it go.
 if (Test-PortOpen $probePort) {
     $results += 'SKIP case12_probe_port_still_open_after_case11'
 } else {
     Write-ServingArgs -Tag 'tt12'
-    Set-Content -LiteralPath (Join-Path $logDir 'tt12.benchdone') -Value 'bench done before the arm even asked' -Encoding ASCII
+    $marker12 = Join-Path $logDir 'tt12.benchdone'
+    Set-Content -LiteralPath $marker12 -Value 'stale marker from an earlier tt12 run' -Encoding ASCII
+    $arm12 = Start-ArmAsync -Tag 'tt12' -Extra ((Common-ArmArgs 'tt12') + @('-TeardownHoldMin', '10'))
+    $rec12 = Wait-File -Path (Join-Path $logDir 'tt12.record.md') -TimeoutSec 90
+    Start-Sleep -Seconds 20   # > one 15 s hold poll: a stale marker would have released by now
+    $heldDespiteStale12 = $rec12 -and -not $arm12.HasExited
+    Set-Content -LiteralPath $marker12 -Value 'bench done' -Encoding ASCII
     $t12 = Get-Date
-    $out12 = Invoke-Arm -Extra ((Common-ArmArgs 'tt12') + @('-TeardownHoldMin', '10'))
-    $elapsed12 = [math]::Round(((Get-Date) - $t12).TotalSeconds)
+    $exited12 = $arm12.WaitForExit(40000)
+    $release12 = [math]::Round(((Get-Date) - $t12).TotalSeconds)
     $gone12 = Wait-ArmGone -Tag 'tt12' -TimeoutSec 10
-    # The arm must have actually run: an args file + pids.txt + record.md prove it launched,
-    # went ready, and entered the hold - otherwise "all gone fast" is vacuously true.
-    $ran12 = (Test-Path -LiteralPath (Join-Path $logDir 'tt12.pids.txt')) -and
-             (Test-Path -LiteralPath (Join-Path $logDir 'tt12.record.md')) -and
-             ($out12 -match 'ready')
-    if ($ran12 -and $gone12 -and $elapsed12 -lt 120) {
-        $results += "PASS case12_benchdone_marker_releases_hold_early (arm ran ${elapsed12}s, hold was 600s)"
+    if ($heldDespiteStale12) { $results += 'PASS case12a_stale_benchdone_from_earlier_run_does_not_end_hold' }
+    else { $results += "FAIL case12a_stale_benchdone_from_earlier_run_does_not_end_hold: record=$rec12 armExited=$($arm12.HasExited). Output: $(Get-Content -Raw -LiteralPath (Join-Path $logDir 'tt12.stdout.txt') -ErrorAction SilentlyContinue)" }
+    if ($heldDespiteStale12 -and $exited12 -and $gone12) {
+        $results += "PASS case12b_fresh_benchdone_releases_hold_early (released ${release12}s after marker, hold was 600s)"
     } else {
-        $results += "FAIL case12_benchdone_marker_releases_hold_early: ran=$ran12 allGone=$gone12 after ${elapsed12}s. Output: $out12"
+        if (-not $arm12.HasExited) { Stop-Process -Id $arm12.Id -Force -ErrorAction SilentlyContinue }
+        $results += "FAIL case12b_fresh_benchdone_releases_hold_early: exited=$exited12 allGone=$gone12 after ${release12}s"
     }
-    Remove-Item -LiteralPath (Join-Path $logDir 'tt12.benchdone') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $marker12 -Force -ErrorAction SilentlyContinue
     Clear-RuntimeMocks
 }
+
+# --- case 13: watchdog kill BEFORE the record - record first, then teardown; production lives ---
+# The handoff's warning case. The arm's server never answers (no --serve), and an impossible
+# RAM floor makes the watchdog kill it within seconds - so the death happens before record.md
+# exists. Required: record.md is written before the teardown runs and says the watchdog killed
+# the arm; the arm exits non-zero (2 = never answered); everything it started is gone.
+# A production stand-in (a llama-server from ANOTHER runtime dir, with the biggest working set
+# on the box) starts while the arm is loading - exactly what llama-swap does on a live request.
+# It must survive both the watchdog and the teardown: unrecorded servers are never touched.
+$t13Floor = '999999'
+$rtProdExe13 = Join-Path $rtProd 'llama-server.exe'
+Set-Content -LiteralPath (Join-Path $logDir 'tt13.args') -Encoding ASCII -Value @(
+    '-m', (Join-Path $mockDir 'mock-server.cs'), '--port', "$probePort"
+)
+$arm13 = Start-ArmAsync -Tag 'tt13' -Extra (Common-ArmArgs 'tt13' -MinFreeGB $t13Floor -HeadroomGB "-$t13Floor")
+$prod13 = $null
+if (Wait-File -Path (Join-Path $logDir 'tt13.pids.txt') -TimeoutSec 60) {
+    $prod13 = Start-Process -FilePath $rtProdExe13 -ArgumentList @('--port', '9061', '--alloc-mb', '400') -WindowStyle Hidden -PassThru
+}
+$exited13 = $arm13.WaitForExit(150000)
+if (-not $exited13) { Stop-Process -Id $arm13.Id -Force -ErrorAction SilentlyContinue }
+$recPath13 = Join-Path $logDir 'tt13.record.md'
+$tdPath13 = Join-Path $logDir 'tt13.teardown.log'
+$record13 = Test-Path -LiteralPath $recPath13
+$recText13 = if ($record13) { Get-Content -Raw -LiteralPath $recPath13 } else { '' }
+$order13 = $record13 -and (Test-Path -LiteralPath $tdPath13) -and
+    ((Get-Item -LiteralPath $recPath13).LastWriteTime -le (Get-Item -LiteralPath $tdPath13).CreationTime)
+$names13 = $recText13 -match 'watchdog: available RAM fell'
+$code13 = if ($exited13) { $arm13.ExitCode } else { 'hung' }
+$gone13 = Wait-ArmGone -Tag 'tt13' -TimeoutSec 15
+$prodAlive13 = $prod13 -and (Mock-Alive -Id $prod13.Id)
+if ($order13 -and $names13 -and $code13 -eq 2 -and $gone13) {
+    $results += 'PASS case13a_watchdog_kill_before_record_writes_record_first_then_tears_down'
+} else {
+    $results += "FAIL case13a_watchdog_kill_before_record_writes_record_first_then_tears_down: record=$record13 recordBeforeTeardown=$order13 recordNamesKill=$names13 exit=$code13 allGone=$gone13. watchdog.log: $(Get-Content -Raw -LiteralPath (Join-Path $logDir 'tt13.watchdog.log') -ErrorAction SilentlyContinue)"
+}
+if ($prodAlive13) { $results += 'PASS case13b_production_server_started_mid_arm_survives_watchdog_and_teardown' }
+else { $results += "FAIL case13b_production_server_started_mid_arm_survives_watchdog_and_teardown: prodStarted=$([bool]$prod13). watchdog.log: $(Get-Content -Raw -LiteralPath (Join-Path $logDir 'tt13.watchdog.log') -ErrorAction SilentlyContinue)" }
+if ($prod13) { Stop-Process -Id $prod13.Id -Force -ErrorAction SilentlyContinue }
+Clear-RuntimeMocks
 
 # --- cleanup: never leave mock servers behind ---------------------------------------------------
 $orphans = @(Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" |
