@@ -8,7 +8,12 @@ from your own cards. Upstream context: [ggml-org/llama.cpp#30956](https://github
 decodes ~30% faster than layer split on Qwen3.8-27B ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)),
 and adding per-card launch threads on top brings it to +38-42% at 1-8 tokens and +31% at 512 tokens
 ([Measurement 4](#measurement-4-graph-cache--per-card-launch-threads-2026-10-22)).
-Prototype, not yet tested in a server or on MoE models.**
+**Update 2026-10-23: validated in llama-server and in production use** ([Measurement 5](#measurement-5-llama-server-validation-2026-10-23)):
+Mistral-Small-3.2-24B decode +45% and Qwen3.8-27B +18-21% with MTP, on a build that also fixes 10-35 s slot-save
+stalls in tensor split ([Measurement 6](#measurement-6-slot-save-stalls-and-get_tensor_2d-2026-10-23)). Two caveats
+found on the way: the graph-record size gate matters ([Measurement 7](#measurement-7-the-record-size-gate-2026-10-23)),
+and per-card launch threads are **not** safe for serving. On a long-form generation workload, 2 cards with the cache
+beat the same model on 1 card by 26-41% decode ([Measurement 8](#measurement-8-long-form-generation-1-card-vs-2-cards-2026-10-23)).**
 
 ## The question
 
@@ -164,8 +169,84 @@ MTP (llama-bench forwards only), tok/s, median of reps 3-8:
   across all four (layer 18.0, +38%). Per-card threads *without* the cache crashed once in four loops inside oneMKL's
   threading DLL (not root-caused), so the threads-only setup is not recommended; with the cache no crash was seen,
   which makes it rare but does not prove it gone.
+- **Update 2026-10-23: not safe for serving.** Under llama-server mixed traffic, Qwen3.8-27B Q8 with cache + per-card
+  threads exited silently once and hung once in six runs, both during a long prompt read. Mistral and Q6 ran clean. Not
+  root-caused; the extra 3-7% is not worth it. Use the cache alone.
 
-Still not done for either setup: llama-server with real mixed traffic, MTP end to end, MoE models, more than 2 cards.
+## Measurement 5: llama-server validation (2026-10-23)
+
+Standalone llama-server per arm with each model's serving args (q4_0 KV, -fa on, MTP where used), 2 cards, cache env on
+the tensor arms. Client: greedy 3 x 2048 tokens, a 24-request mixed run (6 prompt lengths 8-12k x 4 output lengths,
+temp 0.7, host prompt cache on), a ~33k-token prompt read, and repeated decode rounds. tok/s; A/B/B/A pairs.
+
+| model | arm | decode | ~33k read | decode right after it |
+|---|---|---:|---:|---:|
+| Qwen3.8-27B Q8_0, MTP n4 | layer | 43.2 / 42.8 | 968 / 955 | 27.9 / 28.3 |
+| | **tensor + cache** | **50.4 / 51.7 (+18-20%)** | 973 / 961 (=) | 26.4 / 27.3 (-3..-5%) |
+| Qwen3.8-27B UD-Q6_K_XL, MTP n4 | layer | 43.0 / 42.4 | 899 / 900 | 27.6 / 28.0 |
+| | **tensor + cache** | **50.8 / 51.0 (+19%)** | 921 / 917 (+2%) | 31.9 / 26.3 (noisy) |
+| Mistral-Small-3.2-24B Q8_0 (already tensor split) | tensor | 21.5 / 22.0 | 1007 / 1111 | 15.8 / 16.1 |
+| | **tensor + cache** | **31.5 / 31.7 (+45%)** | 1131 / 1104 (+5%) | **19.5 / 19.5 (+22%)** |
+| gpt-oss-120b (3-card layer, n-gram drafting) | layer | 96.6 / 81.7 | 1007 / 1017 | 54.3 / 57.3 |
+| | layer + cache | 98.1 / 92.6 (noise) | 1034 / 1035 (+2-3%) | 56.3 / 55.0 (=) |
+
+- Perplexity at ub 4 bit-identical to the stock build on all four. Qwen Q8 greedy output (3 x 2048 tokens) identical
+  with and without the cache.
+- gpt-oss shows the cache is correct on a MoE model, but at ~10 ms per token on 3-card layer split the launch time is
+  already hidden: no gain, not worth switching.
+- Cache counters in a long server run: ~94% replays; entries settle at a few hundred per card; no growth problem in a
+  30-minute soak. Each new prompt shape runs eagerly once, then records (~0.4 s once per shape).
+- Mistral tensor split is not deterministic at temperature 0 even without the cache (two loads of the same binary
+  diverge within a few words), so greedy text cannot judge the cache there; perplexity at ub 4 can, and passed.
+
+## Measurement 6: slot-save stalls and get_tensor_2d (2026-10-23)
+
+In mixed traffic, tensor-split servers paused 12-30 s whenever a new prompt displaced a large saved slot into the host
+prompt cache; layer split never paused more than ~4 s. Cause: SYCL has no batched read-back for the meta backend's
+per-device tensors, so saving a slot read the KV cache one row at a time. A ~50-line `get_tensor_2d` for SYCL buffers
+(the read-side twin of `set_tensor_2d` in #30358: one drain + one large device-to-host copy per 64 MB, or queue all
+rows and wait once) fixes it:
+
+| model, slot size | layer save | tensor save, old path | **tensor save, get_tensor_2d** |
+|---|---:|---:|---:|
+| Mistral-24B Q8, 14.8k tokens | 757-805 ms | 35,215-35,449 ms | **1,044-1,104 ms** |
+| Qwen3.8-27B Q8, 15.5k tokens | 987-1,065 ms | 15,312-15,782 ms | **1,293-1,440 ms** |
+
+24-request mixed run, wall time: Qwen Q8 layer 200.8 s, tensor + cache before the fix 256.5 s (8 stalls), **after
+190.8 s (no stalls)**; Mistral 352.8 s before, **169.0 s after**. Saved-then-restored slots are byte-identical and
+regenerate the same text. (Workaround without the fix: `--cache-ram 0`, at the cost of re-reading old conversations.)
+
+## Measurement 7: the record-size gate (2026-10-23)
+
+- Recording every repeated shape crashes: a repeated 1024-token prompt batch past 1024 tokens of context takes the
+  oneMKL flash-attention path, which waits on the host and cannot be captured ("Graph nodes cannot depend on events
+  from outside the graph ... FLASH_ATTN_EXT"), and the server exits. The overnight runs missed it by luck of traffic.
+- A gate keeps large batches eager. It counts matrix rows x attention heads, not tokens: a gate of 8 rejects even
+  single-token decode subgraphs and loses most of the gain (Mistral decode 22.9 vs 31.9, Qwen Q8 48.4 vs 52.4). A gate
+  of **512** keeps all the speed, and the crash case (forced recording of repeated 160-477-token batches at 1.3-2.3k
+  context) ran clean on both models. Batches over 512 rows are never recorded.
+
+## Measurement 8: long-form generation, 1 card vs 2 cards (2026-10-23)
+
+A long-form fiction workload that ran Qwen3.8-27B Q6 on one card (MTP n3, 49k context): manuscript prompts of
+~4.5k / ~21k / ~30k tokens, 4,000 generated tokens each, plus a warm continuation. Same args in every arm. tok/s.
+
+| | 1 card (older runtime) | **2 cards, tensor + cache, Q6** | 2 cards, tensor + cache, Q8 |
+|---|---:|---:|---:|
+| decode after 4.5k / 21k / 30k prompt | 27.9 / 25.9 / 23.3 | **35.2 / 36.6 / 31.9** | 37.0 / 31.8 / 38.2 |
+| warm continuation (~34k context) | 23.2 | **30.3** | 28.2 |
+| prompt read | 450 / 687 / 668 | 654 / 851 / 815 | 587 / 827 / 796 |
+| total wall time | 600 s | **458 s (-24%)** | 447 s (-26%) |
+
+Draft acceptance was 42-67% per request in all arms (sampled fiction), so the decode gain (+26-41% at similar
+acceptance) is speed, not luckier drafting. Unlike the 2-card layer comparison, there is no loss at 21-30k context.
+In production use the first long request after the switch ran at 35.7 tok/s vs ~29 on one card at similar context.
+
+**Side result, same session:** the paired single-card model (Gemma 4 26B-A4B, Q4_K_M, MTP) moved from an older fork
+build to the rebased runtime ([REBASE-2026-10-17.md](REBASE-2026-10-17.md)): decode +30-40% on one card (25k prompt
+40-42 -> 54-63 tok/s, 300-token prompt ~47 -> 66-78), short-prompt read +45%, perplexity +0.06%, vision unchanged.
+The graph cache added nothing on one card. Note: Gemma 4 needs `enable_thinking: false` in the chat template kwargs,
+or the reply lands in `reasoning_content`.
 
 ## Candidate fixes
 
@@ -197,8 +278,8 @@ there, not in a short MTP run), and post your OS, driver, and whether `q0->get_c
 
 - On Windows Level Zero, 2-card tensor-split decode is host-launch-bound. Exchange/bandwidth fixes (#30956, the
   2-buffer patch, barriers) cannot beat layer split at 1-8 tokens here; caching SYCL graphs per subgraph does.
-- Graph cache: server test with mixed batch sizes and a long-decode text comparison, then MoE models and 4 cards.
-  If those hold, it becomes the recipe for 2-card dense models and an upstream candidate.
-- Per-card launch threads stack on the cache for another 3-7% (Measurement 4); worth it only once the oneMKL crash
-  seen without the cache is understood.
+- In use on this machine since 2026-10-23: graph cache (gate 512) + get_tensor_2d on the 2-card dense models
+  (Mistral-24B, Qwen3.8-27B Q8 / Q6). Layer split stays for gpt-oss and the 3-4 card MoE models.
+- Upstream candidates, one at a time: get_tensor_2d (fits next to #30358), then the graph cache.
+- Open: per-card launch threads (crash/hang under serving, cause unknown); more than 2 cards in tensor split.
 - Numbers from Linux / single-context setups very welcome, especially the per-forward launch time with and without graphs.

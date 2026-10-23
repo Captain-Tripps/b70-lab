@@ -3,6 +3,16 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-23
+- Graph cache validated in llama-server and switched live for the 2-card dense models: Mistral-24B decode +45%,
+  Qwen3.8-27B Q8 / Q6 +18-21% (now tensor split instead of layer), PPL ub4 bit-exact. Record-size gate must be 512
+  (8 loses most of the gain; recording large batches crashes on the oneMKL flash-attention path).
+- New SYCL get_tensor_2d removes 10-35 s slot-save stalls in tensor split (slot save at ~15k tokens 35 s -> 1.1 s).
+- Cache + per-card launch threads rejected for serving (1 exit + 1 hang in 6 runs).
+- Long-form generation workload: Qwen3.8-27B Q6 1 card -> 2-card tensor + cache, decode +26-41%, wall -24%. The
+  paired Gemma 4 26B-A4B moved to the rebased runtime on its single card: decode +30-40%.
+  [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md).
+
 ## 2026-10-22
 - Mistral-Small-3.2-24B (the only 2-card tensor-split entry) switched live to r67c + PR #30956.
   [PR30956-2026-10-21.md](llama.cpp-sycl/PR30956-2026-10-21.md).
