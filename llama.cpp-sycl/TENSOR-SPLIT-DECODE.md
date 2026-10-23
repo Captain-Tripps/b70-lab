@@ -283,3 +283,81 @@ there, not in a short MTP run), and post your OS, driver, and whether `q0->get_c
 - Upstream candidates, one at a time: get_tensor_2d (fits next to #30358), then the graph cache.
 - Open: per-card launch threads (crash/hang under serving, cause unknown); more than 2 cards in tensor split.
 - Numbers from Linux / single-context setups very welcome, especially the per-forward launch time with and without graphs.
+
+##  Test Feedback 1:
+@Captain-Tripps 
+
+"... If you test the barrier approach where it does run, please check correctness with perplexity at ub 4 and ub 512 plus a long greedy decode against a stock build (a write-after-read race on reused staging buffers would show up there, not in a short MTP run), and post your OS, driver, and whether q0->get_context() == q1→get_context(). ..."
+
+### Requested Information:
+The barrier patch runs with no crashes.
+
+OS: Debian Trixie Backports, Kernel 7.2.9
+oneAPI 2026.1.1  oneDNN
+
+q0 and q1 get_context() are ALWAYS the same.
+
+6145 tokens for all 4 runs with 60 second cool downs between runs.
+
+**Note:** There are run-2-run +/- variance on both stock and patched binaries.
+
+-dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 **-ub 4**
+
+| -ub 4 PPL Run | Stock | Patch barrier |
+| :--- | :---: | :---: |
+| 1 | **2.5196 +/- 0.09057** | 2.5209 +/- 0.09065 |
+
+Stock 74.91 t/s vs Patch 72.36 t/s
+
+-dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 **-ub 512**
+
+| -ub 512 PPL Run | Stock | Patch barrier |
+| :--- | :---: | :---: |
+| 1 | 2.5217 +/- 0.09076 | **2.5216 +/- 0.09075** |
+
+Stock 1028.55 t/s vs Patch 1186.21 t/s
+
+Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
+
+## Test Feedback 2:
+@Captain-Tripps ,
+
+I added "-seed 1234" to try and stabilize the +/- PPL variance in both the STOCK and PATCH runs, but the run-2-run variance still remains in both.
+
+This set of runs with a fixed seed ( eliminating uncontrolled variables ), the **PATCH barrier's PPL is better than the STOCK with both -ub 4 and 512** where last night was better with just 512 (with random dissimilar seeds).  
+
+I think we are chasing random run-2-run noise levels ( and random seed mixes ? ).
+
+A better test would be to pre-generate a set of random seeds and then A/B test each random seed to see where the trend goes to validate Patch barrier has a consistent better PPL @ -ub 4 and 512.
+
+### Multiple interleaved hands off -seed 1234 -ub 4 runs:
+
+-dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 -seed 1234 -ub 4
+
+| -ub 4 PPL Run | Stock | Patch barrier |
+| :--- | :---: | :---: |
+| 1 | PPL 2.5203 +/- 0.09064 | **2.5196 +/- 0.09056** |
+| 2 | PPL 2.5209 +/- 0.09064 | **2.5189 +/- 0.09052** |
+| 3 | PPL 2.5210 +/- 0.09069 | **2.5202 +/- 0.09062** |
+| 4 | PPL 2.5203 +/- 0.09062 | **2.5194 +/- 0.09054** |
+
+Tokens per second **Stock 75.16 t/s** vs Patch 72.24 t/s
+Tokenization Stock 76.185 ms vs **Patch 75.963 ms**
+
+
+-dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 -seed 1234 -ub 512
+
+| -ub 512 PPL Run | Stock | Patch barrier |
+| :--- | :---: | :---: |
+| 1 | 2.5218 +/- 0.09077 | **2.5214 +/- 0.09074** |
+
+Tokens per second Stock 1029.96 t/s vs **Patch 1184.14 t/s**
+Tokenization **Stock 75.431 ms** vs Patch 76.777 ms
+
+
+As for your Windows crash, make sure code is q0:d2h_1 and q1:d2h_0.
+```
+    q0->ext_oneapi_submit_barrier({e_d2h_1}); // q0 waits for q1's device-to-host copy
+    q1->ext_oneapi_submit_barrier({e_d2h_0}); // q1 waits for q0's device-to-host copy
+```
+Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
