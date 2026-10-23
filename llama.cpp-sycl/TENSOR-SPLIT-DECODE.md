@@ -5,7 +5,9 @@ from your own cards. Upstream context: [ggml-org/llama.cpp#30956](https://github
 (faster exchange, by @92es) and the thread on [#30358](https://github.com/ggml-org/llama.cpp/pull/30358).
 
 **Update 2026-10-22 evening: a per-subgraph SYCL graph cache removes most of the launch cost. 2-card tensor split now
-decodes ~30% faster than layer split on Qwen3.8-27B ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)).
+decodes ~30% faster than layer split on Qwen3.8-27B ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)),
+and adding per-card launch threads on top brings it to +38-42% at 1-8 tokens and +31% at 512 tokens
+([Measurement 4](#measurement-4-graph-cache--per-card-launch-threads-2026-10-22)).
 Prototype, not yet tested in a server or on MoE models.**
 
 ## The question
@@ -133,6 +135,38 @@ Not yet done: a long greedy-decode text comparison through llama-server, a serve
 re-record hiccups and cache growth), MoE models, GGML_SYCL_PIPELINE, more than 2 cards, other models. The patch is
 not published yet.
 
+## Measurement 4: graph cache + per-card launch threads (2026-10-22)
+
+The cache leaves a few ms of launch per forward, and Measurement 2 pointed at launching each card's subgraph from its
+own host thread. That used to hang on the Level Zero two-thread launch deadlock
+([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)). Setting
+`UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` (read by the Level Zero v2 adapter; it switches kernel launches to the
+older set-argument + append-launch path) avoids the hang here: a standalone reproducer went from hanging 6 of 6 runs
+to 10 of 10 clean, with no measurable launch-rate cost, and it cost nothing in the llama.cpp runs below.
+
+Per-card threads are a local, env-gated meta-backend change (not published). Same model and settings as before, no
+MTP (llama-bench forwards only), tok/s, median of reps 3-8:
+
+| test | layer | tensor + cache | **tensor + cache + per-card threads** | vs layer | vs cache only |
+|---|---:|---:|---:|---:|---:|
+| pp1 | 17.95 | 24.24 / 24.26 | **25.13 / 25.56** | **+40-42%** | +4-5% |
+| pp5 | 84.18 | 110.02 / 109.55 | **113.29 / 114.92** | **+35-37%** | +3-5% |
+| pp8 | 131.51 | 171.93 / 172.11 | **177.81 / 179.71** | **+35-37%** | +3-4% |
+| pp512 | 980.18 | 1280.8 / 1284.2 | **1285.6 / 1290.7** | **+31-32%** | ~0 |
+| tg32 | 17.98 | 23.55 / 23.43 | **24.57 / 25.06** | **+37-39%** | +5-7% |
+
+- The two levers stack, but once subgraphs are replayed there is little launch time left to overlap, so the threads
+  add only 3-7% at 1-8 tokens.
+- **The graph cache also speeds up prompt batches:** pp512 goes from ~980 (layer) / ~954 (tensor eager) to ~1,285.
+- Correctness: perplexity at ub 4 bit-identical (4.8336, all chunks equal; 6.2 s per pass vs 9.4-9.7 eager); ub 512
+  4.8282, inside the eager spread.
+- Stability: four ~6.5-minute llama-bench loops (`-p 1,5,8,512 -n 128 -r 60`) ran clean; decode tg128 24.8-25.1
+  across all four (layer 18.0, +38%). Per-card threads *without* the cache crashed once in four loops inside oneMKL's
+  threading DLL (not root-caused), so the threads-only setup is not recommended; with the cache no crash was seen,
+  which makes it rare but does not prove it gone.
+
+Still not done for either setup: llama-server with real mixed traffic, MTP end to end, MoE models, more than 2 cards.
+
 ## Candidate fixes
 
 | idea | result on this machine (Windows, Level Zero) |
@@ -141,7 +175,7 @@ not published yet.
 | `host_task` hand-off instead of a blocking wait | **-25%**: a pending host_task routes later launches through the DPC++ scheduler (13 us per node) |
 | `ext_oneapi_submit_barrier` on each queue with the peer's download event (proposed by @92es on #30358) | **aborts on the first all-reduce** (0xC0000409, "Abort was called at 3440 line"): here the two devices are in separate SYCL contexts and the barrier rejects the other context's event. Probably fine where both queues share one context (likely on Linux); even then the bound above caps the gain at about layer parity on this machine |
 | One SYCL context spanning both devices | not built; capped at layer parity by the bound |
-| **Launch each card's subgraph from its own host thread** (the lever the numbers point to) | **hangs** after a few all-reduces: the known Level Zero two-thread launch deadlock ([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)), still present on driver 32.0.101.8976. Rough ceiling if it worked: launch 41.5 -> ~21 ms, pp1 ~20-23 tok/s (estimate) |
+| **Launch each card's subgraph from its own host thread** | hangs on the Level Zero two-thread launch deadlock ([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)) unless `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` is set. With it and without the cache: works, but one oneMKL crash in four loops. **With the cache: +3-7% more, best overall** ([Measurement 4](#measurement-4-graph-cache--per-card-launch-threads-2026-10-22)) |
 | **SYCL graph replay with a per-subgraph cache** (cuts per-node launch cost) | **+27-37% over layer at 1-8 tokens, ub-4 perplexity bit-identical** ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)); stock graph mode crashes in the driver |
 | Fewer nodes via fusion | not tried |
 
@@ -165,5 +199,6 @@ there, not in a short MTP run), and post your OS, driver, and whether `q0->get_c
   2-buffer patch, barriers) cannot beat layer split at 1-8 tokens here; caching SYCL graphs per subgraph does.
 - Graph cache: server test with mixed batch sizes and a long-decode text comparison, then MoE models and 4 cards.
   If those hold, it becomes the recipe for 2-card dense models and an upstream candidate.
-- Per-card launch threads could stack on top (the cache leaves ~11 ms of launch per forward); retest pending.
+- Per-card launch threads stack on the cache for another 3-7% (Measurement 4); worth it only once the oneMKL crash
+  seen without the cache is understood.
 - Numbers from Linux / single-context setups very welcome, especially the per-forward launch time with and without graphs.

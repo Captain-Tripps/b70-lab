@@ -16,6 +16,9 @@ changed and when.
   exchange fixes cap at layer parity. A per-subgraph SYCL graph cache (prototype, env-gated) removes ~30 ms of it:
   2-card tensor split pp1 / pp5 / tg +35% / +32% / +30% over layer on Qwen3.8-27B, ub-4 perplexity bit-identical.
   Stock graph mode crashes in the Level Zero driver. Server and MoE tests pending.
+- Per-card launch threads now run with `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` (avoids the Level Zero
+  two-thread launch deadlock). On top of the graph cache: pp1 +40-42%, pp5 +35-37%, pp512 +31%, tg +38% over layer
+  split; ub-4 perplexity bit-identical, four bench loops clean. Without the cache: one oneMKL crash in four loops.
 
 ## 2026-10-21
 - Tested upstream PR #30956 (fast 2-device `-sm tensor` exchange) on r67c: correct on Windows Level Zero (ub-4
