@@ -4,6 +4,10 @@ Living page, started 2026-10-22. Collaboration welcome: open an issue or a discu
 from your own cards. Upstream context: [ggml-org/llama.cpp#30956](https://github.com/ggml-org/llama.cpp/pull/30956)
 (faster exchange, by @92es) and the thread on [#30358](https://github.com/ggml-org/llama.cpp/pull/30358).
 
+**Update 2026-10-22 evening: a per-subgraph SYCL graph cache removes most of the launch cost. 2-card tensor split now
+decodes ~30% faster than layer split on Qwen3.8-27B ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)).
+Prototype, not yet tested in a server or on MoE models.**
+
 ## The question
 
 On 2x B70, tensor split now reads prompts as fast as layer split (with #30956), but decode, and MTP decode in
@@ -86,6 +90,49 @@ Bounds (timing experiments that deliberately produce wrong results):
 Removing every host wait only brings tensor to **parity** with layer at 1-8 tokens. Even a free all-reduce gives
 only +16-19% at pp1, because ~44 ms per forward of pure launch time remains.
 
+## Measurement 3: per-subgraph SYCL graph cache (2026-10-22)
+
+Measurement 2 says the GPUs wait on ~41.5 ms of single-thread kernel launches per forward. SYCL graph replay removes
+per-kernel launches, so it was the next thing to try.
+
+**Stock graph mode (`GGML_SYCL_ENABLE_GRAPH=1`) is not usable here.** In llama-bench it "exits silently": the process
+dies with a fast-fail (0xC0000409) inside the Level Zero driver (`ze_intel_gpu64.dll`), and llama-bench mutes the log
+without `-v`. Just before that, two SYCL exceptions are thrown and caught in the graph path (consistent with the
+executable-graph `update()` failing and falling back to `finalize()`). Where it survives, it re-records every call
+and keeps one executable graph per context: layer pp1 6.3 tok/s vs 17.9 eager.
+
+**Prototype: cache one executable graph per subgraph** (local, env-gated change in
+`ggml_backend_sycl_graph_compute`, enabled with `GGML_SYCL_ENABLE_GRAPH=1 GGML_SYCL_GRAPH_CACHE=1`):
+
+- Key: (backend context, first node of the subgraph) plus a signature of every node (op, type, flags, shapes, strides,
+  data pointers, op params and the same for each source).
+- First sighting runs eagerly (lazy weight reorders happen there). The second records and finalizes. After that the
+  subgraph is replayed without recording and without per-node launches while the signature matches; a mismatch goes
+  back to eager and re-records.
+- Tensor-split decode uses ~258 entries per card, 0 misses in steady state. Recording a new shape costs ~0.4 s once
+  (~129 subgraphs per card). Entries are freed with the backend.
+
+Same model and settings as Measurement 1, tok/s, median of reps 3-8:
+
+| test | layer eager | tensor eager | **tensor + graph cache** | vs layer | layer + graph cache |
+|---|---:|---:|---:|---:|---:|
+| pp1 | 18.06 | 14.13 | **24.45 / 24.69** | **+35-37%** | 17.92 |
+| pp5 (MTP verify shape) | 84.39 | 68.47 | **110.35 / 112.45** | **+31-33%** | 83.27 |
+| pp8 | 131.54 | 105.41 | **168.76 / 175.32** | **+28-33%** | 130.40 |
+| tg32 | 17.95 | 14.64 | **22.88 / 23.88** | **+27-33%** | 17.61 |
+
+(Two runs for the cache column.) pp1 goes from 70.8 to 40.9 ms per forward: about 30 of the ~41.5 ms of launch time
+is gone. Layer split gains nothing, as expected: its launch time was already hidden behind GPU time.
+
+Correctness, 2-card tensor split, 8 chunks of 512: perplexity at ub 4 is **bit-identical** to the stock build on
+every cache run (4.8336, all chunk values equal), and faster (6.7-7.4 s vs 9.4-9.7 s per pass). At ub 512 tensor
+split is not reproducible run to run even without the cache (4.8208-4.8342); cache runs (4.8224-4.8288) sit inside
+that spread.
+
+Not yet done: a long greedy-decode text comparison through llama-server, a server run with mixed batch sizes (watch
+re-record hiccups and cache growth), MoE models, GGML_SYCL_PIPELINE, more than 2 cards, other models. The patch is
+not published yet.
+
 ## Candidate fixes
 
 | idea | result on this machine (Windows, Level Zero) |
@@ -95,7 +142,7 @@ only +16-19% at pp1, because ~44 ms per forward of pure launch time remains.
 | `ext_oneapi_submit_barrier` on each queue with the peer's download event (proposed by @92es on #30358) | **aborts on the first all-reduce** (0xC0000409, "Abort was called at 3440 line"): here the two devices are in separate SYCL contexts and the barrier rejects the other context's event. Probably fine where both queues share one context (likely on Linux); even then the bound above caps the gain at about layer parity on this machine |
 | One SYCL context spanning both devices | not built; capped at layer parity by the bound |
 | **Launch each card's subgraph from its own host thread** (the lever the numbers point to) | **hangs** after a few all-reduces: the known Level Zero two-thread launch deadlock ([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)), still present on driver 32.0.101.8976. Rough ceiling if it worked: launch 41.5 -> ~21 ms, pp1 ~20-23 tok/s (estimate) |
-| SYCL graph replay per subgraph (cuts per-node launch cost) | graph mode currently exits/crashes; would also need up to 128 cached executable graphs per card |
+| **SYCL graph replay with a per-subgraph cache** (cuts per-node launch cost) | **+27-37% over layer at 1-8 tokens, ub-4 perplexity bit-identical** ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)); stock graph mode crashes in the driver |
 | Fewer nodes via fusion | not tried |
 
 If you test the barrier approach where it does run, please check correctness with perplexity at ub 4 *and* ub 512
@@ -114,8 +161,9 @@ there, not in a short MTP run), and post your OS, driver, and whether `q0->get_c
 
 ## Next steps
 
-- On Windows Level Zero, 2-card tensor-split decode is host-launch-bound; exchange/bandwidth fixes (#30956, the
-  2-buffer patch, barriers) cannot beat layer split at 1-8 tokens here. Layer split stays the choice for decode.
-- Unblockers worth watching: a driver fix for the two-thread launch deadlock (then per-card launch threads), and working
-  SYCL graph replay.
-- Numbers from Linux / single-context setups very welcome, especially the per-forward launch time.
+- On Windows Level Zero, 2-card tensor-split decode is host-launch-bound. Exchange/bandwidth fixes (#30956, the
+  2-buffer patch, barriers) cannot beat layer split at 1-8 tokens here; caching SYCL graphs per subgraph does.
+- Graph cache: server test with mixed batch sizes and a long-decode text comparison, then MoE models and 4 cards.
+  If those hold, it becomes the recipe for 2-card dense models and an upstream candidate.
+- Per-card launch threads could stack on top (the cache leaves ~11 ms of launch per forward); retest pending.
+- Numbers from Linux / single-context setups very welcome, especially the per-forward launch time with and without graphs.

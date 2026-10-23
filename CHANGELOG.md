@@ -12,6 +12,10 @@ changed and when.
   layer at 1-8 tokens with or without #30956 (the PR only helps pp512); ~40 ms per forward lost to the split vs an
   ideal ~28 ms. Theory (host waits per all-reduce), candidate fixes and an MTP A/B method.
   [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md).
+- Timers: the tensor-split decode gap is single-thread kernel launch (41.5 ms per forward), not the exchange waits;
+  exchange fixes cap at layer parity. A per-subgraph SYCL graph cache (prototype, env-gated) removes ~30 ms of it:
+  2-card tensor split pp1 / pp5 / tg +35% / +32% / +30% over layer on Qwen3.8-27B, ub-4 perplexity bit-identical.
+  Stock graph mode crashes in the Level Zero driver. Server and MoE tests pending.
 
 ## 2026-10-21
 - Tested upstream PR #30956 (fast 2-device `-sm tensor` exchange) on r67c: correct on Windows Level Zero (ub-4
