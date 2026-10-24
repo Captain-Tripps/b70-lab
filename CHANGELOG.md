@@ -3,6 +3,12 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-24
+- Shared SYCL context on Windows: DPC++ disables its platform default context on Windows (`SYCL_ENABLE_DEFAULT_CONTEXTS`,
+  on by default on Linux), which likely explains why each device gets its own context here. With the env var set, the
+  queue-barrier exchange still aborts; whether the contexts were really shared is not yet verified. No new speed
+  numbers. [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md#shared-context-attempt-windows-2026-10-24).
+
 ## 2026-10-23
 - Graph cache validated in llama-server and switched live for the 2-card dense models: Mistral-24B decode +45%,
   Qwen3.8-27B Q8 / Q6 +18-21% (now tensor split instead of layer), PPL ub4 bit-exact. Record-size gate must be 512

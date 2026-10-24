@@ -255,7 +255,7 @@ or the reply lands in `reasoning_content`.
 | Two staging slots, drop the upload waits (ordering kept by the next call's download waits) | +1-2%, noise level |
 | `host_task` hand-off instead of a blocking wait | **-25%**: a pending host_task routes later launches through the DPC++ scheduler (13 us per node) |
 | `ext_oneapi_submit_barrier` on each queue with the peer's download event (proposed by @92es on #30358) | **Windows: aborts on the first all-reduce** (0xC0000409 in the Level Zero driver): the two devices are in separate SYCL contexts and the barrier rejects the other context's event. Retested 2026-10-23 with the exact peer-only wiring (`q0` waits on `e_d2h_1`, `q1` on `e_d2h_0`): same crash, while the stock exchange in the same build runs. **Linux (shared context): runs, correct, +15% at ub 512**, see [Community results](#community-results-linux-single-sycl-context-92es). Needs a guard on `q0->get_context() == q1->get_context()` before it can be the default |
-| One SYCL context spanning both devices | not built; capped at layer parity by the bound |
+| One SYCL context spanning both devices | **Env-only attempt 2026-10-24: barrier still aborts.** ggml-sycl builds its queues without an explicit context, so DPC++ uses the platform default context only when `SYCL_ENABLE_DEFAULT_CONTEXTS` is on. That is on by default on Linux and **off by default on Windows**, which likely explains the difference. With `SYCL_ENABLE_DEFAULT_CONTEXTS=1` the peer-only barrier build still aborts the same way (0xC0000409, 2 of 2 runs). Not yet verified that the two queues really shared a context; see [Shared context attempt](#shared-context-attempt-windows-2026-10-24) |
 | **Launch each card's subgraph from its own host thread** | hangs on the Level Zero two-thread launch deadlock ([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)) unless `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` is set. With it and without the cache: works, but one oneMKL crash in four loops. **With the cache: +3-7% more, best overall** ([Measurement 4](#measurement-4-graph-cache--per-card-launch-threads-2026-10-22)) |
 | **SYCL graph replay with a per-subgraph cache** (cuts per-node launch cost) | **+27-37% over layer at 1-8 tokens, ub-4 perplexity bit-identical** ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)); stock graph mode crashes in the driver |
 | Fewer nodes via fusion | not tried |
@@ -263,6 +263,28 @@ or the reply lands in `reasoning_content`.
 If you test the barrier approach where it does run, please check correctness with perplexity at ub 4 *and* ub 512
 plus a long greedy decode against a stock build (a write-after-read race on reused staging buffers would show up
 there, not in a short MTP run), and post your OS, driver, and whether `q0->get_context() == q1->get_context()`.
+
+## Shared context attempt (Windows, 2026-10-24)
+
+Question: if both B70s share one SYCL context on Windows, does the queue-barrier exchange become legal, and is it
+faster on top of the graph cache?
+
+- **Why the contexts differ:** ggml-sycl creates each device queue as `sycl::queue(device, handler, props)` (dpct
+  `device_ext`), with no explicit context. DPC++ then falls back to the platform default context, which contains all
+  devices of the platform, but only if `SYCL_ENABLE_DEFAULT_CONTEXTS` is enabled. It is enabled by default on Linux
+  and disabled by default on Windows. Without it, each queue gets its own context. (The `sycl::context(device)` in
+  `ggml_sycl_init` only queries the VMM page size, and the VMM pool uses the queue's context.)
+- **Test:** same build as the peer-only barrier retest, cards 0+1, Qwen3.8-27B Q8_0, `-sm tensor`, with
+  `SYCL_ENABLE_DEFAULT_CONTEXTS=1`.
+- **Result:** the barrier build still aborts on the first all-reduce (0xC0000409, "Abort was called at 3440 line"),
+  2 of 2 runs. The speed arms of this run are not usable (a harness error ran two copies on the same cards at once),
+  so there are no new speed numbers.
+- **Not yet known:** whether the env var really gave both queues one context. Next step: log
+  `stream(0)->get_context() == stream(1)->get_context()` once at init. If they are equal and the barrier still aborts,
+  the cross-device barrier itself fails on the Windows Level Zero driver (no-go). If they are not equal, build an
+  explicit shared context (one `sycl::context` over the selected GPUs, queues built from it) behind an env switch.
+- A cheap cross-check from the Linux side: run the barrier build with `SYCL_ENABLE_DEFAULT_CONTEXTS=0`. If it then
+  aborts like Windows, separate contexts are confirmed as the cause.
 
 ## How to A/B MTP stably (answer to a question on #30358)
 
