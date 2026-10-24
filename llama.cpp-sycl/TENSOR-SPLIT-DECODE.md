@@ -254,7 +254,7 @@ or the reply lands in `reasoning_content`.
 |---|---|
 | Two staging slots, drop the upload waits (ordering kept by the next call's download waits) | +1-2%, noise level |
 | `host_task` hand-off instead of a blocking wait | **-25%**: a pending host_task routes later launches through the DPC++ scheduler (13 us per node) |
-| `ext_oneapi_submit_barrier` on each queue with the peer's download event (proposed by @92es on #30358) | **aborts on the first all-reduce** (0xC0000409, "Abort was called at 3440 line"): here the two devices are in separate SYCL contexts and the barrier rejects the other context's event. Probably fine where both queues share one context (likely on Linux); even then the bound above caps the gain at about layer parity on this machine |
+| `ext_oneapi_submit_barrier` on each queue with the peer's download event (proposed by @92es on #30358) | **Windows: aborts on the first all-reduce** (0xC0000409 in the Level Zero driver): the two devices are in separate SYCL contexts and the barrier rejects the other context's event. Retested 2026-10-23 with the exact peer-only wiring (`q0` waits on `e_d2h_1`, `q1` on `e_d2h_0`): same crash, while the stock exchange in the same build runs. **Linux (shared context): runs, correct, +15% at ub 512**, see [Community results](#community-results-linux-single-sycl-context-92es). Needs a guard on `q0->get_context() == q1->get_context()` before it can be the default |
 | One SYCL context spanning both devices | not built; capped at layer parity by the bound |
 | **Launch each card's subgraph from its own host thread** | hangs on the Level Zero two-thread launch deadlock ([intel/llvm#23530](https://github.com/intel/llvm/issues/23530)) unless `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` is set. With it and without the cache: works, but one oneMKL crash in four loops. **With the cache: +3-7% more, best overall** ([Measurement 4](#measurement-4-graph-cache--per-card-launch-threads-2026-10-22)) |
 | **SYCL graph replay with a per-subgraph cache** (cuts per-node launch cost) | **+27-37% over layer at 1-8 tokens, ub-4 perplexity bit-identical** ([Measurement 3](#measurement-3-per-subgraph-sycl-graph-cache-2026-10-22)); stock graph mode crashes in the driver |
@@ -284,110 +284,52 @@ there, not in a short MTP run), and post your OS, driver, and whether `q0->get_c
 - Open: per-card launch threads (crash/hang under serving, cause unknown); more than 2 cards in tensor split.
 - Numbers from Linux / single-context setups very welcome, especially the per-forward launch time with and without graphs.
 
-##  Test Feedback 1:
-@Captain-Tripps 
+## Community results: Linux, single SYCL context (@92es)
 
-"... If you test the barrier approach where it does run, please check correctness with perplexity at ub 4 and ub 512 plus a long greedy decode against a stock build (a write-after-read race on reused staging buffers would show up there, not in a short MTP run), and post your OS, driver, and whether q0->get_context() == q1→get_context(). ..."
+Contributed by [@92es](https://github.com/92es) (author of [#30956](https://github.com/ggml-org/llama.cpp/pull/30956))
+in [PR #2](https://github.com/Captain-Tripps/b70-lab/pull/2), 2026-10-23. His setup and his numbers; summarised here,
+full tables below.
 
-### Requested Information:
-The barrier patch runs with no crashes.
+**Setup:** 2x Arc Pro B70, Debian Trixie (backports, kernel 7.2.9), oneAPI 2026.1.1. `q0->get_context() ==
+q1->get_context()` is **always true** here: both devices share one SYCL context, which is why the queue-barrier
+exchange is legal on Linux and aborts on Windows (separate contexts per device).
 
-OS: Debian Trixie Backports, Kernel 7.2.9
-oneAPI 2026.1.1  oneDNN
+**Barrier patch vs stock** (`-sm tensor -ts 1,1`, Qwen3.8-27B Q8_0 unless noted):
 
-q0 and q1 get_context() are ALWAYS the same.
+| test | stock | barrier patch | note |
+|---|---:|---:|---|
+| PPL, ub 4, 12 chunks, 5 repeats | 2.5178 +/- 0.09048 | 2.5178 +/- 0.09048 | **identical on all 5** |
+| PPL, ub 512, 12 chunks, 5 repeats | 2.5211-2.5214 | 2.5207-2.5213 | inside the run-to-run spread |
+| perplexity speed, ub 4 | 74.9-75.2 t/s | 72.2-72.4 t/s | about -4% |
+| perplexity speed, ub 512 | 1,029-1,030 t/s | 1,184-1,186 t/s | **about +15%** |
+| llama-cli MTP, Qwen3.6-27B Q4_0, 3,265-token prompt + 256 out | 680 / 29.6 t/s | 746 / 31.3 t/s | prompt +10%, generation +6%, draft acceptance 76% -> 80% |
 
-6145 tokens for all 4 runs with 60 second cool downs between runs.
+Reading:
 
-**Note:** There are run-2-run +/- variance on both stock and patched binaries.
+- ub-4 perplexity identical across five repeats is the strong correctness signal: no sign of a write-after-read race
+  on reused staging buffers in that configuration.
+- `--seed`, `--temp`, `--min-p` and `--repeat-penalty` do not affect `llama-perplexity` (it does not sample), so the
+  "seed series" are repeats of the same run. Earlier runs with fewer chunks showed stock varying run to run at ub 4
+  (2.5203-2.5210) on this setup, unlike the bit-identical ub-4 results on the Windows box; a KL-divergence check
+  (`--kl-divergence-base` from a stock run, then `--kl-divergence` for a second stock run and for the patch) would
+  separate patch effects from that noise.
+- Windows retest of the exact same wiring: see the barrier row in [Candidate fixes](#candidate-fixes).
 
--dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 **-ub 4**
+<details>
+<summary>Raw runs as posted</summary>
 
-| -ub 4 PPL Run | Stock | Patch barrier |
-| :--- | :---: | :---: |
-| 1 | **2.5196 +/- 0.09057** | 2.5209 +/- 0.09065 |
+ub 4, first pass (6,145 tokens, 60 s cool-down between runs): stock 2.5196 +/- 0.09057 (74.91 t/s), patch 2.5209 +/-
+0.09065 (72.36 t/s). ub 512: stock 2.5217 +/- 0.09076 (1,028.55 t/s), patch 2.5216 +/- 0.09075 (1,186.21 t/s).
 
-Stock 74.91 t/s vs Patch 72.36 t/s
+ub 4, interleaved, `-seed 1234`: stock 2.5203 / 2.5209 / 2.5210 / 2.5203; patch 2.5196 / 2.5189 / 2.5202 / 2.5194
+(stock 75.16 t/s, patch 72.24 t/s). ub 512: stock 2.5218, patch 2.5214 (1,029.96 vs 1,184.14 t/s).
 
--dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 **-ub 512**
+Seed series 1234 533389 978863 676111 151847, `--chunks 12 -b 512 -c 512`: ub 4 stock = patch = 2.5178 +/- 0.09048
+on all five; ub 512 stock 2.5211 / 2.5213 / 2.5214 / 2.5211 / 2.5213, patch 2.5207 / 2.5209 / 2.5211 / 2.5213 /
+2.5210.
 
-| -ub 512 PPL Run | Stock | Patch barrier |
-| :--- | :---: | :---: |
-| 1 | 2.5217 +/- 0.09076 | **2.5216 +/- 0.09075** |
+MTP llama-cli A/B (Qwen3.6-27B-Q4_0-MTP, 3,265-token prompt, 256 generated): prompt 679.50 vs 746.32 t/s, generation
+29.57 vs 31.25 t/s, acceptance 76.13% (118/155) vs 80.00% (132/165), mean draft length 2.74 vs 3.13, per-position
+acceptance stock (0.882, 0.338, 0.235, 0.132, 0.074, 0.074) vs patch (0.952, 0.419, 0.306, 0.210, 0.129, 0.113).
 
-Stock 1028.55 t/s vs Patch 1186.21 t/s
-
-Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
-
-## Test Feedback 2:
-@Captain-Tripps ,
-
-I added "-seed 1234" to try and stabilize the +/- PPL variance in both the STOCK and PATCH runs, but the run-2-run variance still remains in both.
-
-This set of runs with a fixed seed ( eliminating uncontrolled variables ), the **PATCH barrier's PPL is better than the STOCK with both -ub 4 and 512** where last night was better with just 512 (with random dissimilar seeds).  
-
-I think we are chasing random run-2-run noise levels ( and random seed mixes ? ).
-
-A better test would be to pre-generate a set of random seeds and then A/B test each random seed to see where the trend goes to validate Patch barrier has a consistent better PPL @ -ub 4 and 512.
-
-### Multiple interleaved hands off -seed 1234 -ub 4 runs:
-
--dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 -seed 1234 -ub 4
-
-| -ub 4 PPL Run | Stock | Patch barrier |
-| :--- | :---: | :---: |
-| 1 | PPL 2.5203 +/- 0.09064 | **2.5196 +/- 0.09056** |
-| 2 | PPL 2.5209 +/- 0.09064 | **2.5189 +/- 0.09052** |
-| 3 | PPL 2.5210 +/- 0.09069 | **2.5202 +/- 0.09062** |
-| 4 | PPL 2.5203 +/- 0.09062 | **2.5194 +/- 0.09054** |
-
-Tokens per second **Stock 75.16 t/s** vs Patch 72.24 t/s
-Tokenization Stock 76.185 ms vs **Patch 75.963 ms**
-
-
--dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 -seed 1234 -ub 512
-
-| -ub 512 PPL Run | Stock | Patch barrier |
-| :--- | :---: | :---: |
-| 1 | 2.5218 +/- 0.09077 | **2.5214 +/- 0.09074** |
-
-Tokens per second Stock 1029.96 t/s vs **Patch 1184.14 t/s**
-Tokenization **Stock 75.431 ms** vs Patch 76.777 ms
-
-
-As for your Windows crash, make sure code is q0:d2h_1 and q1:d2h_0.
-```
-    q0->ext_oneapi_submit_barrier({e_d2h_1}); // q0 waits for q1's device-to-host copy
-    q1->ext_oneapi_submit_barrier({e_d2h_0}); // q1 waits for q0's device-to-host copy
-```
-Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
-
-## Test Feedback 3:
-
-The following seed series was tested A/B (stock/patch) on -ub 4 and -ub 512:
-
-**Seed series:** 
-
-1234 533389 978863 676111 151847
-
-**Command:** 
-
-./${BINDIR}/llama-perplexity -m ${LLMDIR}/Qwen3.8-27B-Q8_0.gguf -dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 -ngl 99 --load-mode dio --temp 0.15 --min-p 0.05 --repeat-penalty 1.1 --seed ${SEED} --chunks 12 -n 64 -b 512 -ub ${UB} -c 512 -lv 4
-
-## -ub 4 results: Identical 5:5 seeds (stock and patch)
-
-| -ub 4 PPL Run | Stock | Patch barrier |
-| :--- | :---: | :---: |
-| 1-5 | 2.5178 +/- 0.09048 | 2.5178 +/- 0.09048 |
-
-## ub 512 results:  Patch barrier PPL better 4:5 seeds (stock and patch)
-
-| -ub 512 PPL Run | Stock | Patch barrier |
-| :--- | :---: | :---: |
-| 1 | 2.5211 +/- 0.09078 | **2.5207 +/- 0.09076** |
-| 2 | 2.5213 +/- 0.09080 | **2.5209 +/- 0.09077** |
-| 3 | 2.5214 +/- 0.09080 | **2.5211 +/- 0.09078** |
-| 4 | **2.5211 +/- 0.09078** | 2.5213 +/- 0.09080 |
-| 5 | 2.5213 +/- 0.09080 | **2.5210 +/- 0.09077** |
-
-Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
+</details>

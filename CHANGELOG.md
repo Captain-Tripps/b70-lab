@@ -12,6 +12,9 @@ changed and when.
 - Long-form generation workload: Qwen3.8-27B Q6 1 card -> 2-card tensor + cache, decode +26-41%, wall -24%. The
   paired Gemma 4 26B-A4B moved to the rebased runtime on its single card: decode +30-40%.
   [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md).
+- Community results from @92es (Linux, single SYCL context): the queue-barrier exchange runs there, ub-4 PPL
+  identical to stock, +15% at ub 512. Retested the exact peer-only wiring on Windows: still aborts (separate
+  contexts per device).
 
 ## 2026-10-22
 - Mistral-Small-3.2-24B (the only 2-card tensor-split entry) switched live to r67c + PR #30956.
