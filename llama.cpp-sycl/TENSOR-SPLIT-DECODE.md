@@ -361,3 +361,33 @@ As for your Windows crash, make sure code is q0:d2h_1 and q1:d2h_0.
     q1->ext_oneapi_submit_barrier({e_d2h_0}); // q1 waits for q0's device-to-host copy
 ```
 Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
+
+## Test Feedback 3:
+
+The following seed series was tested A/B (stock/patch) on -ub 4 and -ub 512:
+
+**Seed series:** 
+
+1234 533389 978863 676111 151847
+
+**Command:** 
+
+./${BINDIR}/llama-perplexity -m ${LLMDIR}/Qwen3.8-27B-Q8_0.gguf -dev SYCL0,SYCL1 -f ggml-sycl.cpp -sm tensor -ts 1,1 -ngl 99 --load-mode dio --temp 0.15 --min-p 0.05 --repeat-penalty 1.1 --seed ${SEED} --chunks 12 -n 64 -b 512 -ub ${UB} -c 512 -lv 4
+
+## -ub 4 results: Identical 5:5 seeds (stock and patch)
+
+| -ub 4 PPL Run | Stock | Patch barrier |
+| :--- | :---: | :---: |
+| 1-5 | 2.5178 +/- 0.09048 | 2.5178 +/- 0.09048 |
+
+## ub 512 results:  Patch barrier PPL better 4:5 seeds (stock and patch)
+
+| -ub 512 PPL Run | Stock | Patch barrier |
+| :--- | :---: | :---: |
+| 1 | 2.5211 +/- 0.09078 | **2.5207 +/- 0.09076** |
+| 2 | 2.5213 +/- 0.09080 | **2.5209 +/- 0.09077** |
+| 3 | 2.5214 +/- 0.09080 | **2.5211 +/- 0.09078** |
+| 4 | **2.5211 +/- 0.09078** | 2.5213 +/- 0.09080 |
+| 5 | 2.5213 +/- 0.09080 | **2.5210 +/- 0.09077** |
+
+Author: @92es - Carbon Based Personal AI - ( Alzheimer's Intuition )
