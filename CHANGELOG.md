@@ -4,13 +4,13 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-10-24
-- Shared SYCL context on Windows: DPC++ disables its platform default context on Windows (`SYCL_ENABLE_DEFAULT_CONTEXTS`,
-  on by default on Linux), which likely explains why each device gets its own context here. With the env var set, the
-  queue-barrier exchange still aborts; whether the contexts were really shared is not yet verified. No new speed
-  numbers. [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md#shared-context-attempt-windows-2026-10-24).
-- @92es (Linux): the env var does flip shared vs separate contexts there; KL divergence of the barrier patch vs stock
-  identical at ub 4, within noise at ub 512. So the Windows abort with a shared context most likely comes from the
-  Level Zero driver (not yet confirmed with a context print on Windows).
+- Queue-barrier exchange on Windows, cause found: the two devices already share one SYCL context; the abort comes from
+  the Level Zero v2 UR adapter, and the legacy adapter (`SYCL_UR_USE_LEVEL_ZERO_V2=0`) runs it (standalone test).
+  **Corrects** an earlier entry today that blamed separate contexts / `SYCL_ENABLE_DEFAULT_CONTEXTS` being off on
+  Windows. No speed numbers yet.
+  [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md#shared-context-attempt-windows-2026-10-24).
+- @92es (Linux): `SYCL_ENABLE_DEFAULT_CONTEXTS` flips shared vs separate contexts there; KL divergence of the barrier
+  patch vs stock identical at ub 4, within noise at ub 512.
 
 ## 2026-10-23
 - Graph cache validated in llama-server and switched live for the 2-card dense models: Mistral-24B decode +45%,
