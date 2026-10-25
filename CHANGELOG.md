@@ -3,6 +3,12 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-25
+- Review notes on @92es's startup-selected barrier exchange: the context check alone would select the barrier path on
+  Windows and crash on the default L0 v2 adapter; the trailing upload waits are needed with one staging pair (safe to
+  drop with two); `nsm` undercounts Xe2 cores (arch-aware fix + re-measure); the oneDNN probe is fine on B70.
+  [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md#review-notes-on-the-startup-selected-barrier-exchange-2026-10-25).
+
 ## 2026-10-24
 - Queue-barrier exchange on Windows, cause found: the two devices already share one SYCL context; the abort comes from
   the Level Zero v2 UR adapter, and the legacy adapter (`SYCL_UR_USE_LEVEL_ZERO_V2=0`) runs it (standalone test).
