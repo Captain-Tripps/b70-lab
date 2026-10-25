@@ -283,8 +283,12 @@ faster on top of the graph cache?
   `stream(0)->get_context() == stream(1)->get_context()` once at init. If they are equal and the barrier still aborts,
   the cross-device barrier itself fails on the Windows Level Zero driver (no-go). If they are not equal, build an
   explicit shared context (one `sycl::context` over the selected GPUs, queues built from it) behind an env switch.
-- A cheap cross-check from the Linux side: run the barrier build with `SYCL_ENABLE_DEFAULT_CONTEXTS=0`. If it then
-  aborts like Windows, separate contexts are confirmed as the cause.
+- Cross-check from the Linux side (@92es, 2026-10-24): `SYCL_ENABLE_DEFAULT_CONTEXTS` **does** switch between one
+  shared context and separate contexts per device there (confirmed with a context-equality print in the exchange).
+  He now selects the barrier path or the host-wait path once at startup via a function pointer, and A/Bs both with
+  the env var. So the env var very likely gave a shared context on Windows too, which would mean the Windows abort
+  comes from the Level Zero driver rejecting the cross-device barrier itself. That is still an inference until the
+  context comparison is printed on Windows.
 
 ## How to A/B MTP stably (answer to a question on #30358)
 
@@ -336,6 +340,21 @@ Reading:
   (`--kl-divergence-base` from a stock run, then `--kl-divergence` for a second stock run and for the patch) would
   separate patch effects from that noise.
 - Windows retest of the exact same wiring: see the barrier row in [Candidate fixes](#candidate-fixes).
+
+**KL divergence, barrier patch vs stock** (2026-10-24, Qwen3.8-27B Q8_0, wikitext-2 test, `-sm tensor -ts 1,1`,
+`--chunks 12 -b 512 -c 512`, both runs against the same base logits):
+
+| | stock, ub 4 | patch, ub 4 | stock, ub 512 | patch, ub 512 |
+|---|---:|---:|---:|---:|
+| Mean KLD | 0.000000 | 0.000000 | 0.000005 | 0.000005 |
+| Maximum KLD | 0.000059 | 0.000059 | 0.000272 | 0.000628 |
+| Mean PPL(Q) - PPL(base) | 0.003818 | 0.003818 | 0.004778 | 0.004466 |
+| Same top token | 100% | 100% | - | - |
+
+- ub 4: every statistic identical between stock and patch; only speed differs.
+- ub 512: small differences in both directions, consistent with the run-to-run variance seen earlier at ub 512.
+- His two cards sit on Gen5 x16 and a chipset-attached Gen4 x4 link, so his speed numbers include that
+  bottleneck; two CPU-attached x8/x16 slots should do better.
 
 <details>
 <summary>Raw runs as posted</summary>

@@ -8,6 +8,9 @@ changed and when.
   on by default on Linux), which likely explains why each device gets its own context here. With the env var set, the
   queue-barrier exchange still aborts; whether the contexts were really shared is not yet verified. No new speed
   numbers. [TENSOR-SPLIT-DECODE.md](llama.cpp-sycl/TENSOR-SPLIT-DECODE.md#shared-context-attempt-windows-2026-10-24).
+- @92es (Linux): the env var does flip shared vs separate contexts there; KL divergence of the barrier patch vs stock
+  identical at ub 4, within noise at ub 512. So the Windows abort with a shared context most likely comes from the
+  Level Zero driver (not yet confirmed with a context print on Windows).
 
 ## 2026-10-23
 - Graph cache validated in llama-server and switched live for the 2-card dense models: Mistral-24B decode +45%,
