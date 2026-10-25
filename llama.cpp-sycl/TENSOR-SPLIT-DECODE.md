@@ -302,6 +302,29 @@ changes kernel launch cost for everything, and the graph cache and the launch-de
 v2 only. Next test: graph cache on v2 (current setup) vs barrier exchange + graph cache on the legacy adapter vs stock
 exchange + graph cache on the legacy adapter, with ub-4 and ub-512 perplexity.
 
+## Review notes on the startup-selected barrier exchange (2026-10-25)
+
+@92es pushed a version of #30956 that picks the exchange once at startup: the barrier ("fast") path when both
+queues share a SYCL context, the host-staged path otherwise. He also shared an audit of `ggml-sycl.cpp`. Notes from
+reading it against this fork:
+
+- **The context check is not a sufficient guard on Windows.** The queues share one context here by default, so the
+  fast path is selected and then aborts on the default Level Zero v2 adapter (see
+  [Shared context attempt](#shared-context-attempt-windows-2026-10-24)). His Linux runs use the legacy adapter
+  (`UR_LOADER_USE_LEVEL_ZERO_V2=0`), where the barrier works. It needs an adapter check, or to stay opt-in.
+- **The trailing upload waits are needed with one staging-buffer pair.** The next call's download into `host_out[0]`
+  on `q0` is not ordered after `q1`'s previous upload from `host_out[0]`; the waits prevent that overwrite. It
+  rarely triggers (compute between all-reduces is much longer than the copy), so KLD and benchmarks look identical
+  either way. With two alternating pairs the waits can be dropped: `q0`'s barrier on `q1`'s next download also
+  covers `q1`'s previous upload, because the queues are in-order.
+- **`nsm = max_compute_units / 16` undercounts Xe2** (16 instead of 32 cores on B70). It feeds flash-attention split
+  selection, count-equal and top-k. This fork already compensates locally (a B70 floor of 48 KV splits for TILE
+  decode: +5.5% Qwen3.8-27B, +17% Mistral-Small-3.2-24B at 32k; and a 2x factor in top-k), so a fix should be an
+  arch-aware divisor (8 on Xe2, 16 on Xe-HPG) plus re-measuring those heuristics, not a global `/ 8`.
+- **oneDNN matmul probe** (one 64x64 f16 problem decides for every dtype and shape): fragile in principle, but on
+  B70 it reports an optimized kernel, and none of this machine's saved test logs contain the fallback warning. A
+  per-dtype probe at an LLM-sized shape is a robustness improvement, not a B70 speedup.
+
 ## How to A/B MTP stably (answer to a question on #30358)
 
 - llama-bench and llama-perplexity have no MTP path. MTP runs in llama-server, llama-cli and
