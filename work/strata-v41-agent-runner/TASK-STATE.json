@@ -4,7 +4,7 @@
   "branch": "work/strata-v41-agent-runner",
   "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
   "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
-  "updated_at": "2026-10-27T05:45:00Z",
+  "updated_at": "2026-10-27T05:50:00Z",
   "gate_status": {
     "CHECK-100": {
       "status": "PARTIAL",
@@ -32,12 +32,13 @@
       ],
       "not_passing": [
         "per-card PCIe link generation/width: UNKNOWN (no Windows API exposure found)",
-        "compiler / oneMKL / Level Zero / UR versions: not inventoried",
-        "Strata source checkout location on GPU-BOX: not located",
+        "UR adapter DLL: ze_loader.dll found (1.32.0) but ur_loader.dll / ur_adapter_level_zero.dll not found in System32",
+        "Strata source checkout: NOT located (found C:\\llama-swap, C:\\llama-sycl, C:\\llama-sycl-new, C:\\Models - none confirmed as the Strata tree)",
         "Windows fork base 1c360526 full commit: not resolved",
-        "same-pack CUDA/HIP reference fixture availability: not checked"
+        "same-pack CUDA/HIP reference fixture availability: python 3.14.6 present, torch NOT installed",
+        "icx/dpcpp not on PATH (oneAPI 2025.1 and 2026.0 installed at C:\\Program Files (x86)\\Intel\\oneAPI)"
       ],
-      "baseline_verdict": "NO STABLE BASELINE. WHEA memory-path errors are still firing on boot as of 2026-10-25, so heavy testing must stay paused per CHECK-101."
+      "baseline_verdict": "STABLE-BUT-DEGRADED. WHEA Id 22 is a boot-time event firing once ~23 s after boot, not a runtime one: 37.6 h of continuous uptime produced zero recurrences. Heavy testing is therefore NOT gated by expected runtime instability; the 95.87 GiB usable figure is the budget and any RAM change invalidates cross-boundary A/B comparisons. Root cause remains unresolved."
     }
   },
   "artifacts": {
@@ -66,7 +67,10 @@
     "windows_reached_via": "powershell.exe / cmd.exe from WSL interop",
     "powershell_version": "5.1.26100.9711",
     "dotnet_framework": "4.0.30319.42000",
-    "consequence": "ProcessStartInfo.ArgumentList does not exist; argv quoting is implemented manually per CommandLineToArgvW."
+    "consequence": "ProcessStartInfo.ArgumentList does not exist; argv quoting is implemented manually per CommandLineToArgvW.",
+    "oneapi": "C:\\Program Files (x86)\\Intel\\oneAPI - versions 2025.1 and 2026.0 present; icx/dpcpp not on PATH",
+    "python": "C:\\Python314\\python.exe 3.14.6; torch not installed",
+    "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0"
   },
   "next_action": "STEP-002 is NOT started (out of scope for this session). Before it: resolve the unresolved CHECK-101 items (oneAPI/LevelZero/UR versions, Strata checkout, 1c360526 full commit, PCIe links) and arrange a genuine fresh-session resume to close CHECK-100.",
   "resume_check": {

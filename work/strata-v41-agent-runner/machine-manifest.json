@@ -29,7 +29,14 @@
     "speed_mt": 2133,
     "manufacturer": "Micron Technology",
     "part_number": "36ASF2G72PZ-2G1A2",
-    "channels_populated": ["A", "B", "C", "D", "E", "F"],
+    "channels_populated": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F"
+    ],
     "reconciliation": {
       "reported_128_gb_claim": "NOT confirmed. Six 16 GiB DIMMs populate 6 of 8 channels.",
       "historical_112_gb": "not reproduced today",
@@ -40,25 +47,61 @@
   "whea": {
     "provider": "Microsoft-Windows-WHEA-Logger",
     "event_id": 22,
+    "pattern": {
+      "occurrences": "exactly one per boot, ~23 s after boot",
+      "last_boot": "2026-10-25T11:08:30",
+      "last_event": "2026-10-25T11:08:53",
+      "seconds_after_boot": 23.0,
+      "events_since_boot": 1,
+      "uptime_hours_at_check": 37.62,
+      "runtime_recurrence": "none observed in 37.6 h of continuous uptime"
+    },
     "recent_occurrences": [
-      "2026-10-25T11:08:53", "2026-10-24T08:59:47", "2026-10-24T08:38:08",
-      "2026-10-22T08:35:54", "2026-10-21T11:41:12", "2026-10-21T11:30:12",
-      "2026-10-21T11:07:42", "2026-10-21T10:16:57", "2026-10-19T12:34:26",
+      "2026-10-25T11:08:53",
+      "2026-10-24T08:59:47",
+      "2026-10-24T08:38:08",
+      "2026-10-22T08:35:54",
+      "2026-10-21T11:41:12",
+      "2026-10-21T11:30:12",
+      "2026-10-21T11:07:42",
+      "2026-10-21T10:16:57",
+      "2026-10-19T12:34:26",
       "2026-10-17T14:00:02"
     ],
     "unresolved_hardware_fault": true,
-    "interpretation": "A fatal memory-path error (Component: Memory, Error Source: BOOT) still fires on boot as of 2026-10-25. This is the same fault the lab notes attributed to the CPU socket on 2026-10-21.",
-    "check_101_consequence": "A stable baseline for heavy testing is NOT established. Per CHECK-101, heavy testing pauses; source analysis and small fixtures may continue."
+    "revised_interpretation": "This is a BOOT-TIME memory-path fault, not a runtime one. It fires once per boot ~23 s in, then does not recur for the life of the uptime (37.6 h clean at time of check). The practical consequence is a permanently reduced DIMM population (6 of 8 slots usable), not an expectation that a long GPU workload will crash the box.",
+    "check_101_consequence": "UPDATED: heavy testing is NOT gated by runtime instability on this evidence. What CHECK-101 still lacks is a resolved root cause and a repaired DIMM/CPU path. Treat the machine as stable-but-degraded: 95.87 GiB usable is the budget, and any future RAM change invalidates A/B comparisons across it. The earlier 'pause heavy testing' reading in commit ecaad19 overstated the risk; this supersedes it.",
+    "root_cause_status": "unresolved; prior lab note attributes it to the CPU socket. Unverified here."
   },
   "storage": {
     "physical_disks": [
-      { "model": "WD_BLACK SN770 2TB", "size_bytes": 2000396321280, "interface": "SCSI" },
-      { "model": "KINGSTON SNV3S1000G", "size_bytes": 1000202273280, "interface": "SCSI" }
+      {
+        "model": "WD_BLACK SN770 2TB",
+        "size_bytes": 2000396321280,
+        "interface": "SCSI"
+      },
+      {
+        "model": "KINGSTON SNV3S1000G",
+        "size_bytes": 1000202273280,
+        "interface": "SCSI"
+      }
     ],
     "volumes": [
-      { "drive": "C:", "used_gb": 577.82, "free_gb": 52.81 },
-      { "drive": "D:", "used_gb": 1223.44, "free_gb": 639.56 },
-      { "drive": "E:", "used_gb": 0.1, "free_gb": 298.85 }
+      {
+        "drive": "C:",
+        "used_gb": 577.82,
+        "free_gb": 52.81
+      },
+      {
+        "drive": "D:",
+        "used_gb": 1223.44,
+        "free_gb": 639.56
+      },
+      {
+        "drive": "E:",
+        "used_gb": 0.1,
+        "free_gb": 298.85
+      }
     ],
     "note": "A 257 GB model download does not fit on C:. D: has 639 GB free and E: has 298 GB free."
   },
