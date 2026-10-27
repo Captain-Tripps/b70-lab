@@ -62,6 +62,19 @@ compute code is CUDA/HIP and has no SYCL implementation. Porting means translati
 STEP-003. This plan's "Automatic CUDA translation as a complete port — Reject" decision stands: translation
 tooling may scaffold, but cannot satisfy CHECK-103.
 
+Measured scope, kernel counts, the in-tree SYCL template, and the base-version decision are in
+[PORT-SCOPE.md](PORT-SCOPE.md). Two items there supersede this file:
+
+- **Base is `v0.2.7` (`5e8a4cca7`), not the `v0.2.6` pin below.** v0.2.7 adds ~1,000 engine lines
+  (incl. a new `ds4_wmma.cuh`) one day after v0.2.6. Porting a stale tree then re-porting is waste.
+- **`sycl/src/` already contains 108,675 lines of working Windows SYCL**, structurally mirroring
+  `src/`, with expert placement, host staging, graph capture and MTP already implemented. The port is
+  `sycl/src/dsv41/` following that pattern — not translation from first principles.
+
+Port surface: **16,428 lines of CUDA/HIP compute, 93 `__global__` kernels, 130 launch sites, 41
+`__shfl` shuffles**; 5,790 lines of CPU/host code compile unchanged; `ds4_vision.cu` (519 lines) is
+out of scope for the first deliverable.
+
 ### What the llama.cpp detour actually bought us
 
 Retained as route-relevant input, explicitly **not** as Strata evidence:
