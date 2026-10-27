@@ -14,6 +14,15 @@ contains the Windows Qwen port and useful failure evidence; the action plan must
 | Existing V4 0731 layer split and expert-parallel rejection | Simpler baseline and useful counterexample | Old model's ceiling is not a V4.1 prediction (EV-006) |
 | Lab driver/hardware/lifecycle notes | Turn known failures into first-class gates | Version-specific evidence, not current health certification (EV-005, EV-007, EV-008) |
 
+## Hosted implementation agent
+
+Adopt the user-selected DeepSeek V4.1 Flash 1017 OpenRouter route and OpenClaw host execution (DEC-008).
+The simpler alternative is local Qwen/GLM plus a model-swapping supervisor. Remote coding inference removes
+that GPU-residency conflict, but still needs task-specific runner scripts. Defer local model swapping.
+The exact 1017 route must pass a real reasoning/tool-result round trip; older V4 compatibility notes do not
+prove the new snapshot works with the installed OpenClaw release. Benchmarks are not port acceptance evidence.
+No live API request or OpenClaw/Zeus integration was run for this documentation change.
+
 ## Rejected and deferred
 
 Reject full-model FP16 expansion and treating automatic CUDA translation/emulation as completed support.
@@ -47,6 +56,8 @@ checks have not run. Generated tables below come from evidence.json.
 | --- | --- | --- | --- | --- |
 | REF-001 | [https://github.com/Niko1221/Strata](https://github.com/Niko1221/Strata) | Separate V4.1 engine, packing, memory planning and existing SYCL migration mechanisms. | Released DeepSeek engine lacks Intel support; upstream Intel route is Linux and Qwen-focused. | INSPECTED · MIT · PATTERN_ONLY |
 | REF-002 | [https://github.com/Captain-Tripps/b70-lab](https://github.com/Captain-Tripps/b70-lab) | Same machine's Windows port, probes, benchmarks and rejected strategies. | Existing working Strata model is Qwen; DeepSeek measurements concern V4 0731 and older driver/hardware states. | INSPECTED · MIT · PATTERN_ONLY |
+| REF-003 | [https://docs.openclaw.ai/providers/openrouter](https://docs.openclaw.ai/providers/openrouter) | Documented hosted model selection, tool metadata and reasoning replay. | Installed version and new snapshot compatibility require a real tool-loop test. | UNRECOGNIZED · unknown · PATTERN_ONLY |
+| REF-004 | [https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017](https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017) | Exact requested hosted snapshot with tool/reasoning capability. | Catalog support and vendor descriptions do not prove SYCL port competence or deployment reliability. | UNRECOGNIZED · unknown · PATTERN_ONLY |
 <!-- rfb:references:end -->
 
 ## Ledger: sources
@@ -64,6 +75,9 @@ checks have not run. Generated tables below come from evidence.json.
 | [SRC-008](sources/SRC-008.md) | [original](https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/bench/README.md) | a9e900053adc73bda351f268488318694ac49754 · bench/README.md · arm.ps1 lifecycle and ownership rules | INSPECTED |
 | [SRC-009](sources/SRC-009.md) | [original](https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/src/dsv41/ds4_os.hpp) | 4b9e05a2a806a3fe24f7b2560d98626c37dade35 · src/dsv41/ds4_os.hpp · _WIN32 branches, read/mapping/allocation functions | INSPECTED |
 | [SRC-010](sources/SRC-010.md) | [original](https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/docs/DEEPSEEK41.md) | 4b9e05a2a806a3fe24f7b2560d98626c37dade35 · docs/DEEPSEEK41.md · Official sets; setup; DSpark handling | INSPECTED |
+| [SRC-011](sources/SRC-011.md) | [original](https://docs.openclaw.ai/providers/openrouter) | Model references; Thinking / reasoning injection; DeepSeek V4 reasoning replay | INSPECTED |
+| [SRC-012](sources/SRC-012.md) | [original](https://docs.openclaw.ai/tools/bash) | Exec tool; host routing; completion lifecycle | INSPECTED |
+| [SRC-013](sources/SRC-013.md) | [original](https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017/providers) | API model ID; tool calling and reasoning | INSPECTED |
 <!-- rfb:sources:end -->
 
 ## Ledger: evidence
@@ -81,6 +95,7 @@ checks have not run. Generated tables below come from evidence.json.
 | EV-008 | The documented benchmark lifecycle currently identifies llama-server, requiring adaptation for a Strata V4.1 wrapper. | VERIFIED · documented | [SRC-008](sources/SRC-008.md) | Harness documentation. |
 | EV-009 | The compressed models plausibly fit GPU plus host tiers, but not necessarily with the entire Engram table cached. | INFERENCE | [SRC-002](sources/SRC-002.md), [SRC-005](sources/SRC-005.md), EV-002, EV-005, REQ-002 | Illustrative 110-120 GB GPU-expert budget; user-reported 128 GB host RAM. |
 | EV-010 | V4.1's no-drafter baseline needs allocation verification; --dspark off is not proof of unloaded draft weights. | VERIFIED · documented | [SRC-010](sources/SRC-010.md) | Upstream setup/model notes. |
+| EV-011 | OpenClaw documents OpenRouter model selection and host execution; the requested hosted snapshot advertises tool calling and reasoning. | VERIFIED · documented | [SRC-011](sources/SRC-011.md), [SRC-012](sources/SRC-012.md), [SRC-013](sources/SRC-013.md), REQ-004 | Published interfaces only. |
 <!-- rfb:evidence:end -->
 
 ## Ledger: decisions
@@ -95,4 +110,5 @@ checks have not run. Generated tables below come from evidence.json.
 | DEC-005 | Automated CUDA translation or emulation as proof of support | REJECT | EV-003, EV-007 | Translation does not establish correctness or Windows synchronization behavior. Complexity: Review subgroup, pointer, event and allocation semantics. | A supported implementation demonstrates all required gates. |
 | DEC-006 | Tensor/expert parallelism, graph capture, per-card submission threads | DEFER | EV-006, EV-007 | Prior lab results reject assuming these are unconditional speedups. Complexity: Cross-device reductions, capture limitations and possible driver deadlocks. | V4.1 profile shows sufficient ceiling and isolated proof passes. |
 | DEC-007 | AOT, DSpark, vision, concurrency and extended context | DEFER | EV-004, EV-010 | Keep correctness and memory attribution clear. Complexity: More kernels, shapes, state and allocation paths. | Baseline parity, four-card execution and soak pass; each gets a separate decision. |
+| DEC-008 | Hosted DeepSeek through OpenRouter; OpenClaw with native Windows runner | ADOPT | EV-011, EV-008 | Keeps coding inference off Zeus GPUs while retaining local execution and observable acceptance gates. Complexity: Qualify tool-message continuity, provider settings, Windows dispatch, process ownership and persisted resume. | Repeated integration failures or unresolved correctness bugs justify a different model/harness; local inference only if its overhead is accepted. |
 <!-- rfb:decisions:end -->

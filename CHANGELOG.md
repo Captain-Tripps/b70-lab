@@ -4,6 +4,9 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-10-26
+- Added STEP-000 to qualify DeepSeek V4.1 Flash 1017 through OpenRouter/OpenClaw with a native Windows runner,
+  CPU-only lifecycle mocks and session resume. Added a copyable [agent starter prompt](deepseek-v4/strata-v41/OPENCLAW-START.md).
+  Coding inference is remote; no coding-model swapping is required. Integration and hardware checks remain NOT_RUN.
 - Added the [Strata DeepSeek V4.1 four-B70 Windows action plan](deepseek-v4/strata-v41/PLAN.md) with pinned upstream/lab
   evidence, source-backed decisions, ordered work packages and acceptance gates. It reuses the existing Windows
   port and records known driver/compilation failures; no GPU tests or performance measurements were run.

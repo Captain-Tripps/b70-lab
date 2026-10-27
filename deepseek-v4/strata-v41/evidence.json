@@ -16,13 +16,14 @@
     ]
   },
   "coverage": {
-    "depth": "quick",
-    "reference_exception": "Two directly relevant repositories cover the exact engine and same-machine Windows implementation; generic runtime comparisons would not change this plan.",
+    "depth": "default",
+    "reference_exception": "",
     "rejection_note": "Reject full FP16 expansion and treating CUDA translation as proof; preserve the historical V4 expert-only rejection.",
     "limitations": [
       "No current hardware access or GPU test in this task.",
       "Current RAM/driver/PCIe state and old local fork changes require STEP-001.",
-      "A supported-backend same-pack reference must be obtained before CHECK-103."
+      "A supported-backend same-pack reference must be obtained before CHECK-103.",
+      "Exact OpenClaw/provider integration and task-specific coding ability are untested; STEP-000 qualifies the deployed route."
     ]
   },
   "questions": [
@@ -95,6 +96,14 @@
       "source_locator": "Scope interpretation of the action-plan request and repository README result conventions.",
       "acceptance": "No runtime or production configuration changes; future checks include parity, lifecycle isolation and soak.",
       "critical": true
+    },
+    {
+      "id": "REQ-004",
+      "text": "Use hosted DeepSeek V4.1 Flash 1017 through OpenRouter and OpenClaw; update the milestone and provide an executable starter handoff.",
+      "origin": "USER_REQUIREMENT",
+      "source_locator": "Conversation 2026-10-26: update milestone, push to GitHub, and provide OpenClaw starter prompt.",
+      "acceptance": "Plan begins with a tool-loop/Windows runner gate and a bounded starter prompt; no local coding-model swapping required.",
+      "critical": true
     }
   ],
   "references": [
@@ -138,6 +147,48 @@
         "reuse_mode": "PATTERN_ONLY",
         "code_copied": false,
         "reuse_review": "Only new planning prose and links; existing licensed patches are referenced, not copied."
+      }
+    },
+    {
+      "id": "REF-003",
+      "canonical_url": "https://docs.openclaw.ai/providers/openrouter",
+      "relevance": "Documented hosted model selection, tool metadata and reasoning replay.",
+      "mismatch": "Installed version and new snapshot compatibility require a real tool-loop test.",
+      "selection_rationale": "User-selected implementation-agent stack; inspect mechanisms needed for the milestone.",
+      "activity": {
+        "description": "Primary documentation inspected in this conversation.",
+        "source": "https://docs.openclaw.ai/providers/openrouter",
+        "checked_at": "2026-10-27T03:14:40Z"
+      },
+      "license_record": {
+        "status": "UNRECOGNIZED",
+        "spdx": "",
+        "locator": "",
+        "scope": "Documentation/API reference; license terms were not audited in this planning update.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Original planning prose and interface identifiers only; no third-party implementation copied."
+      }
+    },
+    {
+      "id": "REF-004",
+      "canonical_url": "https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017",
+      "relevance": "Exact requested hosted snapshot with tool/reasoning capability.",
+      "mismatch": "Catalog support and vendor descriptions do not prove SYCL port competence or deployment reliability.",
+      "selection_rationale": "User-selected implementation-agent stack; inspect mechanisms needed for the milestone.",
+      "activity": {
+        "description": "Primary documentation inspected in this conversation.",
+        "source": "https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017",
+        "checked_at": "2026-10-27T03:14:40Z"
+      },
+      "license_record": {
+        "status": "UNRECOGNIZED",
+        "spdx": "",
+        "locator": "",
+        "scope": "Documentation/API reference; license terms were not audited in this planning update.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Original planning prose and interface identifiers only; no third-party implementation copied."
       }
     }
   ],
@@ -331,6 +382,63 @@
       "limitations": [
         "Do not treat a draft flag as proof that drafter VRAM is absent."
       ]
+    },
+    {
+      "id": "SRC-011",
+      "reference_id": "REF-003",
+      "url": "https://docs.openclaw.ai/providers/openrouter",
+      "accessed_at": "2026-10-27T03:14:40Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "Model references; Thinking / reasoning injection; DeepSeek V4 reasoning replay",
+        "version": "Live docs inspected 2026-10-26 America/Chicago",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-011.md",
+      "limitations": [
+        "Documented capability, not a Zeus integration test."
+      ]
+    },
+    {
+      "id": "SRC-012",
+      "reference_id": "REF-003",
+      "url": "https://docs.openclaw.ai/tools/bash",
+      "accessed_at": "2026-10-27T03:14:40Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "Exec tool; host routing; completion lifecycle",
+        "version": "Live docs inspected 2026-10-26 America/Chicago",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-012.md",
+      "limitations": [
+        "Documented capability, not a Zeus integration test."
+      ]
+    },
+    {
+      "id": "SRC-013",
+      "reference_id": "REF-004",
+      "url": "https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017/providers",
+      "accessed_at": "2026-10-27T03:14:40Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "API model ID; tool calling and reasoning",
+        "version": "Live docs inspected 2026-10-26 America/Chicago",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-013.md",
+      "limitations": [
+        "Documented capability, not a Zeus integration test."
+      ]
     }
   ],
   "claims": [
@@ -480,6 +588,26 @@
       "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
       "scope": "Upstream setup/model notes.",
       "limitations": []
+    },
+    {
+      "id": "EV-011",
+      "statement": "OpenClaw documents OpenRouter model selection and host execution; the requested hosted snapshot advertises tool calling and reasoning.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-011",
+        "SRC-012",
+        "SRC-013"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "support_explanation": "Inspected provider integration, exec and exact model catalog documentation.",
+      "scope": "Published interfaces only.",
+      "limitations": [
+        "Exact installed route, reasoning replay and native Windows execution remain untested.",
+        "No claim that this model alone can complete the port."
+      ]
     }
   ],
   "decisions": [
@@ -634,9 +762,41 @@
       "complexity_cost": "More kernels, shapes, state and allocation paths.",
       "scale_fit": "One Windows workstation, four B70s, one initial request.",
       "revisit_trigger": "Baseline parity, four-card execution and soak pass; each gets a separate decision."
+    },
+    {
+      "id": "DEC-008",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "candidate": "Hosted DeepSeek through OpenRouter; OpenClaw with native Windows runner",
+      "outcome": "ADOPT",
+      "evidence_ids": [
+        "EV-011",
+        "EV-008"
+      ],
+      "rationale": "Keeps coding inference off Zeus GPUs while retaining local execution and observable acceptance gates.",
+      "alternatives": [
+        "Local Qwen/GLM with coding-model load/unload supervisor"
+      ],
+      "complexity_cost": "Qualify tool-message continuity, provider settings, Windows dispatch, process ownership and persisted resume.",
+      "scale_fit": "One implementation agent and one exclusive GPU test at a time.",
+      "revisit_trigger": "Repeated integration failures or unresolved correctness bugs justify a different model/harness; local inference only if its overhead is accepted."
     }
   ],
   "plan_units": [
+    {
+      "id": "STEP-000",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "decision_ids": [
+        "DEC-008"
+      ],
+      "outcome": "Qualify hosted agent tool loop and native Windows runner without GPU loads",
+      "acceptance_checks": [
+        "CHECK-100"
+      ]
+    },
     {
       "id": "STEP-001",
       "requirement_ids": [
@@ -759,7 +919,8 @@
       "requirement_ids": [
         "REQ-001",
         "REQ-002",
-        "REQ-003"
+        "REQ-003",
+        "REQ-004"
       ],
       "decision_ids": [
         "DEC-001",
@@ -768,16 +929,34 @@
         "DEC-004",
         "DEC-005",
         "DEC-006",
-        "DEC-007"
+        "DEC-007",
+        "DEC-008"
       ],
       "required": true,
       "result": "PASS",
       "method": "SOURCE_AUDIT",
-      "criterion": "Audit core claims and reconcile existing Windows support, hardware conflicts and V4/V4.1 scope against pinned sources.",
+      "criterion": "Audit core claims and reconcile existing Windows support, hardware conflicts and V4/V4.1 scope against pinned sources. Audit hosted-agent interfaces separately from untested runtime integration.",
       "command": "Manual inspection through GitHub connector; no GPU execution.",
       "evidence_path": "checks/SOURCE_AUDIT.md",
-      "tested_snapshot": "Strata 4b9e05a2a806a3fe24f7b2560d98626c37dade35; b70-lab a9e900053adc73bda351f268488318694ac49754",
-      "checked_at": "2026-10-27T02:04:49Z"
+      "tested_snapshot": "Strata 4b9e05a2a806a3fe24f7b2560d98626c37dade35; b70-lab a9e900053adc73bda351f268488318694ac49754; OpenClaw/OpenRouter live documentation inspected 2026-10-26 America/Chicago",
+      "checked_at": "2026-10-27T03:14:40Z"
+    },
+    {
+      "id": "CHECK-100",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "decision_ids": [
+        "DEC-008"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Real tool rounds, failing-fixture repair, native Windows runner mocks, ownership/timeout/lock tests and fresh-session resume pass with saved receipts.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
     },
     {
       "id": "CHECK-101",
