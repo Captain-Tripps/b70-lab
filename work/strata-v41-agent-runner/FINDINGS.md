@@ -1800,3 +1800,78 @@ numbers, and this correction removes the main argument that the fork might get c
 Still `-r 1`, still single-sample for stages 2-5 of the sweep in progress. The b=128/256 figures
 now have two runs each and are trustworthy. Everything else in the sweep is provisional until
 its repeat lands.
+
+## Session 9b — completed repeat sweep: FA and ubatch findings both collapse (2026-10-27)
+
+Full five-stage sweep completed (`bw/sweep2/`, 16:55-17:58, `q7.done` = ALLDONE_Q7). Every stage exited 0.
+Results below are `-r 1` except S2/S3 which were `-r 3`.
+
+### W-041 — Flash attention is NOT a 10x regression. That finding was single-sample noise.
+
+| config | run A (single sample, `bw/sweep/`) | run B (`-r 3`, `sweep2/`) |
+|---|---|---|
+| `-fa 1`, pp128 | 0.33 | **39.63 ± 31.48** |
+| `-fa 0`, pp128 | 3.48 | **41.15 ± 32.59** |
+| `-fa 1`, tg16 | 0.33 | 3.13 ± 2.16 |
+| `-fa 0`, tg16 | 3.80 | 4.36 ± 0.33 |
+
+At `-r 3`, FA-on and FA-off prefill are **statistically indistinguishable** (39.63 vs 41.15). The "10x
+regression" in W-033/issue #8 came from single samples that happened to catch the slow mode. FA-off does
+show a modest decode advantage (4.36 vs 3.13) and much tighter variance (±0.33 vs ±2.16), so FA-off is still
+the safer default — but it is not a 10x effect and the causal story in #8 is wrong.
+
+### W-042 — The standard deviation is the finding: this pack's throughput is bimodal
+
+`pp128 = 39.63 ± 31.48`. A mean of 39.6 with a standard deviation of 31.5 is not measurement noise around a
+stable value; it is a **bimodal distribution** — some repetitions fast, some catastrophic. The same signature
+explains the b=512 confusion (41.87 then 0.61) and the FA confusion (0.33 then 39.63).
+
+**Hypothesis, untested:** the first repetition runs fast (cold clocks/page cache/VRAM not yet fragmented) and
+later repetitions collapse. Three-sample means of {80, 40, 0.3} would produce exactly this mean and spread.
+If true, every `-r 1` number in this ledger is measuring "the first rep", and every `-r 3` mean is a blend of
+two populations.
+
+**Required fix:** `llama-bench -o json` retains per-sample data. That is the only way to see the two
+populations separately. Until per-sample data exists, no throughput number from this pack should be treated
+as a capability figure. This is exactly the CHECK-106 variance requirement and it now has a concrete reason.
+
+### W-043 — At b=512, ubatch — not n_batch — controls prefill. The default ubatch is pathological.
+
+Stage S4, `-p 512 -b 512 -fa 0`, ubatch isolated:
+
+| n_ubatch | pp512 t/s |
+|---:|---:|
+| 128 | 12.01 |
+| 256 | **29.61** |
+| default (unset) | **0.61-0.79** (S1 and S5, two runs) |
+
+**A 48x spread at identical `-b 512`.** The default ubatch is the worst of the three. This reframes the whole
+batch story: the b=512 collapses in W-038 and W-039 were not "batch size too large", they were "default
+ubatch badly chosen for this batch size". With `-ub 256`, b=512 reaches 29.61 t/s.
+
+This also offers a candidate explanation for the 41.87 outlier: a run where the ubatch default resolved
+differently. Unproven, but it fits.
+
+**Consequence:** the b=256 collapse (0.70 t/s, reproduced twice) should be retested with explicit `-ub`.
+If `-ub 256` fixes b=256 as well, then the "collapse" was never about batch size at all.
+
+### W-044 — Decode is stable; prefill is not
+
+Across every stage, decode sits in a narrow band: tg16 = 3.13-4.36 t/s, and at b=512/fa0 it was 3.33 ± 0.00.
+Decode behaves like a real measurement. Prefill swings by orders of magnitude between repetitions.
+
+This matters for interpretation: the pack's decode capability (~3.3-4.4 t/s) is established, but its prefill
+capability is not measurable with the tooling used so far.
+
+### Route consequence
+
+The sweep is complete and this line of work is closed. The owner confirmed 2026-10-27 that the Strata engine
+port is the route and llama.cpp is a dead end. These results are retained for two reasons:
+
+1. **Platform characteristics transfer.** A bimodal throughput distribution on this box will affect the ported
+   engine too. W-042's per-sample discipline applies to STEP-006 regardless of engine.
+2. **The ubatch finding is a kernel-selection lesson.** A 48x spread from one scheduling parameter means the
+   fork's dispatch logic picks badly for this tensor shape. That is a warning for the port: verify dispatch
+   choices rather than trusting defaults.
+
+None of this is Strata-engine evidence. No CHECK-102..108 gate moves.

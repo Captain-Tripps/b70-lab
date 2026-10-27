@@ -10,13 +10,15 @@ Opened 2026-10-27 during the speed-tuning session. Umbrella: **#11**.
 | [#5](https://github.com/Captain-Tripps/b70-lab/issues/5) | OOM: SYCL alloc failure at large ubatch (b=32, ub>=128), cause unidentified | OPEN |
 | [#6](https://github.com/Captain-Tripps/b70-lab/issues/6) | pp512 non-monotonic in batch: **41.87 did NOT reproduce** (repeat 0.61); b=128 ~11-12 and b=256 0.70 both reproduced | OPEN — corrected |
 | [#7](https://github.com/Captain-Tripps/b70-lab/issues/7) | Model load takes 10-17 min: break down the cost and cut it | OPEN |
-| [#8](https://github.com/Captain-Tripps/b70-lab/issues/8) | Flash attention ON is a 10x regression (0.33 vs 3.48 t/s at p128) | OPEN |
-| [#9](https://github.com/Captain-Tripps/b70-lab/issues/9) | KV quant q8_0 halves prefill (3.48 -> 1.62 t/s), decode unchanged | OPEN |
+| [#8](https://github.com/Captain-Tripps/b70-lab/issues/8) | Flash attention "10x regression" **did NOT reproduce** — at r3, fa1 39.63 vs fa0 41.15, indistinguishable | CLOSED as a regression; variance is the real issue (#17) |
+| [#9](https://github.com/Captain-Tripps/b70-lab/issues/9) | KV quant q8_0 "halves prefill" — single sample from the same unreliable regime | SUPERSEDED by #17 |
 | [#10](https://github.com/Captain-Tripps/b70-lab/issues/10) | llama-server cannot use the tuned batching path; llama-swap integration broken | OPEN |
 | [#12](https://github.com/Captain-Tripps/b70-lab/issues/12) | `-sm row` aborts: `get_row_rounding` has no I32/I64 case | OPEN |
 | [#13](https://github.com/Captain-Tripps/b70-lab/issues/13) | `-ngl 38` forced by ~955 MiB VRAM overrun; split lopsided 22/37 | OPEN |
 | [#14](https://github.com/Captain-Tripps/b70-lab/issues/14) | Engram/PLE unusable: 10 tensors skipped, metadata absent | OPEN |
 | [#15](https://github.com/Captain-Tripps/b70-lab/issues/15) | PCIe measured ~12 GB/s per card (x8-class), topology unconfirmed | OPEN |
+| [#16](https://github.com/Captain-Tripps/b70-lab/issues/16) | Strata engine port is the route; engine is CUDA/HIP-only (0 SYCL files) | OPEN — primary |
+| [#17](https://github.com/Captain-Tripps/b70-lab/issues/17) | Throughput is bimodal (±31 on a mean of 39); needs per-sample JSON | OPEN — blocks all numbers |
 
 ## Rules for this work
 
