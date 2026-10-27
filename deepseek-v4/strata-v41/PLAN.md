@@ -1,7 +1,7 @@
 # Action plan: Strata DeepSeek V4.1 on four B70s, native Windows
 
 Status: **planned; no DeepSeek V4.1 Intel implementation or performance measurements from this work.**
-Prepared 2026-10-26. Start with STEP-001; the remaining steps depend on its recorded findings.
+Prepared 2026-10-26. Updated for hosted DeepSeek/OpenClaw execution. Start with STEP-000, then STEP-001; later gates retain their IDs.
 This is a research-only handoff, not a claim that the model can currently launch.
 
 ## Outcome and scope
@@ -34,10 +34,24 @@ No performance target is promised before measurement. This plan does not start h
   and a Level Zero submission deadlock. These are version-scoped observations; re-test the intended runtime.
   Shared context alone does not make the newer queue-barrier path safe on the default v2 adapter.
 
+## Agent execution arrangement
+
+Use OpenClaw with `openrouter/deepseek/deepseek-v4.1-flash-1017` as the implementation agent.
+The coding model runs remotely; GPU-BOX runs native Windows builds and GPU tests. No local coding-model
+load/unload loop is needed. This is an operational choice, not a proven ranking of model coding ability.
+Qualify the exact installed OpenClaw version, model route, reasoning/tool replay and Windows runner first.
+Keep hosted API inference separate from the local V4.1 engine being ported; API answers are not same-pack
+numerical reference logits. See [OpenClaw starter prompt](OPENCLAW-START.md).
+
+The gateway can run on GPU-BOX or another machine. A separate gateway survives a GPU-BOX reboot; a gateway on
+GPU-BOX does not. In either case, persist task state and artifacts on disk. If the gateway is in WSL, dispatch
+builds/tests to native Windows explicitly; this does not introduce WSL as an inference dependency.
+
 ## Architecture decisions
 
 | Decision | Adopt / defer / reject | Reason |
 |---|---|---|
+| Hosted DeepSeek through OpenRouter; OpenClaw with a native Windows runner | Adopt | Keeps coding inference off the four B70s; qualify real tool rounds before port work |
 | Extend Strata's V4.1 engine using SYCL/oneMKL and the lab's Windows patterns | Adopt | Preserves model semantics, packer, CPU experts, Engram I/O, and API integration |
 | JIT build, AVX2-compatible host code, explicit synchronization | Adopt first | Existing lab evidence includes bad AOT output and EPYC illegal-instruction failures |
 | Layer split with host-staged device transfers in a shared context | Adopt first | Works without assuming GPU peer access; each GPU owns a block of layers |
@@ -72,9 +86,42 @@ still need checking. Do not download duplicate packs before inspecting existing 
 
 ## Work packages and acceptance gates
 
+### STEP-000 — Qualify the hosted agent and native Windows test runner
+
+Owner: OpenClaw implementation agent with access to GPU-BOX. No model weights or GPU workload required.
+Deliverables: runner scripts/tests, a redacted execution manifest, receipt artifacts and a resumable task record.
+Use [OPENCLAW-START.md](OPENCLAW-START.md) for the first session.
+
+- [ ] Record OpenClaw version, gateway host, execution host identity, exact model ID, effective reasoning
+  setting, provider policy and actual provider when exposed. Use existing secret storage; never log API keys.
+  Do not silently fall back to a local model or a different model/provider; record any approved change.
+- [ ] Confirm repo/worktree identity, current branch, dirty files and applicable AGENTS.md instructions.
+  Create a dedicated development branch without resetting user work. Preserve the plan branch as a handoff.
+- [ ] Prove the complete tool loop: inspect/edit a disposable fixture, observe an intentional failing test,
+  fix the fixture (not its assertion), rerun successfully and perform a subsequent tool call using its result.
+  Record evidence of actual execution and reasoning/tool-message continuity; a chat-only answer is insufficient.
+- [ ] Implement a native Windows command runner with explicit cwd, argument handling, toolchain initialization,
+  exit-code propagation, stdout/stderr files, timeout, and a machine-readable result. Do not assemble arbitrary
+  shell strings from JSON. Avoid secret-bearing environment dumps. Cache artifacts under a unique run ID.
+- [ ] Add a cross-process lock for GPU tests and ownership tracking for child processes (PID, creation time,
+  executable path and endpoint where applicable). Existing model services cause a busy result; do not unload
+  or kill them automatically. A GPU-test lease alone does not prove that production services released VRAM.
+- [ ] Exercise CPU-only mocks: success, nonzero exit, timeout with child cleanup, paths with spaces,
+  competing lock acquisition and an unrelated sentinel process that must survive every cleanup case.
+  A Windows Job Object or equivalent verified ownership mechanism may manage spawned process trees.
+- [ ] Save code SHA plus dirty diff hash when relevant, commands, toolchain identity, timestamps, exit status,
+  logs, acceptance results and next action. Reopen task state in a fresh agent session and resume without
+  repeating completed actions. No credentials or unrestricted transcripts go into Git.
+
+CHECK-100 passes only when the real OpenRouter/OpenClaw tool loop and all CPU-only runner mocks pass,
+including session resume. A stand-alone runner test does not prove the agent integration. Missing GPU-BOX access
+leaves the Windows portions BLOCKED; a Linux/WSL substitute cannot be reported as a Windows pass.
+Keep GPU benchmark concurrency at one. No unattended multi-agent GPU testing is part of this milestone.
+
 ### STEP-001 — Reconcile the actual machine and establish provenance
 
-Owner: implementation agent with access to the B70 host; user supplies access or missing local paths.
+Depends on STEP-000 for automated host execution. Owner: implementation agent with access to the B70 host.
+Read-only inventory and source inspection can proceed while STEP-000 is being qualified.
 Planning allowance: 0.5-1 engineering day. No heavy GPU work before this gate.
 
 - [ ] Save OS build, CPU model, actual physical/available RAM, DIMM count, relevant recent WHEA boot events,
@@ -152,7 +199,7 @@ Depends on STEP-004. Owner: serving/harness implementer. Planning allowance: 2-5
 
 - [ ] Add explicit development engine selection to Strata's V4.1 setup/server path, with actionable unsupported
   backend/format diagnostics. Preserve upstream pack integrity and production engine selection.
-- [ ] Extend the lab benchmark harness for `strata-dsv41.exe` and its Python wrapper. Existing `arm.ps1`
+- [ ] Reuse STEP-000 runner ownership, lock, timeout and artifact conventions. Then extend the lab benchmark harness for `strata-dsv41.exe` and its Python wrapper. Existing `arm.ps1`
   ownership/discovery/teardown assumes llama-server; it is not a drop-in V4.1 harness.
 - [ ] Retain executable path + PID + port identity checks and process-owned cleanup. Add mock lifecycle tests
   for the new engine so unrelated production services cannot be killed.
@@ -200,10 +247,12 @@ is overwritten. CHECK-108: final diff contains no unqualified deferred features.
 
 ## First implementation session
 
-Execute STEP-001, then attempt the smallest STEP-002 build/probe. End with a committed machine manifest,
-pinned dependency list, exact build command/log, probe output (or reproducible failure), and updated gate status.
-Do not start with a 257 GB download or a complete CUDA translation. The existing lab probes and Windows patch
-history should shorten this session substantially.
+Execute STEP-000 and the read-only STEP-001 inventory. The first session ends with a committed runner and
+CPU-only mock tests, redacted execution/machine manifests, tool-loop and resume evidence, and updated gate
+status. Record missing access or telemetry explicitly. Stop at this reviewable milestone before STEP-002;
+do not start a 257 GB download, GPU workload, production service change or complete CUDA translation.
+The prompt authorizes bounded development edits/tests and pushing the new development branch, not a merge
+or production deployment. Future STEP-002 work starts from the recorded readiness evidence.
 
 This is not a calendar promise: the initial reconciliation/probe is roughly 2-4 engineering days, while a
 correct full engine plus qualification is a multi-week effort. Compiler/runtime failures may extend it.
@@ -220,6 +269,7 @@ planning task. All implementation checks start NOT_RUN.
 <!-- rfb:plan:start -->
 | ID | Outcome | Requirements | Decisions | Acceptance |
 | --- | --- | --- | --- | --- |
+| STEP-000 | Qualify hosted agent tool loop and native Windows runner without GPU loads | REQ-004 | DEC-008 | CHECK-100 |
 | STEP-001 | Reconcile hardware, runtime and source provenance | REQ-001, REQ-002, REQ-003 | DEC-002 | CHECK-101 |
 | STEP-002 | Qualify native Windows build and four-device operations | REQ-001, REQ-002, REQ-003 | DEC-001, DEC-002, DEC-003 | CHECK-102 |
 | STEP-003 | Port required model operations and validate numerical behavior | REQ-001, REQ-002, REQ-003 | DEC-001, DEC-002 | CHECK-103 |

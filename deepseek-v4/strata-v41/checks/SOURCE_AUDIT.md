@@ -17,3 +17,15 @@ Snapshots: Strata 4b9e05a2a806a3fe24f7b2560d98626c37dade35; b70-lab a9e900053adc
 - All hardware, compilation, numerical parity, runtime and throughput checks remain NOT_RUN.
 
 Result: source-supported planning handoff, not verified implementation readiness or a benchmark result.
+
+## Hosted-agent planning update (2026-10-27T03:14:40Z)
+
+- Inspected OpenClaw OpenRouter integration and exec docs, and the exact OpenRouter 1017 snapshot listing.
+- Verified documented model-reference syntax and tool/reasoning support. Kept exact installed-route
+  compatibility, provider selection and native Windows dispatch as CHECK-100, NOT_RUN.
+- Older DeepSeek V4 replay special cases do not establish 1017 compatibility. The starter includes a real
+  multi-turn fixture test and fresh-session resume rather than assuming integration from catalog metadata.
+- Source licenses for the new documentation references were not audited; no implementation was copied.
+- No live API usage, secret configuration, Windows runner implementation or GPU test occurred.
+
+Result: PASS for documented planning claims only. No coding-ability ranking or price guarantee is asserted.
