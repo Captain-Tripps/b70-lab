@@ -3,6 +3,27 @@
 This is a **research-only planning handoff**. No DeepSeek V4.1 Intel binary was built, no model was loaded,
 and no GPU benchmark was run. The current implementation is unchanged.
 
+> **Update 2026-10-27 (session 3) — the sentence above is no longer accurate for that session.**
+> A 233 GB pack *was* downloaded and loaded, and four-GPU benchmarks *were* run — but in a
+> **llama.cpp SYCL fork**, not in the Strata engine this plan describes, and in violation of the
+> first-session boundaries at [PLAN.md](PLAN.md) line 252. The original statement is retained
+> above as history rather than deleted. Details, measurements, the corrected false premise that
+> caused the divergence, and the production-config rollback are in
+> [FINDINGS.md "SESSION 3 — ROUTE DIVERGENCE"](../../work/strata-v41-agent-runner/FINDINGS.md)
+> and `session_3_divergence` in
+> [TASK-STATE.json](../../work/strata-v41-agent-runner/TASK-STATE.json).
+>
+> **No gate changed.** CHECK-102 through CHECK-108 remain NOT_RUN: no four-device probe, no
+> quant/attention fixture, no same-pack reference-logit comparison, and no Strata engine was run.
+> The session-3 measurements are llama.cpp-side, single-sample, unqualified evidence — input to
+> route assessment, not a passed gate. `run.json` still records `stage: PREBUILD_CHECKED`.
+
+> **Manual consistency review (2026-10-27).** The local research helper was **not available** in
+> this environment, so it was **not run** and its validation is **not claimed** here. The ledger
+> tables below were reviewed by hand and left unchanged; no rows were added, weakened or removed.
+> Per [OPENCLAW-START.md](OPENCLAW-START.md), a manual review is recorded rather than a claimed
+> helper pass.
+
 The source audit checked pinned upstream and lab documents/code and recorded contradictions. Hardware and
 implementation checks CHECK-102 through CHECK-108 are future gates and remain NOT_RUN. CHECK-100 and CHECK-101
 are PARTIAL as of the STEP-000 session recorded in [work/strata-v41-agent-runner](../../work/strata-v41-agent-runner/TASK-STATE.json).
