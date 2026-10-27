@@ -4,7 +4,7 @@
   "branch": "work/strata-v41-agent-runner",
   "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
   "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
-  "updated_at": "2026-10-27T06:02:00Z",
+  "updated_at": "2026-10-27T06:15:00Z",
   "gate_status": {
     "CHECK-100": {
       "status": "PARTIAL",
@@ -32,7 +32,8 @@
         "Strata tree located: %USERPROFILE%\\strata-win (remote github.com/hotschmoe/Strata.git, branch win-port)",
         "Windows fork base 1c360526 RESOLVED to 1c360526bce659f45cec60b2e36c46b7770c5bf1 - it is the current win-port HEAD, not an ancestor",
         "Tree identified as v0.1.44.1-26-g1c360526, 2200 commits, not shallow",
-        "29 uncommitted local Windows changes enumerated (13 sycl/src, 5 sycl/include, 1 sycl, 10 root)"
+        "29 uncommitted local files CAPTURED and verified: rescue/working-tree.patch, 20189 bytes ASCII, 18 files +157/-23, reverse-applies cleanly",
+        "0731 prior art mapped to 1017 in FINDINGS.md APPLICABILITY section"
       ],
       "not_passing": [
         "Pinned upstream v0.2.6 (4b9e05a2a806a3fe24f7b2560d98626c37dade35) is NOT in the local object store; requires a fetch to compare the deployed tree against it",
@@ -57,7 +58,9 @@
       "work/strata-v41-agent-runner/receipts/02-fixture-passing.log"
     ],
     "fixture": "work/strata-v41-agent-runner/fixtures/greeting.py",
-    "source_audit": "work/strata-v41-agent-runner/source-audit.json"
+    "source_audit": "work/strata-v41-agent-runner/source-audit.json",
+    "findings_ledger": "work/strata-v41-agent-runner/FINDINGS.md",
+    "working_tree_patch": "work/strata-v41-agent-runner/rescue/working-tree.patch"
   },
   "exact_commands": {
     "run_windows_suite": "ssh gpu-box 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\b70-work\\runner\\bench\\runner\\Test-NativeRunner.ps1\"'",
@@ -78,7 +81,7 @@
     "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0",
     "strata_tree": "%USERPROFILE%\\strata-win @ win-port 1c360526bce659f45cec60b2e36c46b7770c5bf1 (v0.1.44.1-26), 29 dirty files"
   },
-  "next_action": "STEP-002 is NOT started. Two hard preconditions before any file-level port work: (1) fetch github.com/hotschmoe/Strata.git to obtain pinned upstream v0.2.6 4b9e05a2, because the local tree predates it and contains none of the ds4_* DeepSeek engine files; (2) capture the 29 uncommitted local changes as a patch receipt before touching the tree - they are the user's in-progress Windows work and must not be reset. Additionally still open: icx/dpcpp PATH, UR adapter DLLs, PCIe link telemetry, fresh-session resume for CHECK-100.",
+  "next_action": "Documented in FINDINGS.md. Immediate next: (a) git fetch origin to obtain pinned upstream v0.2.6 4b9e05a2 for comparison, (b) fix oneAPI PATH so icx/dpcpp resolve, (c) inspect the 4 strata-stall-*.dmp crash dumps for current build state, (d) fresh session to close CHECK-100 resume. STEP-002 device probe after those. Note: 1017 cannot run in the llama.cpp fork at all (DeepseekV41ForCausalLM unsupported) and ~510B at ~2.7bpw is ~170GB > 128GB VRAM, so Strata + CPU overflow experts + NVMe Engram is the route.",
   "resume_check": {
     "status": "NOT_RUN",
     "reason": "Requires a real new agent session, not this one.",

@@ -1,0 +1,472 @@
+diff --git a/sycl/CMakeLists.txt b/sycl/CMakeLists.txt
+index 4b682003..56becbb2 100644
+--- a/sycl/CMakeLists.txt
++++ b/sycl/CMakeLists.txt
+@@ -37,7 +37,9 @@ if(STRATA_SYCL_SPIN_MAX)
+   add_compile_definitions(STRATA_SYCL_SPIN_MAX=${STRATA_SYCL_SPIN_MAX}u)
+ endif()
+ set(_sycl_flags -fsycl)
+-if(STRATA_SYCL_AOT MATCHES "^(bmg|lnl)")
++# JIT on an Xe2 card (B-series): the AOT build defines this from the device name; a JIT build asks for it here
++option(STRATA_SYCL_XE2_JIT "JIT build for an Xe2 (Arc B-series / Lunar Lake) card: the sub-group-16 XMX kernels" OFF)
++if(STRATA_SYCL_AOT MATCHES "^(bmg|lnl)" OR (NOT STRATA_SYCL_AOT AND STRATA_SYCL_XE2_JIT))
+   add_compile_definitions(STRATA_XMX_SG16=1)   # the grouped XMX kernels on sub-group 16, joint_matrix 8x16x16 (Xe2)
+ elseif(STRATA_SYCL_AOT MATCHES "^pvc")
+   add_compile_definitions(STRATA_NO_DG2_XMX=1)   # the grouped XMX kernels (sub-group 8, 8x8x16) do not compile for Xe2 / Xe-HPC
+@@ -50,8 +52,14 @@ if(STRATA_SYCL_AOT)
+   if(STRATA_SYCL_AOT_CACHE_DIR)
+     set(_sycl_cache_flags " -allow_caching -cache_dir ${STRATA_SYCL_AOT_CACHE_DIR}")
+   endif()
++  # extra ocloc -options for the AOT device code (e.g. -ze-opt-greater-than-4GB-buffer-required)
++  set(STRATA_SYCL_AOT_OPTIONS "" CACHE STRING "extra ocloc -options for the AOT build")
++  set(_sycl_aot_opts "-cl-fp32-correctly-rounded-divide-sqrt")
++  if(STRATA_SYCL_AOT_OPTIONS)
++    string(APPEND _sycl_aot_opts " ${STRATA_SYCL_AOT_OPTIONS}")
++  endif()
+   set(_sycl_link -fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen
+-      "-device ${STRATA_SYCL_AOT} -options -cl-fp32-correctly-rounded-divide-sqrt${_sycl_cache_flags}")
++      "-device ${STRATA_SYCL_AOT} -options \"${_sycl_aot_opts}\"${_sycl_cache_flags}")
+ else()
+   set(_sycl_link -fsycl)
+ endif()
+@@ -85,8 +93,17 @@ list(APPEND _sycl_flags -fsycl-default-sub-group-size=32)
+ # split the first launch in the prompt path (the embedding gather) paid 245 ms for the image it shared (2026-09-30).
+ list(APPEND _sycl_link -fsycl-device-code-split=per_kernel)
+ list(APPEND _sycl_flags -fsycl-device-code-split=per_kernel)
+-add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${_sycl_flags}>" -fp-model=precise -Wno-unused-parameter
+-                    -Wno-unused-variable -Wno-deprecated-declarations)
++# Windows (icx, MSVC-style driver): the same options in their /-spelling
++if(WIN32)
++  set(_strata_fp_precise /fp:precise)
++  set(_strata_mkl /Qmkl:sequential)
++  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _USE_MATH_DEFINES)
++else()
++  set(_strata_fp_precise -fp-model=precise)
++  set(_strata_mkl -qmkl=sequential)
++endif()
++add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${_sycl_flags}>" "$<$<COMPILE_LANGUAGE:CXX>:${_strata_fp_precise}>"
++                    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-parameter;-Wno-unused-variable;-Wno-deprecated-declarations>")
+ add_link_options(${_sycl_link})
+ 
+ # --- source resolution: the migrated copy when there is one, the original otherwise -------------------------------
+@@ -115,7 +132,11 @@ add_library(strata_includes INTERFACE)
+ target_include_directories(strata_includes INTERFACE
+   ${CMAKE_CURRENT_SOURCE_DIR}/include      # migrated headers + dpct/ helpers, first
+   ${STRATA_ROOT}/include)
+-target_compile_options(strata_includes INTERFACE -Wall -Wextra)
++if(WIN32)
++  target_compile_options(strata_includes INTERFACE /W3)   # clang-cl's -Wall is -Weverything
++else()
++  target_compile_options(strata_includes INTERFACE -Wall -Wextra)
++endif()
+ 
+ # --- CPU-side pieces, identical to the top-level build ------------------------------------------------------------
+ strata_resolve(_spec src/spec/suffix_drafter.cpp src/spec/controller.cpp src/spec/draft_policy.cpp
+@@ -210,9 +231,14 @@ strata_resolve(_core src/core/device.cu src/core/pinned.cu src/platform/memory.c
+ add_library(strata_core STATIC ${_core})
+ target_link_libraries(strata_core PUBLIC strata_includes)
+ # zeMemAllocHost for the host memory a kernel polls (include/strata/sycl_queue.hpp, host_malloc_polled): only when libze-dev's header is there
+-find_library(STRATA_ZE_LOADER ze_loader)
++file(GLOB _strata_ze_sdk "C:/Program Files/LevelZeroSDK/*")   # Windows: the Level Zero SDK installer's folder
++find_library(STRATA_ZE_LOADER ze_loader HINTS $ENV{LEVEL_ZERO_V1_SDK_PATH}/lib ${_strata_ze_sdk})
++find_path(STRATA_ZE_INCLUDE level_zero/ze_api.h HINTS $ENV{LEVEL_ZERO_V1_SDK_PATH}/include ${_strata_ze_sdk} PATH_SUFFIXES include)
+ if(STRATA_ZE_LOADER)
+   target_link_libraries(strata_core PUBLIC ${STRATA_ZE_LOADER})
++  if(STRATA_ZE_INCLUDE)
++    target_include_directories(strata_core PUBLIC ${STRATA_ZE_INCLUDE})
++  endif()
+ endif()
+ 
+ set(_kernel_cu dequant_s2 s2_gemv s_gemv s2_gemv_quads s2_gemv_fast router_top10 quantize_act rope sampler s2_gemv_q8
+@@ -250,8 +276,8 @@ add_library(strata_prefill STATIC ${_prefill}
+             ${CMAKE_CURRENT_SOURCE_DIR}/src/prefill/moe_fused_stub.cpp   # upstream's fused int8 kernels: not built here
+             ${CMAKE_CURRENT_SOURCE_DIR}/src/prefill/xmx_moe.dp.cpp      # A770 port: grouped XMX expert GEMM
+             ${CMAKE_CURRENT_SOURCE_DIR}/src/prefill/gdn_chunk.dp.cpp)    # night-lab: chunkwise GDN recurrence
+-target_compile_options(strata_prefill PUBLIC -qmkl=sequential)
+-target_link_options(strata_prefill PUBLIC -qmkl=sequential)
++target_compile_options(strata_prefill PUBLIC ${_strata_mkl})
++target_link_options(strata_prefill PUBLIC ${_strata_mkl})
+ target_link_libraries(strata_prefill PUBLIC strata_engine)
+ 
+ strata_resolve(_main src/program/generate.cpp)
+diff --git a/sycl/include/dpct/device.hpp b/sycl/include/dpct/device.hpp
+index b55d2dcf..44e87e9e 100644
+--- a/sycl/include/dpct/device.hpp
++++ b/sycl/include/dpct/device.hpp
+@@ -32,6 +32,7 @@
+ #define NOMINMAX
+ #endif
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #endif
+ 
+ namespace dpct {
+@@ -462,6 +463,28 @@ has_capability_or_fail(const sycl::device &dev,
+   }
+ }
+ 
++#if defined(_WIN32)
++/// Windows port: Level Zero on Windows has no IPC handles and no peer access between Arc cards (measured on two
++/// B70s: zeMemGetIpcHandle 0x78000003, zeDeviceCanAccessPeer 0, a kernel on the other card's memory: device lost).
++/// The two cards' shared regions (strata/core/ep_mem.hpp) are therefore host memory, which both cards' kernels can
++/// use only inside ONE context: every GPU of a platform shares one sycl::context here.
++/// STRATA_WIN_SHARED_CONTEXT=0 gives each device its own context again (as on Linux).
++inline sycl::context strata_device_context(const sycl::device &d) {
++  const char *e = std::getenv("STRATA_WIN_SHARED_CONTEXT");
++  if ((e != nullptr && e[0] == '0') || !d.is_gpu()) return sycl::context(d);
++  static std::mutex mu;
++  static std::vector<std::pair<sycl::platform, sycl::context>> made;
++  std::lock_guard<std::mutex> g(mu);
++  const sycl::platform p = d.get_platform();
++  for (auto &m : made)
++    if (m.first == p) return m.second;
++  made.emplace_back(p, sycl::context(p.get_devices(sycl::info::device_type::gpu)));
++  return made.back().second;
++}
++#else
++inline sycl::context strata_device_context(const sycl::device &d) { return sycl::context(d); }
++#endif
++
+ /// dpct device extension
+ class device_ext : public sycl::device {
+   typedef std::mutex mutex_type;
+@@ -472,7 +495,7 @@ public:
+     std::lock_guard<mutex_type> lock(m_mutex);
+     clear_queues();
+   }
+-  device_ext(const sycl::device &base) : sycl::device(base), _ctx(*this) {
++  device_ext(const sycl::device &base) : sycl::device(base), _ctx(strata_device_context(*this)) {
+     std::lock_guard<mutex_type> lock(m_mutex);
+     init_queues();
+   }
+diff --git a/sycl/include/dpct/kernel.hpp b/sycl/include/dpct/kernel.hpp
+index 0e214aee..100c0a63 100644
+--- a/sycl/include/dpct/kernel.hpp
++++ b/sycl/include/dpct/kernel.hpp
+@@ -14,6 +14,7 @@
+ #ifdef _WIN32
+ #include <unordered_set>
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #else
+ #include <dlfcn.h>
+ #endif
+diff --git a/sycl/include/dpct/memory.hpp b/sycl/include/dpct/memory.hpp
+index 2ea68a98..9cf8914c 100644
+--- a/sycl/include/dpct/memory.hpp
++++ b/sycl/include/dpct/memory.hpp
+@@ -28,6 +28,7 @@
+ #define NOMINMAX
+ #endif
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #else
+ #error "Only support Windows and Linux."
+ #endif
+diff --git a/sycl/include/strata/core/ep_mem.hpp b/sycl/include/strata/core/ep_mem.hpp
+index affcd73e..95055275 100644
+--- a/sycl/include/strata/core/ep_mem.hpp
++++ b/sycl/include/strata/core/ep_mem.hpp
+@@ -9,6 +9,7 @@
+ #include <dpct/dpct.hpp>
+ 
+ #include <cstddef>
++#include <cstring>
+ #include <string>
+ 
+ namespace strata::core {
+@@ -32,6 +33,25 @@ inline bool ep_region_alloc(int owner, int other, size_t bytes, EpRegion& r, std
+     r = EpRegion{};
+     r.owner_ctx = ep_ze_context(owner);
+     r.other_ctx = ep_ze_context(other);
++#if defined(_WIN32)
++    // Windows: no IPC and no peer access between the cards, so the region is host memory in the context both cards
++    // share (dpct strata_device_context): one address for both, every access over PCIe (system-scope atomics).
++    if (r.owner_ctx == r.other_ctx) {
++        ze_host_mem_alloc_desc_t hdesc{};
++        hdesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
++        ze_result_t zh = zeMemAllocHost(r.owner_ctx, &hdesc, bytes, 4096, &r.local);
++        if (zh != ZE_RESULT_SUCCESS) {
++            err = "expert parallel: zeMemAllocHost of " + std::to_string(bytes) + " bytes failed (" + std::to_string((unsigned) zh) + ")";
++            r.local = nullptr;
++            return false;
++        }
++        std::memset(r.local, 0, bytes);
++        r.remote = r.local;
++        return true;
++    }
++    err = "expert parallel: the cards have separate contexts (STRATA_WIN_SHARED_CONTEXT=0?) and Windows has no IPC";
++    return false;
++#endif
+     ze_device_mem_alloc_desc_t desc{};
+     desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+     ze_result_t z = zeMemAllocDevice(r.owner_ctx, &desc, bytes, 4096, ep_ze_device(owner), &r.local);
+@@ -54,7 +74,7 @@ inline bool ep_region_alloc(int owner, int other, size_t bytes, EpRegion& r, std
+ }
+ 
+ inline void ep_region_free(EpRegion& r) {
+-    if (r.remote != nullptr) zeMemCloseIpcHandle(r.other_ctx, r.remote);
++    if (r.remote != nullptr && r.remote != r.local) zeMemCloseIpcHandle(r.other_ctx, r.remote);
+     if (r.local != nullptr) zeMemFree(r.owner_ctx, r.local);
+     r = EpRegion{};
+ }
+diff --git a/sycl/src/core/copy_queue.cpp b/sycl/src/core/copy_queue.cpp
+index 247db9ff..1d00080a 100644
+--- a/sycl/src/core/copy_queue.cpp
++++ b/sycl/src/core/copy_queue.cpp
+@@ -22,6 +22,7 @@
+ #ifdef STRATA_HAVE_ZE_API
+ #if defined(_WIN32)
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #else
+ #include <dlfcn.h>
+ #endif
+diff --git a/sycl/src/core/device.dp.cpp b/sycl/src/core/device.dp.cpp
+index 5905b306..f1e0ca42 100644
+--- a/sycl/src/core/device.dp.cpp
++++ b/sycl/src/core/device.dp.cpp
+@@ -165,6 +165,7 @@ catch (sycl::exception const &exc) {
+ #define NOMINMAX
+ #endif
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #include <dxgi1_4.h>
+ #include <atomic>
+ #include <cstdlib>
+diff --git a/sycl/src/core/expert_source.cpp b/sycl/src/core/expert_source.cpp
+index e0bb0f20..2655e1e2 100644
+--- a/sycl/src/core/expert_source.cpp
++++ b/sycl/src/core/expert_source.cpp
+@@ -41,6 +41,7 @@
+ #define NOMINMAX   // std::numeric_limits<T>::max() below
+ #endif
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #else
+ #include <fcntl.h>
+ #include <sys/mman.h>
+diff --git a/sycl/src/core/gguf_expert_source.cpp b/sycl/src/core/gguf_expert_source.cpp
+index af1bda10..8d147bba 100644
+--- a/sycl/src/core/gguf_expert_source.cpp
++++ b/sycl/src/core/gguf_expert_source.cpp
+@@ -7,11 +7,38 @@
+ #include <cstring>
+ #include <utility>
+ #include <fcntl.h>
++#if defined(_WIN32)
++#include <io.h>
++#include <windows.h>
++#include "strata_win_undefs.h"
++#else
+ #include <unistd.h>
++#endif
+ #include <dpct/dpct.hpp>
+ #include <sycl/sycl.hpp>
+ #include <thread>
+ 
++#if defined(_WIN32)
++// Windows: ::open / ::close are the CRT's; pread is a positioned ReadFile on the descriptor's handle (no file
++// position, no text-mode translation). off_t is 32-bit there, so this file's offsets use a 64-bit type.
++#ifndef O_CLOEXEC
++#define O_CLOEXEC 0
++#endif
++#define off_t long long
++#define ssize_t long long
++static long long pread(int fd, void* buf, size_t n, long long off) {
++    HANDLE h = (HANDLE) _get_osfhandle(fd);
++    if (h == INVALID_HANDLE_VALUE) return -1;
++    OVERLAPPED ov{};
++    ov.Offset = (DWORD) ((unsigned long long) off & 0xffffffffu);
++    ov.OffsetHigh = (DWORD) ((unsigned long long) off >> 32);
++    DWORD got = 0;
++    const DWORD want = n > 0x40000000u ? 0x40000000u : (DWORD) n;
++    if (!ReadFile(h, buf, want, &got, &ov)) return GetLastError() == ERROR_HANDLE_EOF ? 0 : -1;
++    return (long long) got;
++}
++#endif
++
+ namespace strata::core {
+ 
+ namespace {
+diff --git a/sycl/src/core/pinned.dp.cpp b/sycl/src/core/pinned.dp.cpp
+index 57fc68e4..643137fd 100644
+--- a/sycl/src/core/pinned.dp.cpp
++++ b/sycl/src/core/pinned.dp.cpp
+@@ -25,6 +25,7 @@
+ 
+ #ifdef _WIN32
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #else
+ #include <fcntl.h>
+ #include <sys/mman.h>
+@@ -320,19 +321,8 @@ namespace {
+ bool sliced_pin_limit(uint64_t& limit, std::string& why) {
+     constexpr uint64_t GiB = 1ull << 30;
+     char buf[256];
+-    int dev = 0;
+-    cudaDeviceProp p{};
+-    uint64_t budget = 0, usage = 0;
+-    std::string err = "no CUDA device properties";
+-    if (cudaGetDevice(&dev) == cudaSuccess && cudaGetDeviceProperties(&p, dev) == cudaSuccess &&
+-        strata::platform::gpu_shared_memory_budget(p.luid, budget, usage, err)) {
+-        limit = budget > usage + 4 * GiB ? budget - usage - 4 * GiB : 0;
+-        std::snprintf(buf, sizeof buf, "the GPU's shared-memory budget %.1f GiB - %.1f GiB in use - 4 GiB",
+-                      (double) budget / GiB, (double) usage / GiB);
+-        why = buf;
+-        return true;
+-    }
+-    (void) cudaGetLastError();
++    // SYCL port: no device LUID from the runtime here, so the DXGI budget is not read; the RAM rule below applies
++    std::string err = "no DXGI budget in the SYCL port";
+     const uint64_t ram = strata::platform::total_physical_memory();
+     if (ram == 0) return false;
+     limit = ram / 2 > 8 * GiB ? ram / 2 - 8 * GiB : 0;
+diff --git a/sycl/src/kernels/cuda/verify_kernels.dp.cpp b/sycl/src/kernels/cuda/verify_kernels.dp.cpp
+index 77288c04..c05eee67 100644
+--- a/sycl/src/kernels/cuda/verify_kernels.dp.cpp
++++ b/sycl/src/kernels/cuda/verify_kernels.dp.cpp
+@@ -26,6 +26,7 @@
+ #include <stdexcept>
+ #include <thread>
+ #include <vector>
++#include "strata_win_undefs.h"   // after every header: <windows.h> macros (small, OUT) clash with names below
+ 
+ #ifndef STRATA_PLAN_LOCAL
+ #define STRATA_PLAN_LOCAL 1   // 0: the original one-thread plan kernel (A/B)
+diff --git a/sycl/src/kernels/iq_multi_parity.cpp b/sycl/src/kernels/iq_multi_parity.cpp
+index 1b0e02d2..5dc25bf6 100644
+--- a/sycl/src/kernels/iq_multi_parity.cpp
++++ b/sycl/src/kernels/iq_multi_parity.cpp
+@@ -108,6 +108,10 @@ std::vector<double> dequant_q8_1(const std::vector<uint8_t>& q, size_t n) {
+ }
+ 
+ #include "iq2xs_host_tables.inc"
++#if defined(_WIN32)
++#undef near   // <windows.h> (minwindef.h) macros; names below
++#undef far
++#endif
+ // IQ2_XS decoded on the CPU from ggml's tables (dequantize_row_iq2_xs), a reference independent of the GPU dequantizer
+ std::vector<float> host_iq2_xs(const std::vector<uint8_t>& w, size_t n) {
+     std::vector<float> y(n);
+diff --git a/sycl/src/kernels/kv_hybrid_parity.cpp b/sycl/src/kernels/kv_hybrid_parity.cpp
+index 8474abfd..4355dffd 100644
+--- a/sycl/src/kernels/kv_hybrid_parity.cpp
++++ b/sycl/src/kernels/kv_hybrid_parity.cpp
+@@ -25,6 +25,9 @@
+ #include <cstring>
+ #include <random>
+ #include <vector>
++#if defined(_WIN32)
++static int setenv(const char* n, const char* v, int) { return _putenv_s(n, v); }   // no setenv in the Windows CRT
++#endif
+ 
+ namespace k = strata::kernels;
+ 
+diff --git a/sycl/src/kernels/qsa_prompt_attn_parity.cpp b/sycl/src/kernels/qsa_prompt_attn_parity.cpp
+index b0f44347..2a6f20a3 100644
+--- a/sycl/src/kernels/qsa_prompt_attn_parity.cpp
++++ b/sycl/src/kernels/qsa_prompt_attn_parity.cpp
+@@ -24,6 +24,9 @@
+ #include <cstring>
+ #include <random>
+ #include <vector>
++#if defined(_WIN32)
++static int setenv(const char* n, const char* v, int) { return _putenv_s(n, v); }   // no setenv in the Windows CRT
++#endif
+ 
+ namespace k = strata::kernels;
+ 
+diff --git a/sycl/src/kernels/rope_parity.cpp b/sycl/src/kernels/rope_parity.cpp
+index cf11ccb1..e617b517 100644
+--- a/sycl/src/kernels/rope_parity.cpp
++++ b/sycl/src/kernels/rope_parity.cpp
+@@ -38,6 +38,10 @@
+ #include <random>
+ #include <string>
+ #include <vector>
++#if defined(_WIN32)
++#undef near   // <windows.h> (minwindef.h) macros; names below
++#undef far
++#endif
+ 
+ namespace {
+ 
+diff --git a/sycl/src/kernels/sampler_parity.cpp b/sycl/src/kernels/sampler_parity.cpp
+index 7938ed9b..bdb34d15 100644
+--- a/sycl/src/kernels/sampler_parity.cpp
++++ b/sycl/src/kernels/sampler_parity.cpp
+@@ -22,6 +22,10 @@
+ #include <random>
+ #include <string>
+ #include <vector>
++#if defined(_WIN32)
++#undef near   // <windows.h> (minwindef.h) macros; names below
++#undef far
++#endif
+ 
+ namespace {
+ 
+diff --git a/sycl/src/platform/direct_file.cpp b/sycl/src/platform/direct_file.cpp
+index a1c16f24..e6cffd59 100644
+--- a/sycl/src/platform/direct_file.cpp
++++ b/sycl/src/platform/direct_file.cpp
+@@ -16,6 +16,7 @@
+ #define WIN32_LEAN_AND_MEAN
+ #define NOMINMAX
+ #include <windows.h>
++#include "strata_win_undefs.h"
+ #else
+ #include <fcntl.h>
+ #include <sys/stat.h>
+diff --git a/sycl/src/program/generate.cpp b/sycl/src/program/generate.cpp
+index 28ef523c..c41a310d 100644
+--- a/sycl/src/program/generate.cpp
++++ b/sycl/src/program/generate.cpp
+@@ -92,8 +92,20 @@ namespace strata::prefill { void set_nonresident_share(double share); }   // SYC
+ #include "strata/core/family_layout.hpp"
+ #if defined(_WIN32)
+ #include <windows.h>
++#include <timeapi.h>
++#pragma comment(lib, "winmm.lib")
+ #include <psapi.h>
+ #include <io.h>
++#include "strata_win_undefs.h"
++#include <cstring>
++// no memmem in the Windows CRT (used only by a load-check diagnostic)
++static const void* memmem(const void* hay, size_t hn, const void* needle, size_t nn) {
++    if (nn == 0) return hay;
++    const unsigned char* h = (const unsigned char*) hay;
++    for (size_t i = 0; i + nn <= hn; ++i)
++        if (std::memcmp(h + i, needle, nn) == 0) return h + i;
++    return nullptr;
++}
+ #else
+ #include <unistd.h>
+ #include <cerrno>
+@@ -128,6 +140,7 @@ namespace strata::prefill { void set_nonresident_share(double share); }   // SYC
+ #include <string>
+ #include <set>
+ #include <vector>
++#include "strata_win_undefs.h"   // after every header: <windows.h> macros (small, OUT) clash with names below
+ 
+ namespace {
+ // Windows' WDDM driver model: native Windows, or WSL2 (its GPU goes through /dev/dxg to the Windows driver).  There,
+@@ -1685,6 +1698,16 @@ int main(int argc, char **argv) try {
+     // pipe or a file is block-buffered, so a program that dies loses every line it had already printed - which
+     // turns "it crashed at step 7" into "it crashed somewhere", and the difference is a debugging session.
+     std::setvbuf(stdout, nullptr, _IONBF, 0);
++#if defined(_WIN32)
++    // Windows: the GPU runtime's waits sleep at this process's timer resolution (per process since Windows 10 2004;
++    // the default is 15.6 ms). STRATA_WIN_TIMER_MS=N asks for N ms (default 1; 0 leaves the default).
++    {
++        const char* e = std::getenv("STRATA_WIN_TIMER_MS");
++        const int ms = e ? std::atoi(e) : 1;
++        if (ms > 0 && timeBeginPeriod((UINT) ms) == TIMERR_NOERROR)
++            std::fprintf(stderr, "strata generate: Windows timer resolution %d ms (STRATA_WIN_TIMER_MS=0 keeps the default)\n", ms);
++    }
++#endif
+ #if (defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)) && !defined(_WIN32)
+     // AMD, a file-backed arena (STRATA_ARENA_MMAP): ROCclr copies a pageable source of 1 MiB or more by locking its
+     // pages in place (a GPU userptr), and keeps them - so every expert the VRAM fill copied from the mapped

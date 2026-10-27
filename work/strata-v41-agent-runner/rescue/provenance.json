@@ -1,0 +1,11 @@
+﻿{
+    "captured_at_utc":  "2026-10-27T06:08:52.2433551Z",
+    "repo_path":  "%USERPROFILE%\\strata-win",
+    "remote":  "https://github.com/hotschmoe/Strata.git",
+    "branch":  "win-port",
+    "head":  "1c360526bce659f45cec60b2e36c46b7770c5bf1",
+    "describe":  "v0.1.44.1-26-g1c360526",
+    "dirty_count":  29,
+    "tracked_patch_bytes":  46526,
+    "untracked_count":  11
+}

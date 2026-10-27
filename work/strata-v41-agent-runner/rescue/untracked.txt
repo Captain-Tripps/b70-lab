@@ -1,0 +1,11 @@
+build-aot2.cmd
+build-jit.cmd
+build-jitx.cmd
+build-parity.cmd
+build-vision.cmd
+build-win.cmd
+strata-stall-17212.dmp
+strata-stall-18284.dmp
+strata-stall-26476.dmp
+strata-stall-29476.dmp
+sycl/include/strata_win_undefs.h
