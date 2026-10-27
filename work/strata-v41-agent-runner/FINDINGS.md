@@ -1537,3 +1537,117 @@ Logged because they cost ~25 minutes and match patterns already in the ledger:
    (`tasklist | grep -c`). Exclude self: `ps -ef | grep 'bash /tmp/script.sh' | grep -v grep`.
 3. Nested quoting ate `$D` and `$1` repeatedly in `ssh '...'` payloads, silently producing paths
    like `/working-tree-real.patch`. Hard-code absolute paths in one-shot ssh commands.
+
+---
+
+## Session 7 — fresh-session resume (2026-10-27 13:33–14:10 CDT)
+
+This is the session HANDOFF.md was written for. Started from files only, after an explicit
+session reset; the prior session's transcript was **not** in context at start. That is the
+CHECK-100 resume condition.
+
+### W-033 — CORRECTION: the working-tree patch DOES replay cleanly (L-034 is wrong)
+
+L-034 concluded that `working-tree-real.patch` and `working-tree-raw.patch` "do not re-apply
+cleanly" and that restore must come from the 2.2 GB tar. **That conclusion is wrong, and the
+cause is a measurement error worth naming.**
+
+The earlier test ran `git apply --check <patch>` **in place, inside the already-modified
+worktree**. A forward patch applied to a tree that already contains the patch is *supposed* to
+fail. The same session's reverse-direction check passed — which was the signal that the patch
+was fine and the direction was wrong.
+
+Correct test: export the 18 pre-image files from `HEAD` into a clean directory, then apply.
+
+```
+# clean-HEAD harness, run locally on exported blobs
+git show HEAD:<file>  ->  /tmp/ft/head/<file>    (18 files, HEAD blobs contain 0 CR bytes)
+git apply --check working-tree-real.patch        -> exit 0
+git apply         working-tree-real.patch        -> exit 0
+cmp applied/<file> worktree/<file> for all 18    -> 18/18 byte-identical
+```
+
+| Patch | Size | SHA256 | `--check` on clean HEAD | Applied result |
+|---|---|---|---|---|
+| `working-tree-real.patch` (backup) | 20,225 B | `d761462d…30d9` | exit 0 | 18/18 identical to live worktree |
+| `rescue/working-tree.patch` (repo) | 20,189 B | `3a50640e…ac7f` | exit 0 | 18/18 identical to live worktree |
+| `working-tree-raw.patch` (backup) | 75,826,448 B | `652e695a…7e14` | n/a — covers 3043 files | full-fidelity pre-image |
+
+So there are **three** good restore paths, not one: the two 18-file patches replay onto a clean
+`1c360526` checkout and reproduce the deployed worktree exactly, and the tar remains the
+full-tree fallback. Restore-by-patch works. The `.patch` files are no longer "read-only" artifacts.
+
+The repo's `rescue/working-tree.patch` and the backup's `working-tree-real.patch` differ only in
+`index` line abbreviation length (`4b682003d..56becbb28` vs `4b682003..56becbb2`) — same content,
+472 lines each, same 18-file list.
+
+**Caveat that remains true:** the two patches reference `strata_win_undefs.h`, which is
+**untracked** (`?? sycl/include/strata_win_undefs.h`). Applying a patch gets you the 18 modified
+files but not that header. It *is* captured in both `untracked-files.tar.gz` and the full tar.
+Restore = patch + `untracked-files.tar.gz`, or the full tar alone.
+
+### W-034 — The "3043 modified files" is exactly 3025 CRLF phantoms + 18 real changes
+
+Measured per file across all 3043 tracked-modified entries:
+
+| Class | Files | Evidence |
+|---|---|---|
+| Pure CRLF churn | **3025** | `CR_count == line_count` in every one (every line ends CRLF) |
+| Real content change | **18** | `CR_count != line_count`; these are the `--ignore-cr-at-eol` set |
+| Untracked | 11 | build scripts, 4 `.dmp`, `strata_win_undefs.h` |
+
+And the asymmetry is now explained: **`git show HEAD:<file>` yields zero CR bytes**, while the
+worktree copies carry CR on every line. `core.autocrlf` and `core.eol` are both unset, and there
+is a `.gitattributes` — so this is a wholesale CRLF conversion of the checkout, not per-file
+editing. That is why plain `git diff` emits 824,758/824,624 line pairs.
+
+**Landmine for the next session:** `git diff --ignore-cr-at-eol --name-only` lists **3043** files,
+but `--ignore-cr-at-eol --stat` reports **18**. Do not drive a loop from `--name-only`; use
+`--numstat`, or the explicit 18-file list.
+
+### W-035 — Source pin reconciled: v0.2.6 is a different, newer tree — not an ancestor
+
+`git fetch origin --tags` resolved the open CHECK-101 item.
+
+- Tag `v0.2.6` is an **annotated tag** `ff91dd77…`, peel `4b9e05a2a806a3fe24f7b2560d98626c37dade35`, tagger Niko1221 2026-10-25, subject confirms "the tag commit adds README and docs only".
+- It lives on **`upstream`** (Niko1221/Strata), **not** `origin` (hotschmoe/Strata): `origin` has 0 refs matching v0.2.6, `upstream` has 2.
+- `origin/main` = `296b59d2…` = the **merge-base** of deployed `HEAD` and `v0.2.6`. The deployed tree is `origin/main` + 26 commits on `win-port`; it is **0 behind** `origin/main`.
+- `v0.2.6` is **2022 commits ahead** of `origin/main` and is not an ancestor of `HEAD` in either direction.
+
+**This settles the plan's premise, and in the plan's favour.** The deployed tree has **zero**
+`dsv41` files. `v0.2.6` has **132** — including `docs/DEEPSEEK41.md`, `data/dsv41/profile-2.00.bin`,
+`include/strata/dsv41/*` — and its `docs/DEEPSEEK41.md` describes exactly the engine PLAN.md
+routes to: "Strata runs it with its own engine, `strata-dsv41` (`src/dsv41`, ported from Project
+Maya's `maya-ds4`)".
+
+**None of the 18 local Windows fixes exist in v0.2.6** (`strata_win_undefs`, `STRATA_SYCL_XE2_JIT`,
+`strata_device_context`, `STRATA_WIN_SHARED_CONTEXT`, `STRATA_WIN_TIMER_MS`, the `ep_mem` host-alloc
+branch: all 0 files; `sycl/include/strata_win_undefs.h` ABSENT; `if(WIN32)` in `sycl/CMakeLists.txt`
+absent). So the 18 changes are **not** superseded by the pin — they are Windows-port work that
+would have to be re-applied on top of a v0.2.6 base, or upstreamed.
+
+### W-036 — Branch tracking: `win-port` has no upstream configured
+
+`git rev-parse @{u}` → "no upstream configured for branch 'win-port'". `1c360526` is pushed only
+as `refs/heads/b70-night-20261016` on origin; there is no `origin/win-port`. Remote branch names
+on `origin` are `b70-night-20261016`, `main`, `ple-prefetch-keymatch-s54`, and `pr/sycl-*`.
+
+### Re-verification performed (not repeated work)
+
+- Backup SHA256SUMS: **4/4 OK** (`sha256sum -c`, 27.6 s) — the 2.2 GB tar and both patches still verify.
+- Full tar: 17,250 entries, 116 `.git/` entries, real `.git/objects/pack/*.pack` + `packed-refs` present → restorable.
+- Untracked tarball: 11 entries including `sycl/include/strata_win_undefs.h`.
+- Receipt hashes: `check101-inventory.txt` `f5bc30c0…`, `check101-level-zero.txt` `aa8dfa30…`,
+  `check101-compiler.txt` `64ef1d2e…` all match the manifest.
+- Runner suite re-deployed from this repo and re-run on GPU-BOX: **11/11 PASS** (new receipt timestamp
+  `20261027T183912Z`), PowerShell 5.1.26100.9711, native Windows. Re-run as verification, not as new work.
+- Production state: service `Running`; listening on **<gpu-host-ip>:8080** only (no localhost);
+  `/v1/models` → **9 models, 0 with v41**; `config.windows.yaml` SHA256 `38a82777…ecda`, 0 `v41` refs.
+  Matches the rollback claim exactly.
+
+### Telemetry still genuinely open
+
+PCIe negotiated width/generation: **UNKNOWN**. Arc Control is not installed on GPU-BOX (no
+`Intel Arc Control` directory, no `igcl*.dll` in System32), so that route is closed too. PnP still
+reports Max = Current = 1 on all four endpoints, which remains implausible. Do not record x16; do
+not record x1.

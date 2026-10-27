@@ -370,5 +370,56 @@
     "dirty_entries": 3054,
     "dirty_note": "3054 dirty entries, not the 29 recorded earlier. The 29 figure referred to a narrower count (tracked modifications) at an earlier moment; this is the full porcelain count including untracked. NOT reconciled here - needs a breakdown before any reliance.",
     "warning": "Do not reset, stash -u, or clean this tree. There is no verified backup of the untracked content. PLAN.md:28 requires resolving the full commit and the actual deployed local changes during STEP-001; that is now started, not finished."
+  },
+  "source_pin_reconciliation": {
+    "captured_at": "2026-10-27T19:05:00-05:00",
+    "method": "git fetch origin --tags in %USERPROFILE%\\strata-win, then ls-remote --tags against origin and upstream; read-only, no checkout",
+    "deployed_tree": {
+      "head": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
+      "describe": "v0.1.44.1-26-g1c360526b",
+      "branch": "win-port",
+      "tracking": "NONE - no upstream configured for win-port; 1c360526 is published only as refs/heads/b70-night-20261016 on origin",
+      "origin_main": "296b59d2f73c8f04a805df29c2fa97655adace78",
+      "ahead_of_origin_main": 26,
+      "behind_origin_main": 0,
+      "merge_base_with_v026": "296b59d2f73c8f04a805df29c2fa97655adace78"
+    },
+    "pin_v0_2_6": {
+      "tag_object": "ff91dd77a13857ccc2f1bd67edc9a8ecd4ecdfa4",
+      "annotated": true,
+      "peeled_code_commit": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+      "tagger": "Niko1221",
+      "tagger_date": "2026-10-25T14:25:46+01:00",
+      "tag_subject": "Strata 0.2.6 (code commit 4b9e05a2...; the tag commit adds README and docs only)",
+      "remote_carrying_tag": "upstream (https://github.com/Niko1221/Strata.git)",
+      "origin_refs_matching": "0",
+      "upstream_refs_matching": "2",
+      "is_ancestor_of_head": false,
+      "head_is_ancestor_of_it": false,
+      "commits_ahead_of_origin_main": 2022
+    },
+    "engine_presence": {
+      "deployed_head_dsv41_files": 0,
+      "v0_2_6_dsv41_files": 132,
+      "v0_2_6_has_docs_DEEPSEEK41_md": true,
+      "v0_2_6_has_data_dsv41_profile_2_00_bin": true,
+      "v0_2_6_has_include_strata_dsv41_exl3_hpp": true,
+      "doc_excerpt": "Strata runs it with its own engine, strata-dsv41 (src/dsv41, ported from Project Maya maya-ds4)"
+    },
+    "local_fix_overlap": {
+      "checked_markers": [
+        "strata_win_undefs",
+        "STRATA_SYCL_XE2_JIT",
+        "strata_device_context",
+        "STRATA_WIN_SHARED_CONTEXT",
+        "STRATA_WIN_TIMER_MS",
+        "zeMemAllocHost(r.owner_ctx"
+      ],
+      "present_in_v0_2_6": 0,
+      "strata_win_undefs_h_in_v0_2_6": "ABSENT",
+      "if_WIN32_in_v0_2_6_sycl_CMakeLists": "absent",
+      "conclusion": "none of the 18 Windows-port changes are superseded by the pin; they are additive work that must be re-applied onto a v0.2.6 base or upstreamed"
+    },
+    "pcie_link_telemetry_note": "Arc Control is not installed on GPU-BOX (no Intel Arc Control directory under Program Files or Program Files (x86), no igcl*.dll in System32). The vendor-tooling route suggested in HANDOFF section 5 is therefore closed as well. Status stays UNKNOWN."
   }
 }

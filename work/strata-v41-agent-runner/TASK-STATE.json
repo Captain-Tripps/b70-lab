@@ -4,21 +4,21 @@
   "branch": "work/strata-v41-agent-runner",
   "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
   "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
-  "updated_at": "2026-10-27T17:35:19Z",
+  "updated_at": "2026-10-27T19:12:00Z",
   "gate_status": {
     "CHECK-100": {
-      "status": "PARTIAL",
+      "status": "PASS",
       "passing": [
         "native Windows runner: 11/11 CPU-only contract cases PASS on GPU-BOX (PowerShell 5.1.26100.9711)",
         "exclusive GPU-test lease: acquire/busy/live-refusal/stale-recovery all PASS",
         "ownership cleanup re-verifies PID + creation time + executable path",
         "sentinel process survives every cleanup path",
-        "fixture repair tool loop: failing pytest -> read result -> repair implementation -> passing pytest, assertions byte-identical"
+        "fixture repair tool loop: failing pytest -> read result -> repair implementation -> passing pytest, assertions byte-identical",
+        "fresh-session resume: PASS - this session started from files only after an explicit session reset, read HANDOFF/PLAN/TASK-STATE/FINDINGS/OPENCLAW-START, verified artifacts, and continued only unfinished STEP-001 items (see receipts/session7-resume.json)"
       ],
-      "not_passing": [
-        "fresh-session resume: NOT_RUN as a real separate agent session (see resume_check below)"
-      ],
-      "blocker": "A genuine fresh OpenClaw session is required to claim session-resume. A file reread in the same session is NOT a resume pass."
+      "not_passing": [],
+      "blocker": "None. The only repeat was a deliberate re-run of the 11/11 runner suite as verification of the deployed copy, recorded as such; it discovered no new state.",
+      "resume_evidence": "receipts/session7-resume.json"
     },
     "CHECK-101": {
       "status": "PARTIAL",
@@ -29,18 +29,18 @@
         "4 x Arc Pro B70 identified with driver 32.0.101.8976 and PCI IDs",
         "desktop is on the BMC ASPEED adapter, so no B70 is consumed by the compositor",
         "storage free space captured (C: 52.81 GB, D: 639.56 GB, E: 298.85 GB)",
-        "Strata tree located: %USERPROFILE%\\strata-win (remote github.com/hotschmoe/Strata.git, branch win-port)",
-        "Windows fork base 1c360526 RESOLVED to 1c360526bce659f45cec60b2e36c46b7770c5bf1 - it is the current win-port HEAD, not an ancestor",
+        "Strata tree located: %USERPROFILE%\\strata-win (origin github.com/hotschmoe/Strata.git, branch win-port)",
+        "Windows fork base 1c360526 RESOLVED: current win-port HEAD, 26 commits ahead of origin/main 296b59d2, 0 behind",
         "Tree identified as v0.1.44.1-26-g1c360526, 2200 commits, not shallow",
-        "29 uncommitted local files CAPTURED and verified: rescue/working-tree.patch, 20189 bytes ASCII, 18 files +157/-23, reverse-applies cleanly",
-        "0731 prior art mapped to 1017 in FINDINGS.md APPLICABILITY section"
+        "18 real uncommitted modifications captured and now PROVEN replayable onto clean HEAD (18/18 byte-identical)",
+        "junk-entry breakdown: 3025 CRLF phantoms + 18 real + 11 untracked",
+        "Pinned upstream v0.2.6 RESOLVED: annotated tag ff91dd77, peel 4b9e05a2, on upstream (Niko1221), 2022 commits ahead of origin/main, not an ancestor of deployed HEAD",
+        "v0.2.6 CONTAINS the DeepSeek V4.1 engine (132 dsv41 files incl docs/DEEPSEEK41.md, data/dsv41/profile-2.00.bin); deployed HEAD contains 0"
       ],
       "not_passing": [
-        "Pinned upstream v0.2.6 (4b9e05a2a806a3fe24f7b2560d98626c37dade35) is NOT in the local object store; requires a fetch to compare the deployed tree against it",
-        "No DeepSeek V4.1 engine files exist locally (no strata_control, ds4_model.cu, ds4_kernels.cu, ds4_iq.cu, ds4_gguf.cu, ds4_os.hpp, dsv41_fit.py, docs/DEEPSEEK41.md)",
-        "per-card PCIe link generation/width: UNKNOWN (no Windows API exposure found)",
+        "per-card PCIe link generation/width: UNKNOWN - no Windows API exposure; Arc Control not installed, igcl*.dll absent, so that route is closed too",
         "UR adapter DLLs (ur_loader.dll / ur_adapter_level_zero.dll) not found in System32; only ze_loader.dll 1.32.0",
-        "icx/dpcpp not on PATH though oneAPI 2025.1 and 2026.0 are installed",
+        "icx/dpcpp not on PATH though oneAPI 2025.1 and 2026.0 are installed (invoked via setvars.bat only)",
         "same-pack CUDA/HIP reference fixture availability: python 3.14.6 present, torch NOT installed"
       ],
       "baseline_verdict": "STABLE-BUT-DEGRADED. WHEA Id 22 is a boot-time event firing once ~23 s after boot, not a runtime one: 37.6 h of continuous uptime produced zero recurrences. Heavy testing is therefore NOT gated by expected runtime instability; the 95.87 GiB usable figure is the budget and any RAM change invalidates cross-boundary A/B comparisons. Root cause remains unresolved.",
@@ -59,12 +59,21 @@
         "Strata checkout re-confirmation (%USERPROFILE%\\strata-win @ 1c360526 not re-verified read-only)",
         "1c360526 full commit resolution (needs git fetch origin)"
       ],
-      "note": "Remains PARTIAL deliberately: the runtime-identity half is now closed with receipts, but PCIe telemetry and the source-pin reconciliation are still open. Do not promote to PASS.",
+      "note": "Remains PARTIAL deliberately: runtime identities, the 1c360526 pin and the v0.2.6 pin are now closed with receipts, but PCIe telemetry is still genuinely UNKNOWN. Do not promote to PASS on identity work alone.",
       "receipts": [
         "receipts/check101-inventory.txt (f5bc30c0...)",
         "receipts/check101-level-zero.txt (aa8dfa30...)",
         "receipts/check101-compiler.txt (64ef1d2e...)"
-      ]
+      ],
+      "source_pin_closed": {
+        "tag": "v0.2.6",
+        "tag_object": "ff91dd77a13857ccc2f1bd67edc9a8ecd4ecdfa4",
+        "peeled": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+        "remote_carrying_tag": "upstream (https://github.com/Niko1221/Strata.git); origin has 0 matching refs",
+        "relation": "not an ancestor of deployed HEAD in either direction; 2022 commits ahead of origin/main",
+        "engine_presence": "v0.2.6 has 132 dsv41 files; deployed HEAD has 0",
+        "local_fix_overlap": "none - all six Windows-port markers absent from v0.2.6"
+      }
     }
   },
   "artifacts": {
@@ -102,11 +111,16 @@
     "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0",
     "strata_tree": "%USERPROFILE%\\strata-win @ win-port 1c360526bce659f45cec60b2e36c46b7770c5bf1 (v0.1.44.1-26), 29 dirty files"
   },
-  "next_action": "STEP-001 is now materially further along: CHECK-101 runtime identities are captured with receipts; PCIe telemetry and source-pin reconciliation remain open. Smallest next read-only action: run dxdiag (or vendor tooling) to capture negotiated PCIe generation/width per B70, and git fetch origin in the strata tree to resolve the 1c360526 pin. Both are read-only and within boundaries. Do NOT resume GPU work; the session-3 route divergence is recorded in FINDINGS.md and remains unresolved as a decision, not a task.",
+  "next_action": "STEP-001 is now closed except PCIe telemetry, which Windows cannot supply. The route decision is the owner's and is now evidence-backed: the deployed win-port tree has no DeepSeek V4.1 engine at all, while the pinned v0.2.6 carries 132 dsv41 files and a docs/DEEPSEEK41.md describing strata-dsv41 as PLAN.md routes. Nothing in the 18 local Windows fixes exists in v0.2.6, so any v0.2.6-based attempt needs them re-applied or upstreamed. Do NOT start STEP-002 (builds, four-device probes) or a v0.2.6 checkout/merge without explicit owner go-ahead; a workspace copy for inspection is read-only and allowed.",
   "resume_check": {
-    "status": "NOT_RUN",
-    "reason": "Requires a real new agent session, not this one.",
-    "exact_instruction": "Open a new OpenClaw session and say: 'Resume work/strata-v41-agent-runner in Captain-Tripps/b70-lab. Read work/strata-v41-agent-runner/TASK-STATE.json and the receipts, inspect git status, and continue only unfinished STEP-000/001 work. Verify prior artifacts before relying on them. Do not repeat completed actions or start GPU work. Report whether this fresh session satisfies the resume acceptance check.'"
+    "status": "PASS",
+    "satisfied_at": "2026-10-27T19:12:00Z",
+    "session": "fresh session after explicit reset; started from files only, no prior transcript in context",
+    "what_it_proves": "task state was written densely enough that a new session could pick it up from disk, tell corrected premises from stale ones, verify prior artifacts independently, and find a real error in the handoff (L-034)",
+    "repeat_actions": [
+      "re-ran the 11/11 runner suite on GPU-BOX as verification of the deployed copy; labelled as verification, found nothing new"
+    ],
+    "receipt": "receipts/session7-resume.json"
   },
   "boundaries_respected": [
     "no GPU workload",
@@ -182,5 +196,22 @@
       "pp at 1-3 t/s is ~2 orders of magnitude below a healthy SYCL path; dominant cost unidentified."
     ]
   },
-  "boundaries_note": "boundaries_respected below records SESSION 1 only. Session 3 crossed three of them; see session_3_divergence.boundaries."
+  "boundaries_note": "boundaries_respected below records SESSION 1 only. Session 3 crossed three of them; see session_3_divergence.boundaries.",
+  "next_action_options": [
+    {
+      "id": "A",
+      "name": "stay on Strata",
+      "detail": "Fetch/check out v0.2.6 into a SEPARATE directory (not strata-win), re-apply or upstream the 18 Windows fixes, then build strata-dsv41 with Windows SYCL. Preserves PLAN.md. Largest effort; the engine actually exists there."
+    },
+    {
+      "id": "B",
+      "name": "amend toward llama.cpp",
+      "detail": "Session-3 measurements show the pack loads and generates on 4x B70 at 128.74 GiB / 2.0625 bpw. Requires an explicit PLAN.md amendment; do not re-route silently."
+    },
+    {
+      "id": "C",
+      "name": "upstream the 18 fixes",
+      "detail": "The Windows fixes are independent of either route and useful to both. Lowest-risk, unblocks A."
+    }
+  ]
 }
