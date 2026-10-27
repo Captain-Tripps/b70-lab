@@ -124,7 +124,7 @@ builds/tests to native Windows explicitly; this does not introduce WSL as an inf
 | Extend Strata's V4.1 engine using SYCL/oneMKL and the lab's Windows patterns | Adopt | Preserves model semantics, packer, CPU experts, Engram I/O, and API integration |
 | JIT build, AVX2-compatible host code, explicit synchronization | Adopt first | Existing lab evidence includes bad AOT output and EPYC illegal-instruction failures |
 | Layer split with host-staged device transfers in a shared context | Adopt first | Works without assuming GPU peer access; each GPU owns a block of layers |
-| Automatic CUDA translation as a complete port | Reject | Migration scaffolding does not establish numerical, subgroup, lifetime, or synchronization correctness |
+| Automatic CUDA translation as a complete port | **Partially superseded 2026-10-27** | dpct was run: it converts ~85% of 93 kernels (96 `parallel_for` emitted, 14 launch sites + 2 kernels need hand work). Translation is now the *method*; it is still not the *acceptance* — CHECK-103 alone decides. See [PORT-SCOPE.md](PORT-SCOPE.md) §10 |
 | CUDA compatibility/emulation as the main strategy | Reject for this plan | No inspected evidence it implements this engine correctly on this Windows/B70 stack |
 | Four-way expert/tensor parallelism, graph capture and per-card submission threads | Defer | Profile V4.1 first; current lab has measured low ceilings and crash/hang cases on other workloads |
 | AOT, DSpark, 2.25-bit, longer context | Defer | Separate correctness and memory/performance campaigns after the baseline |
