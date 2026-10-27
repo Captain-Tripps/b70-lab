@@ -34,6 +34,62 @@ No performance target is promised before measurement. This plan does not start h
   and a Level Zero submission deadlock. These are version-scoped observations; re-test the intended runtime.
   Shared context alone does not make the newer queue-barrier path safe on the default v2 adapter.
 
+## Route decision — CONFIRMED 2026-10-27 by the owner
+
+The owner has re-confirmed that **porting the Strata engine is the intended route**, and that this is how the
+project started. This is not a change of direction; it is a correction of a divergence.
+
+A prior session (recorded in `FINDINGS.md` as SESSION 3 — ROUTE DIVERGENCE) did the work in a llama.cpp SYCL
+fork at `C:\llamacpp-v41` instead. That tree crossed three boundaries this plan fences off. Its measurements
+are retained as **input**, but they are not Strata-engine evidence and no CHECK-102..108 gate moved.
+
+### Newly established scope fact — the engine is CUDA/HIP only
+
+Verified against the upstream object store on GPU-BOX (`git ls-tree -r --name-only`):
+
+| Ref | dsv41 files | SYCL dsv41 files |
+|---|---:|---:|
+| `v0.2.6` | 131 | **0** |
+| `v0.2.7` | 138 | **0** |
+
+Extensions present in `v0.2.6`: 42 `.py`, 22 `.cpp`, 17 `.hpp`, **14 `.cu`, 12 `.cuh`**, 5 `.inc`, plus scripts.
+The engine lives at `src/dsv41/` as `ds4_model.cu`, `ds4_kernels.cu`, `ds4_iq.cu`, `ds4_gguf.cu` and headers.
+`packaging/build_dsv41_windows.bat` and `tools/dsv41/win/*.bat` exist — so Windows is a supported *host*, but
+through HIP/CUDA.
+
+**Consequence:** "build `strata-dsv41` with Windows SYCL" is not a build-configuration change. The engine's
+compute code is CUDA/HIP and has no SYCL implementation. Porting means translating that code, which is exactly
+STEP-003. This plan's "Automatic CUDA translation as a complete port — Reject" decision stands: translation
+tooling may scaffold, but cannot satisfy CHECK-103.
+
+### What the llama.cpp detour actually bought us
+
+Retained as route-relevant input, explicitly **not** as Strata evidence:
+
+| Finding | Value |
+|---|---|
+| Pack integrity | 128.74 GiB, 551.88 B params, 2.0625 bpw; loads and generates on 4x B70 |
+| Prefill baseline | ~11-12 t/s at b=128; b=256 collapses to 0.70 t/s (reproduced) |
+| Decode baseline | ~3.9 t/s at b=32/ub=512; ~3.65 layer split |
+| Split behaviour | `-sm layer` > `-sm tensor` by 65%; `-sm row` aborts on I32/I64 |
+| Memory ceiling | ~955 MiB overrun at `-ngl 99`; `-ngl 38` leaves 3/41 layers on CPU |
+| Failure modes | SYCL alloc OOM at large ubatch; server `-1` at `llama_context`; pinned-host alloc failure |
+| Comparison | Strata's engine does ~1,415 t/s prefill on 2 cards; the fork does ~11.4 on 4 |
+
+That last row is the argument for the port, and it is now measured rather than assumed. It also sets the
+target: a successful port should approach Strata's own numbers, not merely improve on the fork.
+
+### Performance variance is unresolved and may invalidate several recorded numbers
+
+A `-r 3` flash-attention-on run measured `pp128 = 39.63 ± 31.48` t/s. A standard deviation of 31 on a mean of
+39 is not a measurement, it is a bimodal distribution. Earlier single-sample runs gave 0.33 for the same
+configuration. Both cannot be a stable configuration. The same pattern appears in the prefill sweep
+(b=512: 41.87 on one run, 0.61 on the next).
+
+Until per-sample data exists, treat every single-sample throughput figure in this plan as **provisional**.
+`llama-bench -o json` retains individual samples and should be used from here. Any optimisation retained
+without variance data fails CHECK-106 by its own wording.
+
 ## Agent execution arrangement
 
 Use OpenClaw with `openrouter/deepseek/deepseek-v4.1-flash-1017` as the implementation agent.
