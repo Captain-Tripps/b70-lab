@@ -412,3 +412,31 @@ Visual Studio lives at `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildT
    exists and adds one self-contained kernel path.
 3. Test 1017 with a small context on the free card (SYCL3) first, CPU-lane experts only.
 4. Only then negotiate the production arm pause for a real 4-card run.
+
+## W-015 — the v2/v3 MoE kernel port is scoped and tractable
+
+Read both patches in full. The port shape:
+
+| Patch | Added lines | What |
+|---|---:|---|
+| `01-mmvq-iq-moe-slm-v2.patch` | **187** | `moe_iq_traits<IQ2_XS>` + `moe_iq_traits<IQ3_XXS>`, `mul_mat_vec_q_moe_iq_slm`, `launch_moe_iq_slm_cfg`, `launch_moe_iq_slm`, `MOE_IQ_CASE` macro |
+| `02-mmvq-iq-moe-slm-v3.patch` | **236** | arithmetic sign masks (`moe_sign_mask4`/`moe_sign_masks`), 16-bit index/scale reads, per-work-group q8_1 re-layout |
+
+**Integration point verified present upstream**: `ggml_sycl_mul_mat_vec_q_id()` at
+`ggml/src/ggml-sycl/mmvq.cpp:2709`, with `launch_mul_mat_vec_q_moe` at :2689 and the existing
+per-type dispatch switch (`Q4_0`, `Q4_1`, `Q5_0`, `Q5_1`, `Q8_0`, `Q2_0`, ...). The patch inserts
+`case GGML_TYPE_IQ2_XS:` and `case GGML_TYPE_IQ3_XXS:` arms into that switch and calls the new
+launcher.
+
+So the work is: add ~190 lines of new functions to `mmvq.cpp`, add two switch arms, rebuild.
+No fork merge, no 500-commit rebase. Env-gated by `GGML_SYCL_MOE_IQ_SLM` (default on) and
+`GGML_SYCL_MOE_IQ_SLM_CFG` (default 82 = 8 sub-groups x 2 rows).
+
+**Caveat recorded honestly**: both patch headers state "This is NOT stock upstream: it will not
+apply to a fresh clone without porting." True — the diffs name scratch files (`mmvq-new.cpp`,
+`mmvq-v3.cpp`) and their hunk offsets are against a local tree. But the *content* is
+self-contained and the integration point exists, so this is a port, not a rewrite.
+
+**Next after the download completes**: apply the v2 + v3 content to
+`C:\llamacpp-v41\ggml\src\ggml-sycl\mmvq.cpp`, rebuild, and verify correctness against the
+`ds4_cpu_bench` reference before trusting any number.
