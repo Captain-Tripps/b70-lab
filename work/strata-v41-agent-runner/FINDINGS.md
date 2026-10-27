@@ -440,3 +440,33 @@ self-contained and the integration point exists, so this is a port, not a rewrit
 **Next after the download completes**: apply the v2 + v3 content to
 `C:\llamacpp-v41\ggml\src\ggml-sycl\mmvq.cpp`, rebuild, and verify correctness against the
 `ds4_cpu_bench` reference before trusting any number.
+
+## L-012 — CONFIRMED INCOMPATIBILITY: upstream dropped `src1_row_div`
+
+This is the concrete reason the v2/v3 patches need real porting rather than `git apply`.
+
+| | Fork (patch base) | Upstream `de5122d` |
+|---|---|---|
+| Batched MoE vy indexing | `vy_base + (entry / src1_row_div) * src1_row_stride` | `vy_base + (size_t) expert_idx * src1_row_stride` |
+| `src1_row_div` occurrences in `mmvq.cpp` | present (5+) | **0** |
+| Signature | `..., src1_row_stride, src1_row_div, stream` | `..., src1_row_stride, stream` |
+
+Upstream lines 2632-2642 confirm it:
+```
+const void * __restrict__ vx_base, const void * __restrict__ vy_base,
+float * __restrict__ dst_base, const int32_t * __restrict__ ids_dev,
+...
+const char * vy = (const char *) vy_base + (size_t) expert_idx * src1_row_stride;
+```
+
+**So the fork carried a row-sharing optimisation (`src1_row_div`) that upstream does not have.** The
+patched kernel computes `entry / src1_row_div` to share one activation row across several entries;
+upstream assumes one activation row per expert entry.
+
+**Port implication:** drop the `src1_row_div` parameter and the `entry / src1_row_div` division when
+porting, using `expert_idx * src1_row_stride` as upstream does. That is a small, well-understood
+change, but it must be made deliberately - silently keeping `src1_row_div` would read activations
+from the wrong offsets and produce wrong numbers rather than a compile error, because the argument
+would bind to the wrong slot.
+
+**This is the single most important detail in the port.** Recorded before touching code.
