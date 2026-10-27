@@ -328,3 +328,87 @@ will land on the CPU lane — expect lower, but it should run.
 2. Rebase or cherry-pick onto upstream master (needs the deepseek41 commits, ≥ 2026-10-26).
 3. Build `-DGGML_SYCL=ON`, run `strata`… no — run `llama-cli`/`llama-server` with 1017 at 2.25 bpw.
 4. Only if that fails, fall back to Strata route A.
+
+---
+
+# SESSION 3 PROGRESS — engine builds, model downloading
+
+## W-011 — upstream llama.cpp builds with SYCL on GPU-BOX, clean
+
+| Item | Value |
+|---|---|
+| Source | `github.com/ggml-org/llama.cpp` @ `de5122d` (2026-10-27), shallow clone depth 50 |
+| Build dir | `C:\llamacpp-v41\build-sycl` |
+| Result | **335/335 targets, BUILD_OK, 0 errors** |
+| Artifacts | `llama-cli.exe`, `llama-bench.exe` |
+| Toolchain | MSVC 19.51.36248.0 + IntelLLVM 2026.0.0 (icx) |
+| CMake/Ninja | 4.4.4 / 1.13.2 (installed via `pip --user`) |
+| Configure flags | `-DGGML_SYCL=ON -DGGML_SYCL_F16=OFF -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DGGML_OPENMP=ON` |
+
+`deepseek41.cpp` is present in that tree and compiled as part of the model set.
+
+## W-012 — SYCL sees all four B70s
+
+```
+SYCL0: Intel(R) Arc(TM) Pro B70 Graphics (32558 MiB,  7989 MiB free)
+SYCL1: Intel(R) Arc(TM) Pro B70 Graphics (32558 MiB,  9809 MiB free)
+SYCL2: Intel(R) Arc(TM) Pro B70 Graphics (32558 MiB,  9691 MiB free)
+SYCL3: Intel(R) Arc(TM) Pro B70 Graphics (32558 MiB, 32540 MiB free)
+```
+
+**Only 3 of 4 cards are free.** `llama-server.exe` PID 17560 (11.1 GB) is the production
+llama-swap arm; it holds VRAM on SYCL0-2. Left untouched by design - production services cause a
+busy result, not an unload. Any 1017 run must either tolerate ~9 GB/card on three cards, or the
+operator pauses the arm deliberately.
+
+## W-013 — the lab's tuned kernels are largely already upstream
+
+This is the finding that makes Route B cheap. The fork patches target files that **already exist in
+upstream HEAD**:
+
+| Fork patch | Target file | Upstream status |
+|---|---|---|
+| `deepseek-moe/02-mmvq-iq-moe-slm-v3.patch` | `ggml/src/ggml-sycl/mmvq.cpp` | **EXISTS** |
+| `deepseek-sparse/fattn-sparse.patch` | `ggml/src/ggml-sycl/fattn-sparse.cpp` | **EXISTS** |
+| `deepseek-sparse/lightning-indexer.patch` | `ggml/src/ggml-sycl/lightning-indexer.cpp` | **EXISTS** |
+| (route fusion) | `ggml/src/ggml-sycl/topk-moe.cpp` | **EXISTS** |
+
+Upstream `mmvq.cpp` already carries `vec_dot_iq2_xs_q8_1_moe` and `vec_dot_iq3_xxs_q8_1_moe` and the
+`mul_mat_vec_iq2_xs_q8_1_sycl` / `iq3_xxs` entry points. The sparse-FA and lightning-indexer work
+has been upstreamed too.
+
+What the v3 patch **adds on top** is the local-memory optimisation: arithmetic sign masks
+(`moe_sign_mask4` / `moe_sign_masks`, parity-extended 7→8 bits), 16-bit word reads for index/scale
+bytes, and per-work-group re-layout of the entry's q8_1 activations. It is **~236 added lines in
+one file**, gated by `GGML_SYCL_MOE_IQ_SLM_V=2` to select v2 again. That is a very portable patch.
+
+## W-014 — model download underway
+
+| Item | Value |
+|---|---|
+| Source | `ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF` |
+| Set chosen | **IQ2_XXS (2.00 bpw)** - the plan's first target |
+| Destination | `D:\AI\Models\dsv41` (D: has 640 GB free) |
+| Sizes | IQ2_XXS 4 shards = 36.39 + 36.68 + 36.55 + 19.12 = **128.7 GB**; Engram IQ4_NL **103 GB**; mmproj BF16 |
+| Measured rate | **17 MB/s** |
+| ETA | **~3.8 h** for ~230 GB |
+
+Tooling: `huggingface_hub` 1.24.0, `snapshot_download` with `allow_patterns` filter, 4 workers.
+Launched detached via WMI so it survives session teardown.
+
+## L-010 — `nohup cmd.exe` does NOT survive SSH teardown here
+First build attempt used `nohup cmd.exe /c ... &` and produced an empty log and no build dir.
+The lab's own `arm.ps1` comment says the answer: create through WMI
+(`Invoke-CimMethod -ClassName Win32_Process -MethodName Create`). That worked immediately.
+
+## L-011 — CMake 4.4.4 + upstream llama.cpp is fine, but MSVC is at a non-standard path
+Visual Studio lives at `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools` (VS "18", not
+2022). `vswhere -latest -products * -property installationPath` finds it; hardcoded 2022 paths fail.
+
+## Immediate next moves (queued)
+
+1. Wait for the download (~3.8 h), verifying SHA-256 as it lands.
+2. Apply `02-mmvq-iq-moe-slm-v3.patch` to the fresh clone and rebuild - it targets a file that
+   exists and adds one self-contained kernel path.
+3. Test 1017 with a small context on the free card (SYCL3) first, CPU-lane experts only.
+4. Only then negotiate the production arm pause for a real 4-card run.
