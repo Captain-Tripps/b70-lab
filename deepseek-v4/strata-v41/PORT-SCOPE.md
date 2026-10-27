@@ -214,3 +214,107 @@ STEP-002 should be short: confirm `sycl/` builds from the v0.2.7 worktree, confi
 devices enumerate, and confirm a Qwen-model smoke run still works from this base.
 
 Do not start kernel translation before CHECK-102 passes.
+
+-
+
+## 10. dpct pilot — measured 2026-10-27, the port is largely automatable
+
+`PLAN.md` records "Automatic CUDA translation as a complete port — **Reject**". That decision was made on
+principle, without running the tool. It has now been run. The decision should be revised: dpct does the bulk of
+the translation, and the residue is enumerable rather than open-ended.
+
+### Toolchain (now working)
+
+| Item | Value |
+|---|---|
+| dpct | **2025.1.0** (`/mnt/c/Program Files (x86)/Intel/oneAPI/dpcpp-ct/2025.1/bin/dpct.exe`) |
+| Clang underneath | 20.0.0 |
+| CUDA headers | **not installed as a toolkit**; supplied from PyPI wheels into `D:\cuda-headers` (1,396 headers) |
+| Header packages | `nvidia-cuda-runtime-cu12` 12.9.79, `nvidia-cuda-nvcc-cu12` 12.9.86, `nvidia-cuda-cccl-cu12` 12.9.27, `nvidia-curand-cu12` 10.3.10.19 |
+
+No CUDA hardware or toolkit install is required. This bypasses the "no reference backend on this box" blocker
+for *translation* (not for numerical parity — see §11).
+
+Note: dpct 2025.1 warns `CUDA version is newer than the latest partially supported version 12.8`. Headers are
+12.9. Worked anyway for all files below; if a future file fails, drop to 12.8 headers first.
+
+### Result across the whole engine
+
+All five compute files converted (`D:\strata-dsv41-port\dpct-all`, `dpct-out2`):
+
+| File | Source | Output | `parallel_for` | chevrons left | `__global__` left | DPCT marks |
+|---|---:|---:|---:|---:|---:|---:|
+| `ds4_kernels.cu` | 2,467 | 4,579 | **63** | 1 | 1 | 158 |
+| `ds4_model.cu` | 9,744 | 11,136 | 1 | 0 | 0 | 213 |
+| `ds4_iq.cu` | 1,630 | 2,442 | **15** | 2 | 0 | 67 |
+| `ds4_gguf.cu` | 1,529 | 2,225 | **17** | 6 | 1 | 69 |
+| `ds4_tq.cu` | 539 | 674 | **0** | 5 | 0 | 17 |
+| **Total** | **15,909** | **21,056** | **96** | **14** | **2** | **524** |
+
+Against **93 `__global__` kernels** in the source, dpct emitted **96 `parallel_for` blocks**. The kernel bodies
+translate. What fails is a specific, diagnosable pattern: **triple-chevron launches wrapped in preprocessor
+macros**.
+
+### The one real failure mode, precisely characterised
+
+`ds4_tq.cu` converted **zero** kernels. All 5 of its launches are inside macros:
+
+```c
+#define GU_(K, C) { if (w) gate_up_kernel<K, C, true><<<grid, kThreads, 0, s>>>(a); else ... }
+DS4_TQ_SWITCH(a.tg, GU_)
+```
+
+dpct does not rewrite launches it cannot see through macro expansion. This is a **mechanical, local fix**:
+expand the 5 `DS4_TQ_SWITCH` macros into explicit launches (or hand-write those 5 sites against the already
+converted kernel bodies, which are present in `ds4_iq.dp.hpp`). It is hours of work, not weeks.
+
+The remaining 9 chevrons across `ds4_gguf` (6), `ds4_iq` (2) and `ds4_kernels` (1) need triage
+individually; `ds4_kernels`' single leftover is `sparse_attn_wmma_kernel`, the WMMA path, which is the most
+likely to need genuine hand work because WMMA has no direct SYCL analogue.
+
+**Total hand-work surface: 14 launch sites + 2 unconverted kernels, out of 93.** By kernel count that is
+**~85% automatic**.
+
+### DPCT warning density — the fixup debt
+
+524 DPCT markers across 21,056 output lines (one per ~40 lines). Top codes in `ds4_kernels`:
+
+| Code | Count | Meaning |
+|---|---:|---|
+| DPCT1065 | 53 | `sycl::nd_item::barrier()` scope suggestion — usually accept |
+| DPCT1118 | 28 | group barrier in divergent code — **audit** |
+| DPCT1101 | 20 | macro/type needs manual check |
+| DPCT1078 | 14 | initialization semantics |
+| DPCT1013 | 13 | launch config could not be determined |
+| DPCT1049 | 9 | work-group size exceeds device max — **audit on B70** |
+
+For calibration: the **existing, working Qwen SYCL port** carries **2,020 DPCT markers** in `sycl/src/` and
+runs correctly in production. So ~524 for dsv41 is *less* debt than the codebase already absorbed. This is the
+strongest single argument that dpct is the right method here.
+
+### Revised decision
+
+| Old decision | New position |
+|---|---|
+| "Automatic CUDA translation as a complete port — Reject" | **Partially superseded.** dpct is the *method*; it is not the *acceptance*. Translate with dpct, then hand-fix 14 sites + 2 kernels, then prove correctness in CHECK-103. |
+| "Translation tooling may scaffold code but cannot satisfy this check" | **Unchanged and still correct.** CHECK-103 requires frozen per-operation tolerances against a reference. dpct output is scaffolding until that passes. |
+
+The distinction that matters: the old text implies translation is not worth attempting. Measured, it converts
+~85% of 93 kernels. Skipping it would mean hand-porting 21,000 lines to save 14 launch sites.
+
+-
+
+## 11. What the pilot does NOT settle
+
+Being explicit so nothing here is over-read:
+
+1. **Nothing has been compiled.** All output is unconverted-text. `ds4_model.dp.cpp` has 213 DPCT marks and has
+   never seen `icx`. Compilation errors will be the next large cost and are unmeasured.
+2. **No numerical parity.** The plan's CHECK-103 needs same-pack teacher-forced logits against a reference. A
+   CUDA/HIP reference does not exist on this box, and the PyPI headers are compile-time only — no runner.
+3. **The WMMA path is unresolved.** `ds4_wmma.cuh` is new in v0.2.7 and `sparse_attn_wmma_kernel` did not
+   convert. WMMA→SYCL (joint_matrix / XMX) is genuine design work, not translation.
+4. **`ds4_iq_hip_*.inc` are HIP-specific** and have no dpct path — they need SYCL equivalents written by hand,
+   or the CUDA variants used instead.
+5. **The 2,020-marker calibration is from a *different* engine.** It proves the method's viability, not
+   dsv41's cost.
