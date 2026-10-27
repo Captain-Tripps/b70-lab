@@ -237,3 +237,94 @@ ported using what the lab learned from the Maya/0731 work. The 0731 tree in `b70
 |---|---|
 | 2026-10-27 s1 | Initial ledger: tree located, base resolved, WHEA corrected, RAM reconciled |
 | 2026-10-27 s2 | Patch captured and verified valid; 0731/Maya applicability mapped; expert-parallel rejection clarified as a llama.cpp-only result |
+
+---
+
+# MAJOR REVISION — 2026-10-27 s3: llama.cpp now supports DeepSeek V4.1 natively
+
+**This overturns a claim I made in session 2.** I wrote that "1017 cannot run in the llama.cpp fork
+at all (`DeepseekV41ForCausalLM` unsupported)." That was true when the plan was written on
+2026-10-26 and false by the time I checked upstream on 2026-10-27.
+
+## W-009 — upstream llama.cpp has a complete `deepseek41` implementation
+
+| Evidence | Detail |
+|---|---|
+| `src/models/deepseek41.cpp` | **933 lines** |
+| Arch enum | `LLM_ARCH_DEEPSEEK41` → `"deepseek41"` in `llama-arch.cpp` |
+| Model class | `llama_model_deepseek41`, inherits `llama_model_deepseek4` |
+| Engram | **99** engram/ngram/ple references: `engram_hash()`, `build_engram()`, `engram_index()`, `LLM_KV_ENGRAM_TOKEN_MAP`, `LLM_TENSOR_ENGRAM_KV/GATE` |
+| Sparse attention | `build_attention41()` with compressed KV, indexer, per-layer KV source |
+| Engram storage | `TENSOR_READ_LAZY` — the big table is read lazily, i.e. disk-backed |
+| Landed | PR **#31086** "model: DSV4.1 flash", 2026-10-25; review fixes **#31137** 10-26, **#31142** 10-26 |
+
+It even carries the reference to `deepseek-ai/DeepSeek-V4.1-Flash-1017 inference/model.py, engram.py`,
+so it was written against the same model we are targeting.
+
+## W-010 — the SYCL backend covers deepseek41's op set
+
+Checked `ggml/src/ggml-sycl/ggml-sycl.cpp` (upstream master, 8,130 lines):
+
+| Op | Present |
+|---|---|
+| `GGML_GLU_OP_SWIGLU_CLAMP` | **yes** (line 6220, `ggml_sycl_swiglu_clamp`) |
+| `MUL_MAT_ID` | yes |
+| `GET_ROWS` | yes |
+| `TOP_K`, `ARGSORT`, `CONCAT`, `SUM_ROWS` | yes |
+| `SOFT_MAX`, `FLASH_ATTN_EXT` | yes |
+
+`ggml_scale_bias()` is a thin wrapper over `ggml_scale_impl()` → `GGML_OP_SCALE`, which SYCL already
+implements, so it needs no new kernel.
+
+**The two ops I initially flagged as missing were a false alarm.** `SWIGLU_CLAMP` is present under
+the newer GLU-op enum rather than as a standalone op, and `SCALE_BIAS` is not a distinct op at all.
+
+## What this means for the strategy
+
+There are now three routes, and the ranking has changed:
+
+| Route | Work | Risk |
+|---|---|---|
+| **A. Port Strata `dsv41` CUDA→SYCL** | 19,132 lines `.cu`, 119 `__global__`, 148 `__device__`, 172 `__syncthreads`, 52 `__shfl`, 253 `cudaStream_t`, 107 `cudaSetDevice` | Very high — full kernel port, no reference |
+| **B. Rebase tuned SYCL fork onto upstream master** | fork base is `797de63b2` (2026-10-17); deepseek41 landed 2026-10-25 — **8 days / ~500 commits** of rebase | Medium — rebase pain, but the lab has done this before (r67c rebase, 474 commits) |
+| **C. Stock upstream llama.cpp SYCL** | build `-DGGML_SYCL=ON`, run | Low, but no lab tuning |
+
+**Route B is the recommended path to maximum pp/tps**, because it is the only one that combines:
+- deepseek41 support (only upstream has it)
+- the tuned IQ2_XS / IQ3_XXS MoE kernels the lab already built and measured
+- sparse-FA + indexer GEMM work
+- cross-card pipeline
+
+## Why the 0731 work now applies even more directly
+
+1017's official 2-bit sets use exactly the quant family the fork's kernels were optimised for:
+
+| 1017 set | Experts | Fork kernel status |
+|---|---|---|
+| IQ2_XXS (2.00 bpw, 138 GB) | IQ2_XXS | kernel exists (0731 measured 2.0x) |
+| IQ2_XS (2.25 bpw, 155 GB) | IQ2_XS | **the exact type the fork's best kernel targets** |
+| IQ1_M (1.75 bpw, 121 GB) | IQ1_M | not yet tuned — new work |
+
+The 0731 model's experts were IQ2_XS (gate/up) + IQ3_XXS (down). The 2.25 bpw 1017 set is IQ2_XS.
+**That is the same kernel, already measured at 68.3 µs/call vs 118-120 for generic.**
+
+## Memory reality check for GPU-BOX
+
+| Set | Model | Engram | Drafter | Total disk |
+|---|---:|---:|---:|---:|
+| 1.75 bpw | 121 GB | 111 GB | 8 GB | 239 GB |
+| 2.00 bpw | 138 GB | 111 GB | 8 GB | 257 GB |
+| 2.25 bpw | 155 GB | 111 GB | 8 GB | 274 GB |
+
+GPU-BOX free space: C: 52.81 GB, D: 639.56 GB, E: 298.85 GB. **D: fits all three.**
+VRAM is 4×32 GB; the reference config (four R9700, 32 GB each, 251 GB RAM) got 48 tok/s at 2.00 bpw
+and **80 tok/s at 2.25 bpw**. GPU-BOX has 95.87 GiB RAM where the reference had 251 GB, so more experts
+will land on the CPU lane — expect lower, but it should run.
+
+## Immediate next actions
+
+1. Locate the tuned SYCL fork's *source* checkout (the runtimes on `C:\llama-sycl` are binaries; no
+   `.git` was found in the obvious places) — required before any rebase.
+2. Rebase or cherry-pick onto upstream master (needs the deepseek41 commits, ≥ 2026-10-26).
+3. Build `-DGGML_SYCL=ON`, run `strata`… no — run `llama-cli`/`llama-server` with 1017 at 2.25 bpw.
+4. Only if that fails, fall back to Strata route A.
