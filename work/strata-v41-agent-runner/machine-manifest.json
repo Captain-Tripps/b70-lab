@@ -148,7 +148,14 @@
         "2025.1",
         "2026.0"
       ],
-      "dpcpp_note": "dpcpp is deprecated by Intel; wrapper prints 'use icx -fsycl'. Both resolve to the 2026.0 compiler."
+      "dpcpp_note": "dpcpp is deprecated by Intel; wrapper prints 'use icx -fsycl'. Both resolve to the 2026.0 compiler.",
+      "note_on_sycl_dll": "SYCL runtime naming differs by toolkit. 2025.1 ships sycl8.dll; the 2026.0 compiler ships sycl9.dll (3795304 bytes, 2026.0.0.0). There is NO sycl8.dll in the 2026.0 tree - that is expected, not a defect.",
+      "sycl_dll_actual": {
+        "toolkit_2025_1": "sycl8.dll 2025.1.0.0",
+        "toolkit_2026_0": "sycl9.dll 2026.0.0.0 (3795304 bytes); sycl9-preview.dll same size; debug sycl9d.dll 5806440 bytes",
+        "sycl_jit": "sycl-jit.dll 190298984 bytes, filever reports 0"
+      },
+      "sycl7_dll": "absent everywhere - the earlier 'sycl7 not found' result stands and is not a gap"
     },
     "level_zero_loader": {
       "version": "1.32.0",
@@ -172,7 +179,44 @@
       "opencl_neo": "32.0.101.8976"
     },
     "level_zero_device_version": "1.15.39183+4",
-    "level_zero_extension_version": "20.2.0"
+    "level_zero_extension_version": "20.2.0",
+    "one_mkl": {
+      "toolkits": [
+        "2025.1",
+        "2026.0",
+        "latest"
+      ],
+      "mkl_rt_2025_1": {
+        "file": "mkl_rt.2.dll",
+        "bytes": 27561056,
+        "filever": "2025.1.1",
+        "sha256": "698C867E771135911880FA3BA89BD02555607288DEE82EC012230BE1B30DE806",
+        "header": "INTEL_MKL_VERSION 20250100"
+      },
+      "mkl_rt_2026_0": {
+        "file": "mkl_rt.3.dll",
+        "bytes": 27890848,
+        "filever": "2026.0.0",
+        "sha256": "6A312EB1C4A92447E8D4C11D07420678BD07E0666C279FC621A3A6B03DB527D8",
+        "header": "INTEL_MKL_VERSION 20260000"
+      },
+      "note": "setvars puts 2026.0 on PATH; mkl_rt.3.dll is what a 2026.0 build will load"
+    },
+    "deployed_binary_hashes": {
+      "ze_loader.dll": {
+        "path": "C:\\Windows\\System32\\ze_loader.dll",
+        "bytes": 813864,
+        "filever": "1.32.0",
+        "sha256": "BC43DC7C1F30814ADC01340390EE251868A22944A87EB237140F7B8799D45172"
+      },
+      "ur_loader.dll_2026_0": {
+        "path": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\2026.0\\bin\\ur_loader.dll",
+        "bytes": 1530216,
+        "filever": "0.12.0",
+        "sha256": "CA884A229A7896F1D717AE574768F7D8815AD00868F53E153863BBB37FC071C5"
+      },
+      "note": "Hashes are SHA256 of the real files under the mkl/compiler tool trees. Paths under oneAPI\\2026.0\\bin report Length=0 for several files while returning valid hashes - see measurement_anomaly."
+    }
   },
   "sycl_devices": {
     "method": "sycl-ls with oneAPI setvars applied (Level Zero visible); repeat without setvars shows OpenCL only",
@@ -232,6 +276,29 @@
       "captured": "2026-10-27T12:35",
       "method": "cmd.exe + setvars.bat + icx --version",
       "contents": "compiler banner, target, installed dir"
+    },
+    {
+      "file": "receipts/check101-hashes.txt",
+      "captured": "2026-10-27T12:51:10-05:00",
+      "method": "powershell.exe, file hashes + oneMKL headers",
+      "contents": "ze_loader/ur_loader SHA256, mkl_rt 2025.1/2026.0 SHA256 + INTEL_MKL_VERSION headers"
+    },
+    {
+      "file": "receipts/check101-sycl.txt",
+      "captured": "2026-10-27T12:52",
+      "method": "powershell.exe, sycl dll enumeration + reparse/length check",
+      "contents": "sycl9 vs sycl8 resolution, 0-byte-length anomaly evidence"
     }
-  ]
+  ],
+  "captured_at_third_pass": "2026-10-27T17:52:01Z",
+  "measurement_anomaly": {
+    "what": "Files under C:\\Program Files (x86)\\Intel\\oneAPI\\2026.0\\bin report Length=0 via both Get-Item and System.IO.FileInfo, yet Get-FileHash returns the SAME SHA256 as the real, non-zero file in the sibling tool tree (e.g. mkl_rt.3.dll: 0 bytes at oneAPI\\2026.0\\bin, 27890848 bytes at oneAPI\\mkl\\2026.0\\bin, identical hash).",
+    "checked": [
+      "fsutil reparsepoint query on oneAPI\\2026.0 -> 'The file or directory is not a reparse point'",
+      "Get-Item -Force Attributes -> 'Directory' (no LinkType, no Target)",
+      "Same behaviour for sycl9.dll, sycl-ls.exe, sycl-jit.dll in that directory"
+    ],
+    "status": "UNRESOLVED - do not diagnose from this",
+    "guidance": "Treat Length reported for paths directly under oneAPI\\<ver>\\bin as unreliable. For sizes and hashes, read the corresponding file in the component tool tree (oneAPI\\mkl\\2026.0\\bin, oneAPI\\compiler\\2026.0\\bin). Do not conclude 'corrupt install' or 'zero-byte stub' from it."
+  }
 }
