@@ -4,7 +4,7 @@
   "branch": "work/strata-v41-agent-runner",
   "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
   "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
-  "updated_at": "2026-10-27T05:50:00Z",
+  "updated_at": "2026-10-27T06:02:00Z",
   "gate_status": {
     "CHECK-100": {
       "status": "PARTIAL",
@@ -28,15 +28,19 @@
         "WHEA Id 22 occurrences captured through 2026-10-25",
         "4 x Arc Pro B70 identified with driver 32.0.101.8976 and PCI IDs",
         "desktop is on the BMC ASPEED adapter, so no B70 is consumed by the compositor",
-        "storage free space captured (C: 52.81 GB, D: 639.56 GB, E: 298.85 GB)"
+        "storage free space captured (C: 52.81 GB, D: 639.56 GB, E: 298.85 GB)",
+        "Strata tree located: %USERPROFILE%\\strata-win (remote github.com/hotschmoe/Strata.git, branch win-port)",
+        "Windows fork base 1c360526 RESOLVED to 1c360526bce659f45cec60b2e36c46b7770c5bf1 - it is the current win-port HEAD, not an ancestor",
+        "Tree identified as v0.1.44.1-26-g1c360526, 2200 commits, not shallow",
+        "29 uncommitted local Windows changes enumerated (13 sycl/src, 5 sycl/include, 1 sycl, 10 root)"
       ],
       "not_passing": [
+        "Pinned upstream v0.2.6 (4b9e05a2a806a3fe24f7b2560d98626c37dade35) is NOT in the local object store; requires a fetch to compare the deployed tree against it",
+        "No DeepSeek V4.1 engine files exist locally (no strata_control, ds4_model.cu, ds4_kernels.cu, ds4_iq.cu, ds4_gguf.cu, ds4_os.hpp, dsv41_fit.py, docs/DEEPSEEK41.md)",
         "per-card PCIe link generation/width: UNKNOWN (no Windows API exposure found)",
-        "UR adapter DLL: ze_loader.dll found (1.32.0) but ur_loader.dll / ur_adapter_level_zero.dll not found in System32",
-        "Strata source checkout: NOT located (found C:\\llama-swap, C:\\llama-sycl, C:\\llama-sycl-new, C:\\Models - none confirmed as the Strata tree)",
-        "Windows fork base 1c360526 full commit: not resolved",
-        "same-pack CUDA/HIP reference fixture availability: python 3.14.6 present, torch NOT installed",
-        "icx/dpcpp not on PATH (oneAPI 2025.1 and 2026.0 installed at C:\\Program Files (x86)\\Intel\\oneAPI)"
+        "UR adapter DLLs (ur_loader.dll / ur_adapter_level_zero.dll) not found in System32; only ze_loader.dll 1.32.0",
+        "icx/dpcpp not on PATH though oneAPI 2025.1 and 2026.0 are installed",
+        "same-pack CUDA/HIP reference fixture availability: python 3.14.6 present, torch NOT installed"
       ],
       "baseline_verdict": "STABLE-BUT-DEGRADED. WHEA Id 22 is a boot-time event firing once ~23 s after boot, not a runtime one: 37.6 h of continuous uptime produced zero recurrences. Heavy testing is therefore NOT gated by expected runtime instability; the 95.87 GiB usable figure is the budget and any RAM change invalidates cross-boundary A/B comparisons. Root cause remains unresolved."
     }
@@ -52,7 +56,8 @@
       "work/strata-v41-agent-runner/receipts/01-fixture-failing.log",
       "work/strata-v41-agent-runner/receipts/02-fixture-passing.log"
     ],
-    "fixture": "work/strata-v41-agent-runner/fixtures/greeting.py"
+    "fixture": "work/strata-v41-agent-runner/fixtures/greeting.py",
+    "source_audit": "work/strata-v41-agent-runner/source-audit.json"
   },
   "exact_commands": {
     "run_windows_suite": "ssh gpu-box 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\b70-work\\runner\\bench\\runner\\Test-NativeRunner.ps1\"'",
@@ -70,9 +75,10 @@
     "consequence": "ProcessStartInfo.ArgumentList does not exist; argv quoting is implemented manually per CommandLineToArgvW.",
     "oneapi": "C:\\Program Files (x86)\\Intel\\oneAPI - versions 2025.1 and 2026.0 present; icx/dpcpp not on PATH",
     "python": "C:\\Python314\\python.exe 3.14.6; torch not installed",
-    "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0"
+    "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0",
+    "strata_tree": "%USERPROFILE%\\strata-win @ win-port 1c360526bce659f45cec60b2e36c46b7770c5bf1 (v0.1.44.1-26), 29 dirty files"
   },
-  "next_action": "STEP-002 is NOT started (out of scope for this session). Before it: resolve the unresolved CHECK-101 items (oneAPI/LevelZero/UR versions, Strata checkout, 1c360526 full commit, PCIe links) and arrange a genuine fresh-session resume to close CHECK-100.",
+  "next_action": "STEP-002 is NOT started. Two hard preconditions before any file-level port work: (1) fetch github.com/hotschmoe/Strata.git to obtain pinned upstream v0.2.6 4b9e05a2, because the local tree predates it and contains none of the ds4_* DeepSeek engine files; (2) capture the 29 uncommitted local changes as a patch receipt before touching the tree - they are the user's in-progress Windows work and must not be reset. Additionally still open: icx/dpcpp PATH, UR adapter DLLs, PCIe link telemetry, fresh-session resume for CHECK-100.",
   "resume_check": {
     "status": "NOT_RUN",
     "reason": "Requires a real new agent session, not this one.",

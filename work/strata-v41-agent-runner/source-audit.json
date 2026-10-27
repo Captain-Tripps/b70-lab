@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "step": "STEP-001",
+  "check": "CHECK-101",
+  "kind": "strata-source-location-and-provenance",
+  "audited_at": "2026-10-27T05:58:00Z",
+  "method": "read-only directory + git inspection over ssh gpu-box -> powershell.exe",
+
+  "candidates_rejected": [
+    { "path": "C:\\llama-sycl",     "reason": "prebuilt llama.cpp SYCL binaries/redistributables only; no .git, no Strata markers" },
+    { "path": "C:\\llama-sycl-new", "reason": "llama.cpp build/bench workspace (bench-*.ps1, backup-build-*, pr-patches); no .git, no Strata markers" },
+    { "path": "C:\\llama-swap",     "reason": "llama-swap configuration + corpus (config.windows.yaml family); no .git, no Strata markers" },
+    { "path": "C:\\Models",         "reason": "GGUF model store (bartowski, huihui-ai, ISTA-DASLab, ...); not a source tree" }
+  ],
+
+  "strata_tree": {
+    "path": "%USERPROFILE%\\strata-win",
+    "remote": "https://github.com/hotschmoe/Strata.git",
+    "branch": "win-port",
+    "head_full_commit": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
+    "head_subject": "night: KREG BF16 GEMVs + indexer k/q one launch (agent mmvq, STRATA_NIGHT_BF16=1), MMVQ2 CAP_PCT knob",
+    "head_date": "2026-10-16T13:49:51+00:00",
+    "describe": "v0.1.44.1-26-g1c360526",
+    "commit_count": 2200,
+    "is_shallow": false,
+    "local_branches": ["b70-night-20261016", "win-port"],
+    "uncommitted_dirty_files": 29,
+    "dirty_breakdown": {
+      "sycl/src": 13,
+      "sycl/include": 5,
+      "sycl": 1,
+      "repository_root": 10
+    },
+    "dirty_sample": [
+      "M sycl/CMakeLists.txt",
+      "M sycl/include/dpct/device.hpp",
+      "M sycl/include/dpct/kernel.hpp",
+      "M sycl/include/dpct/memory.hpp",
+      "M sycl/include/strata/core/ep_mem.hpp",
+      "M sycl/src/core/copy_queue.cpp",
+      "M sycl/src/core/device.dp.cpp",
+      "M sycl/src/core/expert_source.cpp",
+      "M sycl/src/core/gguf_expert_source.cpp",
+      "M sycl/src/core/pinned.dp.cpp"
+    ]
+  },
+
+  "resolution_of_plan_questions": {
+    "windows_fork_base_1c360526": {
+      "resolved": true,
+      "full_commit": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
+      "note": "The plan listed 1c360526 as the 'abbreviated base' the Windows patches target. It is not an ancestor elsewhere - it IS the current win-port HEAD. So 'resolve the base' resolves to HEAD itself, and the 29 uncommitted files ARE the local Windows work relative to it."
+    },
+    "pinned_upstream_v0_2_6_4b9e05a2": {
+      "resolved": false,
+      "status": "NOT in the local object store",
+      "implication": "Comparing the deployed tree to the pinned upstream requires fetching from origin (github.com/hotschmoe/Strata.git). That is a read-only network operation and was NOT performed in this session."
+    }
+  },
+
+  "critical_finding_no_v41_engine_present": {
+    "searched_for": ["strata_control", "ds4_model.cu", "ds4_kernels.cu", "ds4_iq.cu", "ds4_gguf.cu", "ds4_os.hpp", "dsv41_fit.py", "docs/DEEPSEEK41.md"],
+    "found": [],
+    "conclusion": "The local tree contains NONE of the DeepSeek V4.1 engine files the plan names. This is expected and consistent with the plan: the tree sits at the v0.1.44.1 era, while the plan's DeepSeek work targets upstream v0.2.6 (4b9e05a2) whose Intel docs explicitly exclude V4.1. So there is no 'port the existing ds4 files' shortcut here - STEP-003 starts from upstream v0.2.6, not from this checkout.",
+    "consequence_for_step_002": "STEP-002 must not assume ds4_* sources exist locally. The SYCL device probe (ep_probe-style) can still be built from this tree's sycl/ sources, but any file-level work on ds4_model.cu etc. requires fetching the pinned upstream first."
+  },
+
+  "preservation_warning": {
+    "uncommitted_files": 29,
+    "instruction": "These are the user's in-progress Windows work. Do NOT reset, stash-drop, or checkout over them. The plan requires preserving unrelated local changes. Any STEP-002 branch must be created from a clean understanding of this diff, not by discarding it.",
+    "recommended_first_action_next_session": "Capture `git diff` of the 29 files (or a patch file) as a receipt BEFORE touching the tree."
+  }
+}
