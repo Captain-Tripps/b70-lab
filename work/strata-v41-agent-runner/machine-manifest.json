@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "step": "STEP-001",
+  "check": "CHECK-101",
+  "inventory_kind": "read-only",
+  "captured_at": "2026-10-27T05:35:00Z",
+  "captured_via": "ssh gpu-box -> powershell.exe (native Windows)",
+  "note": "SSH lands in WSL2 bash on GPU-BOX; all Windows facts below came from powershell.exe, not WSL.",
+  "os": {
+    "caption": "Microsoft Windows 11 Pro",
+    "version": "10.0.26200",
+    "build": 26200,
+    "install_date": "2026-06-30T06:17:34"
+  },
+  "cpu": {
+    "name": "AMD EPYC 7402P 24-Core Processor",
+    "physical_cores": 24,
+    "logical_processors": 48,
+    "max_clock_mhz": 2801,
+    "l3_kb": 131072,
+    "isa_note": "Zen 2 - AVX2 only; no AVX-512. Plan requires host code compiled without AVX-512."
+  },
+  "memory": {
+    "dimm_count": 6,
+    "dimm_capacity_bytes_each": 17179869184,
+    "dimm_total_bytes": 103079215104,
+    "reported_total_physical_bytes": 102941720576,
+    "reported_total_gib": 95.87,
+    "speed_mt": 2133,
+    "manufacturer": "Micron Technology",
+    "part_number": "36ASF2G72PZ-2G1A2",
+    "channels_populated": ["A", "B", "C", "D", "E", "F"],
+    "reconciliation": {
+      "reported_128_gb_claim": "NOT confirmed. Six 16 GiB DIMMs populate 6 of 8 channels.",
+      "historical_112_gb": "not reproduced today",
+      "historical_95_9_gb": "MATCHES today's 95.87 GiB exactly",
+      "conclusion": "The box currently has 6 DIMMs / 95.87 GiB usable. The 128 GB figure in the plan is the board's 8-slot capacity, not installed memory. Any earlier 112 GB reading is not reproduced."
+    }
+  },
+  "whea": {
+    "provider": "Microsoft-Windows-WHEA-Logger",
+    "event_id": 22,
+    "recent_occurrences": [
+      "2026-10-25T11:08:53", "2026-10-24T08:59:47", "2026-10-24T08:38:08",
+      "2026-10-22T08:35:54", "2026-10-21T11:41:12", "2026-10-21T11:30:12",
+      "2026-10-21T11:07:42", "2026-10-21T10:16:57", "2026-10-19T12:34:26",
+      "2026-10-17T14:00:02"
+    ],
+    "unresolved_hardware_fault": true,
+    "interpretation": "A fatal memory-path error (Component: Memory, Error Source: BOOT) still fires on boot as of 2026-10-25. This is the same fault the lab notes attributed to the CPU socket on 2026-10-21.",
+    "check_101_consequence": "A stable baseline for heavy testing is NOT established. Per CHECK-101, heavy testing pauses; source analysis and small fixtures may continue."
+  },
+  "storage": {
+    "physical_disks": [
+      { "model": "WD_BLACK SN770 2TB", "size_bytes": 2000396321280, "interface": "SCSI" },
+      { "model": "KINGSTON SNV3S1000G", "size_bytes": 1000202273280, "interface": "SCSI" }
+    ],
+    "volumes": [
+      { "drive": "C:", "used_gb": 577.82, "free_gb": 52.81 },
+      { "drive": "D:", "used_gb": 1223.44, "free_gb": 639.56 },
+      { "drive": "E:", "used_gb": 0.1, "free_gb": 298.85 }
+    ],
+    "note": "A 257 GB model download does not fit on C:. D: has 639 GB free and E: has 298 GB free."
+  },
+  "gpu": {
+    "count_b70": 4,
+    "model": "Intel(R) Arc(TM) Pro B70 Graphics",
+    "driver_version": "32.0.101.8976",
+    "driver_date": "2026-08-27",
+    "pci_ids": [
+      "PCI\\VEN_8086&DEV_E223&SUBSYS_0105172F&REV_00",
+      "PCI\\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00",
+      "PCI\\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00",
+      "PCI\\VEN_8086&DEV_E223&SUBSYS_17018086&REV_00"
+    ],
+    "adapter_ram_reported_bytes": 4293918720,
+    "adapter_ram_note": "WMI AdapterRAM is a 32-bit field and caps at ~4 GiB; real per-card capacity is 32 GB. Do not use this value as a budget.",
+    "display_adapter_separate": "Microsoft Basic Display Adapter (ASPEED, VEN_1A03&DEV_2000) - desktop is on the BMC, not a B70. Good: no B70 loses VRAM to dwm.",
+    "pcie_link_telemetry": "UNKNOWN - not captured. Windows does not expose negotiated link generation/width for these adapters via the CIM classes available here; requires vendor tooling or dxdiag."
+  },
+  "missing_access": {
+    "pcie_link_width_generation": "not captured",
+    "oneapi_compiler_version": "not yet inventoried",
+    "level_zero_loader_version": "not yet inventoried",
+    "ur_adapter_version": "not yet inventoried",
+    "strata_source_checkout": "not yet located on GPU-BOX",
+    "windows_fork_base_1c360526_full_commit": "not yet resolved"
+  }
+}

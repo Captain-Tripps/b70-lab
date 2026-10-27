@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "milestone": "STEP-000 + read-only STEP-001",
+  "branch": "work/strata-v41-agent-runner",
+  "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
+  "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
+  "updated_at": "2026-10-27T05:45:00Z",
+  "gate_status": {
+    "CHECK-100": {
+      "status": "PARTIAL",
+      "passing": [
+        "native Windows runner: 11/11 CPU-only contract cases PASS on GPU-BOX (PowerShell 5.1.26100.9711)",
+        "exclusive GPU-test lease: acquire/busy/live-refusal/stale-recovery all PASS",
+        "ownership cleanup re-verifies PID + creation time + executable path",
+        "sentinel process survives every cleanup path",
+        "fixture repair tool loop: failing pytest -> read result -> repair implementation -> passing pytest, assertions byte-identical"
+      ],
+      "not_passing": [
+        "fresh-session resume: NOT_RUN as a real separate agent session (see resume_check below)"
+      ],
+      "blocker": "A genuine fresh OpenClaw session is required to claim session-resume. A file reread in the same session is NOT a resume pass."
+    },
+    "CHECK-101": {
+      "status": "PARTIAL",
+      "passing": [
+        "OS build, CPU, DIMM count and per-DIMM identity captured",
+        "RAM discrepancy reconciled: 6 x 16 GiB = 95.87 GiB installed; the 128 GB figure is board capacity",
+        "WHEA Id 22 occurrences captured through 2026-10-25",
+        "4 x Arc Pro B70 identified with driver 32.0.101.8976 and PCI IDs",
+        "desktop is on the BMC ASPEED adapter, so no B70 is consumed by the compositor",
+        "storage free space captured (C: 52.81 GB, D: 639.56 GB, E: 298.85 GB)"
+      ],
+      "not_passing": [
+        "per-card PCIe link generation/width: UNKNOWN (no Windows API exposure found)",
+        "compiler / oneMKL / Level Zero / UR versions: not inventoried",
+        "Strata source checkout location on GPU-BOX: not located",
+        "Windows fork base 1c360526 full commit: not resolved",
+        "same-pack CUDA/HIP reference fixture availability: not checked"
+      ],
+      "baseline_verdict": "NO STABLE BASELINE. WHEA memory-path errors are still firing on boot as of 2026-10-25, so heavy testing must stay paused per CHECK-101."
+    }
+  },
+  "artifacts": {
+    "runner": "bench/runner/Invoke-NativeCommand.ps1",
+    "lock": "bench/runner/GpuTestLock.ps1",
+    "tests": "bench/runner/Test-NativeRunner.ps1",
+    "windows_receipt": "work/strata-v41-agent-runner/receipts/windows-mock-suite.json",
+    "tool_loop_receipt": "work/strata-v41-agent-runner/receipts/tool-loop.json",
+    "machine_manifest": "work/strata-v41-agent-runner/machine-manifest.json",
+    "pytest_logs": [
+      "work/strata-v41-agent-runner/receipts/01-fixture-failing.log",
+      "work/strata-v41-agent-runner/receipts/02-fixture-passing.log"
+    ],
+    "fixture": "work/strata-v41-agent-runner/fixtures/greeting.py"
+  },
+  "exact_commands": {
+    "run_windows_suite": "ssh gpu-box 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\b70-work\\runner\\bench\\runner\\Test-NativeRunner.ps1\"'",
+    "deploy_runner_to_box": "tar czf - bench/runner | ssh gpu-box 'cd /mnt/c/b70-work && rm -rf runner && mkdir runner && cd runner && tar xzf -'",
+    "acquire_lease": "powershell -File GpuTestLock.ps1 -Action Acquire -LockPath <path> -HolderPid <pid> -EmitJson",
+    "runner_direct": "powershell -File Invoke-NativeCommand.ps1 -FilePath <exe> -ArgumentsJsonPath <json> -WorkingDirectory <dir> -TimeoutSeconds 600"
+  },
+  "environment_facts": {
+    "gateway_host": "gateway-host",
+    "execution_host": "GPU-BOX",
+    "ssh_lands_in": "WSL2 bash (Linux GPU-BOX 6.18.33.2-microsoft-standard-WSL2)",
+    "windows_reached_via": "powershell.exe / cmd.exe from WSL interop",
+    "powershell_version": "5.1.26100.9711",
+    "dotnet_framework": "4.0.30319.42000",
+    "consequence": "ProcessStartInfo.ArgumentList does not exist; argv quoting is implemented manually per CommandLineToArgvW."
+  },
+  "next_action": "STEP-002 is NOT started (out of scope for this session). Before it: resolve the unresolved CHECK-101 items (oneAPI/LevelZero/UR versions, Strata checkout, 1c360526 full commit, PCIe links) and arrange a genuine fresh-session resume to close CHECK-100.",
+  "resume_check": {
+    "status": "NOT_RUN",
+    "reason": "Requires a real new agent session, not this one.",
+    "exact_instruction": "Open a new OpenClaw session and say: 'Resume work/strata-v41-agent-runner in Captain-Tripps/b70-lab. Read work/strata-v41-agent-runner/TASK-STATE.json and the receipts, inspect git status, and continue only unfinished STEP-000/001 work. Verify prior artifacts before relying on them. Do not repeat completed actions or start GPU work. Report whether this fresh session satisfies the resume acceptance check.'"
+  },
+  "boundaries_respected": [
+    "no GPU workload",
+    "no model download",
+    "no production service change",
+    "no driver/BIOS change",
+    "no merge",
+    "no secrets or raw host logs committed"
+  ]
+}
