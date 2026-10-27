@@ -1352,3 +1352,57 @@ Recorded because they cost hours and will recur:
   valid YAML and were silently ignored. Validate with a parser *plus* a key lookup.
 - **Designed a 4-config benchmark** (`-p 128,512 -b 128,512`) that reloads a 129 GiB model per
   config — ~48 minutes, against a 40-minute watcher. One variable per run.
+
+## Session 4 — CHECK-101 runtime identities closed (read-only, within boundaries)
+
+Second read-only inventory pass. No GPU workload, no downloads, no production change. This is
+plan-authorized STEP-001 work, unlike session 3.
+
+### W-028 — `sycl-ls` without the oneAPI environment hides Level Zero entirely
+This is the trap that makes the probe look complete when it isn't. Run plainly:
+```
+[opencl:gpu][opencl:0..3] Intel Arc Pro B70 ... OpenCL 3.0 NEO [32.0.101.8976]
+[opencl:cpu][opencl:4..5] AMD EPYC 7402P ...
+```
+No `level_zero` lines at all. Run the same binary after `setvars.bat --force`:
+```
+[level_zero:gpu][level_zero:0..3] Intel oneAPI Unified Runtime over Level-Zero V2,
+  Intel Arc Pro B70 Graphics 20.2.0 [1.15.39183+4]
+```
+Four L0 devices appear. **A probe that only reports OpenCL would silently under-report the
+backend this work actually uses.** Capture both, and label which environment produced which.
+
+Related: `ONEAPI_DEVICE_SELECTOR` and `SYCL_DEVICE_FILTER` are both **empty** after setvars.
+That is the correct state. Setting either is exactly what silently killed
+`llama_context` construction in session 3 — so "empty env" is a health signal, not a gap.
+
+### W-029 — Runtime identities captured (CHECK-101 gaps closed)
+| Item | Value |
+|---|---|
+| oneAPI compiler | icx **2026.0.0.20260331**, target x86_64-pc-windows-msvc, thread model posix |
+| installed toolkits | 2025.1 and 2026.0 (setvars selects 2026.0 on PATH) |
+| Level Zero loader | ze_loader.dll **1.32.0** (System32); stale 1.28.2 also in DriverStore |
+| Unified Runtime | ur_loader **0.12.0** (2026.0) / 0.11.10 (2025.1) |
+| SYCL runtime | sycl8.dll 2025.1.0.0; sycl7 absent |
+| GPU driver | **32.0.101.8976**, 2026-08-27 |
+| L0 device | **1.15.39183+4**, extension 20.2.0 |
+| Devices | 4x level_zero:gpu, 4x opencl:gpu, 2x opencl:cpu |
+
+`dpcpp` is deprecated by Intel — the wrapper itself warns "use `icx -fsycl`". Prefer `icx`.
+
+### L-030 — `Get-PnpDevice` Status=Unknown is not a fault
+Several B70 entries report `Status: Unknown` while others report `OK`, with no difference in
+behaviour: all four enumerate in `sycl-ls` and all four were driven in session-3 GPU runs.
+Do not read this as a degraded or failing card. It is a PnP state-reporting quirk for these
+adapters.
+
+### L-031 — PowerShell string quoting around `Program Files` breaks `Start-Process`
+`Start-Process cmd.exe -ArgumentList '/c "C:\Program Files (x86)\...\setvars.bat" --force && ...'`
+fails with `'C:\Program' is not recognized`. The space defeats the nesting. Stage a `.bat`
+file and call that instead — same lesson as session 3, still catching me.
+
+### Still open on CHECK-101 (why it stays PARTIAL)
+- **PCIe negotiated width/generation**: Windows CIM does not expose it for these adapters.
+  Needs `dxdiag` or vendor tooling. Genuinely unresolved, not skipped for convenience.
+- **Strata checkout re-confirmation** and **1c360526 full commit**: needs `git fetch origin`
+  in the strata tree; not re-asserted read-only here, so left OPEN rather than claimed.

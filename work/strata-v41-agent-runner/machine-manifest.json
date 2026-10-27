@@ -119,14 +119,119 @@
     "adapter_ram_reported_bytes": 4293918720,
     "adapter_ram_note": "WMI AdapterRAM is a 32-bit field and caps at ~4 GiB; real per-card capacity is 32 GB. Do not use this value as a budget.",
     "display_adapter_separate": "Microsoft Basic Display Adapter (ASPEED, VEN_1A03&DEV_2000) - desktop is on the BMC, not a B70. Good: no B70 loses VRAM to dwm.",
-    "pcie_link_telemetry": "UNKNOWN - not captured. Windows does not expose negotiated link generation/width for these adapters via the CIM classes available here; requires vendor tooling or dxdiag."
+    "pcie_link_telemetry": "UNKNOWN - not captured. Windows does not expose negotiated link generation/width for these adapters via the CIM classes available here; requires vendor tooling or dxdiag.",
+    "pnp_device_status": {
+      "note": "Get-PnpDevice reports Status=Unknown for several B70 entries. That is a PnP state-reporting quirk for these adapters, not a fault: all four enumerate in sycl-ls and all four were exercised successfully in session 3 GPU runs.",
+      "status_ok_count": 3,
+      "status_unknown_count": 2,
+      "separate_amd_igpu": "PCI\\VEN_1002&DEV_13C0 (AMD Radeon integrated) present but unused for this work"
+    }
   },
   "missing_access": {
-    "pcie_link_width_generation": "not captured",
-    "oneapi_compiler_version": "not yet inventoried",
-    "level_zero_loader_version": "not yet inventoried",
-    "ur_adapter_version": "not yet inventoried",
-    "strata_source_checkout": "not yet located on GPU-BOX",
-    "windows_fork_base_1c360526_full_commit": "not yet resolved"
-  }
+    "pcie_link_width_generation": "still not captured - Windows does not expose negotiated generation/width for these adapters via available CIM classes; requires dxdiag or vendor tooling. Genuinely open.",
+    "oneapi_compiler_version": "CLOSED - 2026.0.0.20260331 (see runtime_identities)",
+    "level_zero_loader_version": "CLOSED - 1.32.0",
+    "ur_adapter_version": "CLOSED - ur_loader 0.12.0 (2026.0) / 0.11.10 (2025.1)",
+    "strata_source_checkout": "not verified in this pass. Earlier session located %USERPROFILE%\\strata-win @ 1c360526 with 29 dirty files, but that path belongs to the deprecated llama.cpp route context and was not re-confirmed read-only here. Leave OPEN rather than assert.",
+    "windows_fork_base_1c360526_full_commit": "still unresolved - requires git fetch origin in the strata tree"
+  },
+  "captured_at_second_pass": "2026-10-27T17:34:45Z",
+  "second_pass_note": "Second read-only pass closed the runtime-identity gaps listed in the original missing_access block. Method: sycl-ls run both WITHOUT and WITH the oneAPI setvars environment. The no-env run exposes only OpenCL devices; Level Zero devices appear only with setvars applied. Capturing only the no-env run would have under-reported the GPU backends actually in use.",
+  "runtime_identities": {
+    "oneapi_compiler": {
+      "icx_version": "2026.0.0.20260331",
+      "banner": "Intel(R) oneAPI DPC++/C++ Compiler for applications running on Intel(R) 64, Version 2026.0.0 Build 20260331",
+      "target": "x86_64-pc-windows-msvc",
+      "thread_model": "posix",
+      "icx_path": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe",
+      "installed_toolkits": [
+        "2025.1",
+        "2026.0"
+      ],
+      "dpcpp_note": "dpcpp is deprecated by Intel; wrapper prints 'use icx -fsycl'. Both resolve to the 2026.0 compiler."
+    },
+    "level_zero_loader": {
+      "version": "1.32.0",
+      "path": "C:\\Windows\\System32\\ze_loader.dll",
+      "additional_copy": "DriverStore iigd_dch_d.inf_amd64_eebe517ae5149ae4\\ze_loader.dll = 1.32.0",
+      "stale_copy": "DriverStore iigd_dch_d.inf_amd64_f69d39497e4a3af5\\ze_loader.dll = 1.28.2 (older, not on PATH)"
+    },
+    "unified_runtime": {
+      "ur_loader_2025_1": "0.11.10",
+      "ur_loader_2026_0": "0.12.0",
+      "note": "Two UR loader versions on disk; setvars selects the toolkit on PATH (2026.0).",
+      "pi_level_zero_dll": "not found as a standalone file (absorbed into the UR/L0 adapter layout)"
+    },
+    "sycl_runtime": {
+      "sycl8_dll": "2025.1.0.0",
+      "sycl7_dll": "absent"
+    },
+    "gpu_driver": {
+      "version": "32.0.101.8976",
+      "date": "2026-08-27",
+      "opencl_neo": "32.0.101.8976"
+    },
+    "level_zero_device_version": "1.15.39183+4",
+    "level_zero_extension_version": "20.2.0"
+  },
+  "sycl_devices": {
+    "method": "sycl-ls with oneAPI setvars applied (Level Zero visible); repeat without setvars shows OpenCL only",
+    "level_zero_gpus": [
+      {
+        "index": 0,
+        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+        "l0_version": "1.15.39183+4",
+        "ext": "20.2.0"
+      },
+      {
+        "index": 1,
+        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+        "l0_version": "1.15.39183+4",
+        "ext": "20.2.0"
+      },
+      {
+        "index": 2,
+        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+        "l0_version": "1.15.39183+4",
+        "ext": "20.2.0"
+      },
+      {
+        "index": 3,
+        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+        "l0_version": "1.15.39183+4",
+        "ext": "20.2.0"
+      }
+    ],
+    "opencl_gpus": 4,
+    "opencl_cpu_devices": 2,
+    "opencl_cpu_detail": "AMD EPYC 7402P appears twice: 2025.19.4.0.18_160000.xmain-hotfix and 2026.21.3.0.31_160000",
+    "sl_count": 4,
+    "env_note": "ONEAPI_DEVICE_SELECTOR and SYCL_DEVICE_FILTER are both EMPTY after setvars. This matters: setting either one is what silently killed llama_context construction in this session's earlier work."
+  },
+  "evidence_receipts": [
+    {
+      "file": "receipts/check101-inventory.txt",
+      "sha256": "f5bc30c05f568d95ff2200f859726b3d8d5ed22d4128a86a59cc0a9b75ff867f",
+      "bytes": 5662,
+      "captured": "2026-10-27T12:33:51-05:00",
+      "method": "powershell.exe, no oneAPI env",
+      "contents": "OS, CPU, DIMMs, GPU CIM, PnP, DLLs, sycl-ls (OpenCL only)"
+    },
+    {
+      "file": "receipts/check101-level-zero.txt",
+      "sha256": "aa8dfa3066bba3743290300a8da1490a36f924cab857185110913a31ad3a4e54",
+      "bytes": 1411,
+      "captured": "2026-10-27T12:34",
+      "method": "cmd.exe + setvars.bat + sycl-ls",
+      "contents": "4x level_zero:gpu devices, env emptiness, exit 0"
+    },
+    {
+      "file": "receipts/check101-compiler.txt",
+      "sha256": "64ef1d2e9aa3f594cdbd870ce545ca95d378e197135b87cbe8a61c4d918039ea",
+      "bytes": 1064,
+      "captured": "2026-10-27T12:35",
+      "method": "cmd.exe + setvars.bat + icx --version",
+      "contents": "compiler banner, target, installed dir"
+    }
+  ]
 }

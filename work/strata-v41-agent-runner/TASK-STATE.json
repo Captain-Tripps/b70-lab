@@ -4,7 +4,7 @@
   "branch": "work/strata-v41-agent-runner",
   "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
   "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
-  "updated_at": "2026-10-27T17:29:48Z",
+  "updated_at": "2026-10-27T17:35:19Z",
   "gate_status": {
     "CHECK-100": {
       "status": "PARTIAL",
@@ -43,7 +43,28 @@
         "icx/dpcpp not on PATH though oneAPI 2025.1 and 2026.0 are installed",
         "same-pack CUDA/HIP reference fixture availability: python 3.14.6 present, torch NOT installed"
       ],
-      "baseline_verdict": "STABLE-BUT-DEGRADED. WHEA Id 22 is a boot-time event firing once ~23 s after boot, not a runtime one: 37.6 h of continuous uptime produced zero recurrences. Heavy testing is therefore NOT gated by expected runtime instability; the 95.87 GiB usable figure is the budget and any RAM change invalidates cross-boundary A/B comparisons. Root cause remains unresolved."
+      "baseline_verdict": "STABLE-BUT-DEGRADED. WHEA Id 22 is a boot-time event firing once ~23 s after boot, not a runtime one: 37.6 h of continuous uptime produced zero recurrences. Heavy testing is therefore NOT gated by expected runtime instability; the 95.87 GiB usable figure is the budget and any RAM change invalidates cross-boundary A/B comparisons. Root cause remains unresolved.",
+      "session": "STEP-001 second read-only pass (2026-10-27 12:33-12:35 CDT)",
+      "closed_this_pass": [
+        "oneAPI compiler: icx 2026.0.0.20260331 (x86_64-pc-windows-msvc, posix)",
+        "Level Zero loader: ze_loader.dll 1.32.0",
+        "Unified Runtime: ur_loader 0.12.0 (2026.0) / 0.11.10 (2025.1)",
+        "SYCL runtime: sycl8.dll 2025.1.0.0 (sycl7 absent)",
+        "GPU driver: 32.0.101.8976 (2026-08-27)",
+        "Level Zero device: 1.15.39183+4, extension 20.2.0",
+        "Device enumeration: 4x level_zero:gpu, 4x opencl:gpu, 2x opencl:cpu"
+      ],
+      "still_open": [
+        "PCIe negotiated width/generation - Windows CIM does not expose it; needs dxdiag or vendor tooling",
+        "Strata checkout re-confirmation (%USERPROFILE%\\strata-win @ 1c360526 not re-verified read-only)",
+        "1c360526 full commit resolution (needs git fetch origin)"
+      ],
+      "note": "Remains PARTIAL deliberately: the runtime-identity half is now closed with receipts, but PCIe telemetry and the source-pin reconciliation are still open. Do not promote to PASS.",
+      "receipts": [
+        "receipts/check101-inventory.txt (f5bc30c0...)",
+        "receipts/check101-level-zero.txt (aa8dfa30...)",
+        "receipts/check101-compiler.txt (64ef1d2e...)"
+      ]
     }
   },
   "artifacts": {
@@ -81,7 +102,7 @@
     "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0",
     "strata_tree": "%USERPROFILE%\\strata-win @ win-port 1c360526bce659f45cec60b2e36c46b7770c5bf1 (v0.1.44.1-26), 29 dirty files"
   },
-  "next_action": "STEP-000/001 remain the open gates. Outstanding: (a) fresh-session resume to close CHECK-100 (requires a genuinely new agent session), (b) git fetch origin to obtain pinned upstream v0.2.6 4b9e05a2 for comparison, (c) per-card PCIe link telemetry and UR/oneMKL binary hashes for CHECK-101. CORRECTED 2026-10-27: the previous note here claimed 1017 could not run in llama.cpp and would not fit in 128 GB. Both are contradicted by measurement (see session_3_divergence below). Do not repeat that premise. Before acting on route choice, re-read FINDINGS.md 'SESSION 3 - ROUTE DIVERGENCE'.",
+  "next_action": "STEP-001 is now materially further along: CHECK-101 runtime identities are captured with receipts; PCIe telemetry and source-pin reconciliation remain open. Smallest next read-only action: run dxdiag (or vendor tooling) to capture negotiated PCIe generation/width per B70, and git fetch origin in the strata tree to resolve the 1c360526 pin. Both are read-only and within boundaries. Do NOT resume GPU work; the session-3 route divergence is recorded in FINDINGS.md and remains unresolved as a decision, not a task.",
   "resume_check": {
     "status": "NOT_RUN",
     "reason": "Requires a real new agent session, not this one.",

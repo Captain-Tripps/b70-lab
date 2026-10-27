@@ -1,0 +1,17 @@
+=== sycl-ls with oneAPI env === 
+[level_zero:gpu][level_zero:0] Intel(R) oneAPI Unified Runtime over Level-Zero V2, Intel(R) Arc(TM) Pro B70 Graphics 20.2.0 [1.15.39183+4]
+[level_zero:gpu][level_zero:1] Intel(R) oneAPI Unified Runtime over Level-Zero V2, Intel(R) Arc(TM) Pro B70 Graphics 20.2.0 [1.15.39183+4]
+[level_zero:gpu][level_zero:2] Intel(R) oneAPI Unified Runtime over Level-Zero V2, Intel(R) Arc(TM) Pro B70 Graphics 20.2.0 [1.15.39183+4]
+[level_zero:gpu][level_zero:3] Intel(R) oneAPI Unified Runtime over Level-Zero V2, Intel(R) Arc(TM) Pro B70 Graphics 20.2.0 [1.15.39183+4]
+[opencl:gpu][opencl:0] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:gpu][opencl:1] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:gpu][opencl:2] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:gpu][opencl:3] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:cpu][opencl:4] Intel(R) OpenCL, AMD EPYC 7402P 24-Core Processor                OpenCL 3.0 (Build 0) [2025.19.4.0.18_160000.xmain-hotfix]
+[opencl:cpu][opencl:5] Intel(R) OpenCL, AMD EPYC 7402P 24-Core Processor                OpenCL 3.0 (Build 0) [2026.21.3.0.31_160000]
+ 
+=== env === 
+ONEAPI_DEVICE_SELECTOR= 
+SYCL_DEVICE_FILTER= 
+=== exit === 
+last=0 

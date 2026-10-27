@@ -969,13 +969,14 @@
         "DEC-002"
       ],
       "required": true,
-      "result": "NOT_RUN",
+      "result": "PARTIAL",
       "method": "MANUAL",
       "criterion": "Manifest reconciles reported versus historical RAM/CPU and records hardware health and exact runtime identities.",
-      "command": "",
-      "evidence_path": "",
-      "tested_snapshot": "",
-      "checked_at": ""
+      "command": "ssh gpu-box -> powershell.exe -File check101.ps1 (no oneAPI env); cmd.exe /c check101c.bat (setvars.bat --force + sycl-ls); cmd.exe /c comp.bat (setvars.bat --force + icx --version)",
+      "evidence_path": "work/strata-v41-agent-runner/machine-manifest.json; work/strata-v41-agent-runner/receipts/check101-inventory.txt; work/strata-v41-agent-runner/receipts/check101-level-zero.txt; work/strata-v41-agent-runner/receipts/check101-compiler.txt",
+      "tested_snapshot": "GPU-BOX read-only inventory 2026-10-27 (second pass, 12:33-12:35 CDT)",
+      "checked_at": "2026-10-27T17:34:54Z",
+      "note": "PARTIAL retained deliberately. Closed this pass: oneAPI compiler, Level Zero loader, UR adapter, SYCL runtime, GPU driver, L0 device version, per-card enumeration. Still open: PCIe negotiated width/generation (Windows does not expose it via available CIM classes; needs dxdiag or vendor tooling), and the strata checkout / 1c360526 full commit. Left PARTIAL rather than PASS so the open items are not hidden."
     },
     {
       "id": "CHECK-102",
