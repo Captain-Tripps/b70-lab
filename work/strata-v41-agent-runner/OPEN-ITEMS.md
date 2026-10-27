@@ -8,7 +8,7 @@ Opened 2026-10-27 during the speed-tuning session. Umbrella: **#11**.
 | # | Item | Status |
 |---|---|---|
 | [#5](https://github.com/Captain-Tripps/b70-lab/issues/5) | OOM: SYCL alloc failure at large ubatch (b=32, ub>=128), cause unidentified | OPEN |
-| [#6](https://github.com/Captain-Tripps/b70-lab/issues/6) | pp512 non-monotonic in batch: 12.25 / 0.70 / 41.87 t/s at b=128/256/512 | OPEN |
+| [#6](https://github.com/Captain-Tripps/b70-lab/issues/6) | pp512 non-monotonic in batch: **41.87 did NOT reproduce** (repeat 0.61); b=128 ~11-12 and b=256 0.70 both reproduced | OPEN — corrected |
 | [#7](https://github.com/Captain-Tripps/b70-lab/issues/7) | Model load takes 10-17 min: break down the cost and cut it | OPEN |
 | [#8](https://github.com/Captain-Tripps/b70-lab/issues/8) | Flash attention ON is a 10x regression (0.33 vs 3.48 t/s at p128) | OPEN |
 | [#9](https://github.com/Captain-Tripps/b70-lab/issues/9) | KV quant q8_0 halves prefill (3.48 -> 1.62 t/s), decode unchanged | OPEN |

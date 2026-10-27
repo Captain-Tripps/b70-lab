@@ -1651,3 +1651,152 @@ PCIe negotiated width/generation: **UNKNOWN**. Arc Control is not installed on G
 `Intel Arc Control` directory, no `igcl*.dll` in System32), so that route is closed too. PnP still
 reports Max = Current = 1 on all four endpoints, which remains implausible. Do not record x16; do
 not record x1.
+
+## Session 8 — speed work: the "batching is broken" conclusion was WRONG (2026-10-27)
+
+### W-035 — Batch size was the whole story: pp scales ~22x from b=32 to b=128
+
+> **CORRECTED by W-038 (Session 9).** The "peaks at b=128+" reading below rests on a single
+> 41.87 t/s sample at b=512 that did **not** reproduce (repeat: 0.61 t/s). The valid part of this
+> finding is that b=32 -> b=128 gains ~22x. The "b=128+" claim and the "big batch for pp"
+> consequence are WRONG. Prefill peaks at b=128 and degrades at 256 and 512.
+`llama-bench` on 4x B70, `-ngl 38 -t 12 -lm none --no-warmup -r 1`:
+
+| config | pp t/s | tg t/s |
+|---|---|---|
+| `-sm layer -p 32 -b 32` | 0.55 | 3.65 |
+| `-sm tensor -p 32 -b 32` | 0.56 | 2.21 |
+| `-sm layer -p 32 -b 32 -ub 512` | 0.60 | 3.69 |
+| `-sm layer -p 256 -b 256` | 6.19 | 0.35 |
+| `-sm layer -p 512 -b 128` | **12.25** | (n/a) |
+
+**This corrects W-019/L-025.** The earlier "prompt processing is 9.2x slower than generation,
+therefore the batched path is not engaging" verdict measured only `-b 32`. At `-b 32` the batch
+is smaller than the 40-layer hyper-connection depth, so per-token serialisation dominates. At
+`-b 128` prefill reaches 12.25 t/s — a 22x improvement over the recorded 0.55, and 37x over the
+0.33 in L-025. Batching does engage; it needs a batch big enough to amortise the per-block work.
+
+### W-036 — Layer split beats tensor split for decode by 65%
+3.65 vs 2.21 t/s at identical flags. Tensor split was never the fast path for this model; the
+recorded "tensor split" experiments were measuring a slower configuration. Use `-sm layer`.
+
+### L-026 — Row split CRASHES on this model, and the cause is now pinned
+`-sm row` aborts immediately: `ggml-sycl.cpp:1419: fatal error`, exit `-1073740791`
+(0xC0000409, stack-buffer-overrun fail-fast) inside `get_row_rounding()`.
+
+Cause: `get_row_rounding()` has no `case` for the tensor types this pack carries. A direct GGUF
+header scan of shard 1 shows 42 tensors: 30x IQ1_M, 8x IQ2_XXS, 3x **I64**, 1x **I32**. The
+I32/I64 tensors are the Engram lookup tables (`engram_token_map.weight` I32 129280 elems;
+`engram_primes/offsets/multipliers.weight` I64). The switch handles IQ1_M and IQ2_XXS but not
+I32/I64, so it falls to `default: GGML_ABORT("fatal error")`.
+
+Note the row-rounding table also omits I8/I16/F16-adjacent cases, so this is a general gap, not a
+one-off. Row split cannot be used for this model until I32/I64 row rounding is defined. These are
+lookup tables and arguably should not be row-split at all.
+
+### W-037 — PCIe is measured now: ~12 GB/s per card, so the "x1" reading was an artifact
+Empirical host<->device probe (`icx-cl -fsycl`, all four B70s, 512 MB transfers):
+
+| device | H2D GB/s | D2H GB/s |
+|---|---|---|
+| 0 | 11.63 | 11.25 |
+| 1 | 11.68 | 11.19 |
+| 2 | 12.60 | 11.42 |
+| 3 | 11.66 | 11.31 |
+
+Peaks 12.1-13.2 GB/s H2D. Real PCIe 4.0 x16 is ~25-28 GB/s; x8 is ~12-14 GB/s. So this is
+consistent with **PCIe 4.0 x8 per card**, decisively not x1 (~0.9-1 GB/s). The earlier PnP
+`link width = 1` reading is contradicted by measurement and should be treated as a reporting
+artifact. CHECK-101's PCIe item can move from UNKNOWN to MEASURED.
+
+Caveat: this is bandwidth evidence, not a negotiated-link-state read. A x16 slot bifurcated to
+two x8 links, or a chipset x8 uplink, would produce the same numbers. The probe cannot tell those
+apart from a plain x8 slot.
+
+### Consequence for tuning
+At ~12 GB/s per card, host-staged weight streaming is a first-order cost for a 128.74 GiB pack.
+
+> **CORRECTED by W-038/W-039 (Session 9).** "Big batch for pp (b=128+)" is wrong. Prefill peaks at
+> **b=128** and degrades at b=256 (17x collapse, reproduced) and b=512 (0.61 t/s, not 41.87).
+> Decode does peak at b=32/ub=512. So prefill and decode still want different settings, but the
+> prefill setting is b=128 specifically, not "128 or larger".
+
+## Session 9 — the b=512 prefill number was noise; this corrects W-035 (2026-10-27)
+
+### W-038 — 41.87 t/s did NOT reproduce. Prefill peaks at ~11-12 t/s, not 42.
+
+Repeated the b=128/256/512 prefill sweep on the same pack, same flags, same box
+(`-ngl 38 -t 12 -lm none --no-warmup -r 1 -p 512 -n 0`). Two independent runs:
+
+| n_batch | run 1 (`bw/sweep/s1.log`) | run 2 (`bw/sweep2/s1.log`) | reproducible? |
+|---:|---:|---:|---|
+| 128 | 12.25 | 11.36 | **yes**, ±8% |
+| 256 | 0.70 | 0.71 | **yes**, dead stable |
+| 512 | **41.87** | **0.61** | **NO — 69x apart** |
+
+The 41.87 was a **single-sample outlier**. It does not survive a repeat. Prefill's real
+peak is b=128 at ~11-12 t/s. b=512 is *worse* than b=128, not 3.4x better.
+
+**This directly invalidates W-035's "b=128+" claim.** W-035 said prefill "peaks at large batch
+(`-b 128`+)" and called b=128+ the big-batch regime. The corrected picture: prefill peaks at
+b=128 and **degrades** at 256 and 512. The monotonic direction in W-035 was built on the
+outlier.
+
+**Also invalidated:** the "Consequence for tuning" paragraph above, which recommends "big batch
+for pp (b=128+)". The correct statement is b=128 specifically, and larger is worse.
+
+### W-039 — The b=256 collapse is REAL and reproducible, and it is the actual anomaly
+
+Both runs agree: b=128 → ~12 t/s, b=256 → 0.70 t/s. A **17x collapse** from doubling one
+parameter, reproduced twice to within 1.4%. This is not measurement noise. It is also not a
+normal scaling curve for any kernel.
+
+The b=256 point is now the single most informative measurement in the set, because it is the
+only anomaly that reproduces. Two candidate causes, both testable cheaply:
+
+1. **Kernel selection boundary.** `GGML_SYCL_XMX_MAX_COLS: 80` and `GGML_SYCL_XMX_GLU_MAX_COLS: 16`
+   are tiling thresholds. A 256-column batch may straddle one and fall onto a slow or partially
+   scalar path. A `-v` run at b=128 vs b=256 would show which kernel each picks.
+2. **Memory placement.** Per the OOM (issue #5) the split is lopsided 22/37 GB. If the b=256
+   compute buffer lands on SYCL2 it thrashes against 37 GB of resident weights. Testable by
+   re-running with `-fit on` for an even split and seeing whether the dip moves or vanishes.
+
+Distinguishing these two matters more than any further throughput tuning: if it is a kernel
+boundary, fixing it may unlock real prefill speed; if it is placement, then b=128 is already
+near the practical ceiling for this configuration.
+
+### W-040 — Scale check against Strata: the gap is ~120x, not ~33x
+
+The earlier comparison used the bad 41.87 figure, which made the gap look like 33x. Corrected:
+
+| Engine | Cards | Prefill | Source |
+|---|---:|---:|---|
+| Strata IQ3_S (Qwen3.8-Flash-Next) | **2** | **1,415 t/s @ 33.6k** | `strata-windows-port/README.md` |
+| llama.cpp fork r62 (Qwen3.8-Flash-Next) | 4 | 748 t/s @ 33.6k | same |
+| llama.cpp fork (DeepSeek V4.1 1017) | 4 | **~11.4 t/s** @ 512 | this session |
+
+Strata does **~124x** the fork's 1017 prefill on **half the cards**. Note the honest caveat:
+these are different models and different quant families (Qwen IQ3_S vs DeepSeek IQ2_XXS), so
+this is not a controlled comparison. But 124x with half the hardware is far outside any
+quant-family explanation. It is an engine-architecture difference.
+
+The mechanism is already documented and is not speculative: Strata keeps all experts resident
+and does **expert parallelism with a captured graph**, so all four cards compute during a single
+token. The fork splits **by layers**, so during decode one card works and three idle, and its
+prefill path is measured to shatter into 166 graph splits across devices before patching. The
+recorded expert-parallel rejection (`PLAN-expert-parallel.md`, Track A) applies to **bolting
+expert parallelism onto the llama.cpp fork**, not to Strata's engine. That distinction was
+already established; W-040 is the number that shows why it matters.
+
+### What this means for the route
+
+"Mimic Strata's numbers" is not reachable by tuning llama.cpp flags. The best measured fork
+configuration is ~11.4 t/s prefill and ~3.9 t/s decode. Strata's engine on this silicon does
+1,415 and ~98. The plan's route — port `strata-dsv41` — is the route that can produce those
+numbers, and this correction removes the main argument that the fork might get close.
+
+### Standing caveat on all Session 9 numbers
+
+Still `-r 1`, still single-sample for stages 2-5 of the sweep in progress. The b=128/256 figures
+now have two runs each and are trustworthy. Everything else in the sweep is provisional until
+its repeat lands.

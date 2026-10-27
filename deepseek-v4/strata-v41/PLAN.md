@@ -258,6 +258,101 @@ This is not a calendar promise: the initial reconciliation/probe is roughly 2-4 
 correct full engine plus qualification is a multi-week effort. Compiler/runtime failures may extend it.
 Re-estimate after CHECK-102 and CHECK-103 instead of treating the earlier generic estimate as a commitment.
 
+## Measured findings (2026-10-27, GPU-BOX, 4x Arc Pro B70)
+
+These are real measurements taken on the lab box, not planning estimates. They correct two
+conclusions recorded earlier and should feed STEP-006 (profile/optimize) directly. The full
+detail, with configs and raw numbers, lives in
+[`work/strata-v41-agent-runner/FINDINGS.md`](../../work/strata-v41-agent-runner/FINDINGS.md)
+sessions 7-8 and in [`machine-manifest.json`](../../work/strata-v41-agent-runner/machine-manifest.json).
+
+### Batch size is the dominant throughput lever (~22x)
+
+> **CORRECTED 2026-10-27 (Session 9, W-038/W-039).** The b=512 figure in this section (41.87 t/s)
+> did **not** reproduce — a repeat measured **0.61 t/s**, 69x lower. Prefill peaks at **b=128
+> (~11-12 t/s)** and degrades above it. The b=256 collapse to 0.70 t/s IS real and reproduced
+> twice. Treat "big batch for prefill" as WRONG; the setting is b=128 specifically. Full
+> correction in `work/strata-v41-agent-runner/FINDINGS.md` W-038..W-040.
+
+`llama-bench`, `-ngl 38 -t 12 -lm none --no-warmup -r 1`, layer split:
+
+| config | prefill t/s | decode t/s |
+|---|---:|---:|
+| `-p 32 -b 32` | 0.55 | 3.65 |
+| `-p 32 -b 32 -ub 512` | 0.60 | 3.69 |
+| `-p 256 -b 256` | 6.19 | 0.35 |
+| `-p 512 -b 128` | **12.25** | — |
+
+**This corrects the earlier "batching is broken" conclusion.** Prefill was previously measured
+only at `-b 32` and read as proof that the batched path never engages. It does engage; `-b 32` is
+simply too small to amortise per-block work across 40 hyper-connection layers. `-b 128` gives
+12.25 t/s, a 22x improvement over the recorded 0.55 and 37x over the 0.33 baseline.
+
+### Prefill and decode want opposite configurations
+
+> **CORRECTED 2026-10-27.** "Prefill peaks at large batch (`-b 128`+)" is wrong — b=512 measured
+> 0.61 t/s on repeat. Prefill peaks at **b=128**. Decode still peaks at b=32/ub=512.
+
+Prefill peaks at large batch (`-b 128`+). Decode collapses at `-b 256` (0.35 t/s) and peaks at
+`-b 32 -ub 512` (3.69 t/s). No single configuration is optimal for both, which is a direct input
+to STEP-005/006: either pick per workload, or run separate instances. This also argues against
+judging the model on a single blended tok/s number.
+
+### Split mode: layer, not tensor
+
+At identical flags, layer split decodes at 3.65 t/s vs tensor split at 2.21 t/s, a 65% advantage.
+Tensor split is not the fast path for this model on this box.
+
+### Row split is broken for this pack, and the cause is identified
+
+`-sm row` aborts immediately at `ggml-sycl.cpp:1419` inside `get_row_rounding()`, exit
+`-1073740791` (0xC0000409). A GGUF header scan of shard 1 shows 42 tensors: 30x IQ1_M, 8x IQ2_XXS,
+3x **I64**, 1x **I32**. The I32/I64 tensors are the Engram lookup tables
+(`engram_token_map.weight` I32; `engram_primes/offsets/multipliers.weight` I64). The row-rounding
+switch handles IQ1_M and IQ2_XXS but has no case for I32/I64, so it reaches
+`default: GGML_ABORT`. Row split is unusable until those cases exist, and lookup tables
+arguably should not be row-split at all.
+
+### PCIe is ~12 GB/s per card — the "link width 1" reading was an artifact
+
+Empirical host↔device probe (`icx-cl -fsycl`, 512 MB transfers, all four cards):
+
+| device | H2D GB/s | D2H GB/s |
+|---|---:|---:|
+| 0 | 11.63 | 11.25 |
+| 1 | 11.68 | 11.19 |
+| 2 | 12.60 | 11.42 |
+| 3 | 11.66 | 11.31 |
+
+Peaks 12.1-13.2 GB/s. PCIe 4.0 x16 is ~25-28 GB/s and x8 is ~12-14 GB/s, so this is **PCIe 4.0
+x8 per card**, decisively not x1 (~0.9-1 GB/s). Windows PnP reported `link width = 1` for all
+four endpoints, which measurement contradicts; treat that reading as a reporting artifact.
+Caveat: this is bandwidth evidence, not a negotiated-link-state read. A x16 slot bifurcated to
+two x8 links, or a chipset x8 uplink, produces the same numbers.
+
+At ~12 GB/s per card, host-staged weight streaming is first-order for a 128.74 GiB pack, which
+supports the CPU-overflow/placement decisions already in the architecture table.
+
+### The serving path currently fails on host pinned memory, not on VRAM
+
+`llama-server` with `-fit off -sm layer -lm none -b 128 -ub 128 -c 2048`:
+
+```
+W ggml_backend_sycl_host_malloc: failed to allocate 9310.57 MiB of pinned memory
+E ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer of size 9762838016
+E llama_model_load: error loading model: unable to allocate SYCL_Host buffer
+```
+
+Omitting `-fit off` fails differently and worse, attempting a 19.1 GiB allocation on SYCL0.
+The failure is a **~9.3 GiB pinned host allocation** against a box with 95.87 GiB usable and
+Windows already resident. This is a host-RAM budget problem, not a VRAM problem, and it is
+consistent with the recorded RAM reconciliation. Any serving configuration must budget the
+host-staged portion explicitly; C: also had only ~52 GiB free at last inventory.
+
+Unresolved: whether the pinned allocation fails because of fragmentation, a hard ceiling in
+`GGML_SYCL_ENABLE_HOST_PINNED_MEM`, or genuine free-RAM exhaustion. That needs a direct
+free-memory measurement at the moment of failure, which has not yet been taken.
+
 ## Evidence and status
 
 [Research and decisions](RESEARCH.md), [verification state](VERIFICATION.md), and [canonical ledger](evidence.json)
