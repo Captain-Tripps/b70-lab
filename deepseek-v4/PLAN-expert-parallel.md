@@ -1,7 +1,12 @@
 # Plan: Strata-style speed for DeepSeek (updated 2026-10-17)
 
+> **2026-10-26 update:** Track A's V4 0731 rejection below still stands. For V4.1, follow the
+> [Strata native Windows action plan](strata-v41/PLAN.md). It ports the separate upstream V4.1 engine
+> using the lab's existing Windows foundation, so that route does not depend on waiting for llama.cpp
+> support. Track B below is retained as the historical October 17 plan, not the current Strata prerequisite.
+
 Status: **Track A rejected** after step A0 (ceiling 1.12x plain / 1.19x DSpark, see the end of this file).
-**Track B planned** (waiting for llama.cpp support). Results will go into [../STATUS.md](../STATUS.md) as they land.
+**Track B historical** (its wait-for-llama.cpp prerequisite is superseded for the new Strata route). Results will go into [../STATUS.md](../STATUS.md) as they land.
 
 ## Why
 

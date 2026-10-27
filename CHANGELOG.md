@@ -3,6 +3,14 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-26
+- Added the [Strata DeepSeek V4.1 four-B70 Windows action plan](deepseek-v4/strata-v41/PLAN.md) with pinned upstream/lab
+  evidence, source-backed decisions, ordered work packages and acceptance gates. It reuses the existing Windows
+  port and records known driver/compilation failures; no GPU tests or performance measurements were run.
+- Superseded the old Track B wait-for-llama.cpp prerequisite for this Strata route, retained the V4 0731
+  expert-parallel rejection, and made current RAM/hardware reconciliation the first gate. Historical hardware
+  entries and production configurations are unchanged.
+
 ## 2026-10-25
 - Review notes on @92es's startup-selected barrier exchange: the context check alone would select the barrier path on
   Windows and crash on the default L0 v2 adapter; the trailing upload waits are needed with one staging pair (safe to

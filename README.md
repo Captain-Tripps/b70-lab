@@ -26,6 +26,13 @@ Before 2026-09-30 the box had 2 B70s and a Ryzen CPU. Numbers from that period a
 **Start with [STATUS.md](STATUS.md)**: one table of every idea tried, with its gain or loss and whether it is
 live, staged, rejected or an open bug. [CHANGELOG.md](CHANGELOG.md) has the dated history.
 
+## DeepSeek V4.1 action plan
+
+[Native Windows Strata V4.1 port plan](deepseek-v4/strata-v41/PLAN.md) (2026-10-26): reuse the existing Windows/JIT
+foundation, qualify four-card transfers, port the separate DeepSeek engine, then validate and profile it.
+Status: **planned, not implemented or benchmarked**. The first gate reconciles current usable RAM with the
+historical hardware notes. Existing Qwen and DeepSeek V4 results remain unchanged.
+
 ## What is here
 
 | Folder | What | Status |
