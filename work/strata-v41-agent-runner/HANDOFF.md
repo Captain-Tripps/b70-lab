@@ -121,6 +121,12 @@ Taken 2026-10-27 to `D:\backups\strata-win-20261027-131251\` containing:
 `working-tree-real.patch` (CR-insensitive), `working-tree-raw.patch` (full fidelity),
 `untracked-files.tar.gz`, `strata-win-full.tar`, `SHA256SUMS`.
 
+**Status: taken and verified.** `strata-win-full.tar` = 2,110,720,000 B, 17,250 entries, 116 `.git/`
+entries, SHA256 `b9d01054...783c`. This is the restorable artifact.
+
+**Caveat (L-034): the `.patch` files do NOT re-apply cleanly.** Both fail `git apply --check`.
+Use them to *read* what changed; restore from the tar. Do not attempt patch-based restore.
+
 **Verify it before trusting it** — the job took ~10 min and the patches are large:
 
 ```bash

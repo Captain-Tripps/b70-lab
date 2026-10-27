@@ -1494,3 +1494,46 @@ not x16"). The suspicious `1` is NOT recorded as x1 either — both would be gue
 | Kernel-Power 41 / EventLog 6008 | 2 pairs, both on 2026-10-24 — **before** this boot |
 | VRAM free | 32520 / 32540 / 32541 / 32373 MiB of 32558 per card |
 | Device enumeration | 4x level_zero:gpu + 4x opencl:gpu, clean |
+
+## Session 6 — strata-win backup taken (read-only)
+
+### W-032 — Backup captured at `D:\backups\strata-win-20261027-131251\`
+
+| Artifact | Size | SHA256 |
+|---|---|---|
+| `strata-win-full.tar` | 2,110,720,000 B | `b9d01054577b55189b3e02c53adb26878531c4e81e5d993cf25f050a0644783c` |
+| `working-tree-raw.patch` | 75,826,448 B | `652e695a7b4980506c5368db90077bdf690078083000c2eefa3c6445df057e14` |
+| `working-tree-real.patch` | 20,225 B | `d761462db07a3f72a48643d2c088e555098625a4aaf75ee382c274fde0b230d9` |
+| `untracked-files.tar.gz` | 134,497 B | `d2fec5d29e49e37b2a0306f13a012211700545cc5c8bb5d25c889c8aaf83a584` |
+
+Plus `HEAD.txt`, `branch.txt`, `head-log.txt`, `remotes.txt`, `status-porcelain.txt`,
+`real-numstat.txt`, `real-stat.txt`, `untracked-list.txt`, `SHA256SUMS`, `listing.txt`.
+
+**Verified**: `strata-win-full.tar` contains **17,250 entries** and **116 `.git/` entries** —
+so it is a complete, restorable copy of the tree including history. This is the authoritative
+backup. The `rescue/working-tree.patch` gap from L-032 is now covered by real files.
+
+### L-034 — The CR-insensitive patch does NOT re-apply cleanly (use the tar instead)
+`git apply --check --ignore-whitespace working-tree-real.patch` fails on all 18 files
+(`patch does not apply`). `git apply --check working-tree-raw.patch` likewise.
+
+Cause is an inconsistency worth naming: `file` reports these worktree files as plain
+`ASCII text` with no CRLF terminators, and `git show HEAD:<file>` does too — yet the plain
+`git diff` produces 824,758/824,624 line pairs. So the "CRLF churn" is **not** simply CR-at-EOL
+in the working tree; the `--ignore-cr-at-eol` stat (18 files) is a useful *signal* of the real
+change set, but the resulting patch is **not a faithful replay artifact**.
+
+**Consequence**: do not treat either `.patch` as the restore mechanism. The 2.1 GB
+`strata-win-full.tar` is the backup that matters; the patches are for *reading* what changed.
+Restoring by patch would fail.
+
+### L-035 — Three self-inflicted process bugs, again
+Logged because they cost ~25 minutes and match patterns already in the ledger:
+1. `timeout 60 ssh gpu-box '...backup...'` killed the job at 60 s mid-patch. A 2 GB tar across the
+   WSL `/mnt/c` boundary needs minutes, not seconds. Budget the timeout for the *work*, not the
+   command's appearance.
+2. `pgrep -f backup-strata.sh` **matches the polling command's own command line**, so
+   "STILL_RUNNING" was reported for a job that had already died. Same family as L-017
+   (`tasklist | grep -c`). Exclude self: `ps -ef | grep 'bash /tmp/script.sh' | grep -v grep`.
+3. Nested quoting ate `$D` and `$1` repeatedly in `ssh '...'` payloads, silently producing paths
+   like `/working-tree-real.patch`. Hard-code absolute paths in one-shot ssh commands.
