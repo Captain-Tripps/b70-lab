@@ -318,3 +318,103 @@ Being explicit so nothing here is over-read:
    or the CUDA variants used instead.
 5. **The 2,020-marker calibration is from a *different* engine.** It proves the method's viability, not
    dsv41's cost.
+
+-
+
+## 12. First build attempt from the v0.2.7 base — 126/134 then 5 failures
+
+Worktree `D:\strata-dsv41-port`, JIT build (`-DSTRATA_SYCL_XE2_JIT=ON`), build dir `build-jit`.
+Configure succeeded (FetchContent cloned deps). Compilation reached **126/134 targets**, then failed with
+**26 errors across 5 files**.
+
+### Errors, complete list
+
+| File | Errors | Cause |
+|---|---:|---|
+| `sycl/src/program/generate.cpp` | 18 | `<windows.h>` macro clashes: `small` (`rpcndr.h`), plus `memmem` absent |
+| `sycl/src/core/pinned.dp.cpp` | 5 | CUDA runtime names (`cudaDeviceProp`, `cudaSuccess`, `cudaGetDevice`, `cudaGetLastError`) |
+| `sycl/src/core/gguf_expert_source.cpp` | 1 | `#include <unistd.h>` |
+| `sycl/src/prefill/prefill.cpp` | 1 | `mkdir` not in global namespace |
+| `sycl/src/kernels/cuda/verify_kernels.dp.cpp` | 1 | `expected expression` at :592 |
+
+Plus a **separate, unrelated** failure: **all ggml targets** died with
+
+```
+cl : Command line error D8021 : invalid numeric argument '/Wno-unused-parameter'
+```
+
+That is not a source problem. `cl` (MSVC) is being handed a GCC-style warning flag, which means the ggml
+sub-build is selecting the MSVC compiler path while receiving GNU flags. It kills 6 targets
+(`ggml.c`, `ggml-cpu.c`, `ggml-alloc.c`, `ggml-quants.c`, `arch/x86/quants.c`, `ggml-cpu/quants.c`).
+
+**This matters more than it looks:** the deployed `%USERPROFILE%\strata-win` tree builds the same ggml
+cleanly, so the flag difference comes from the v0.2.7 CMakeLists (467 lines vs 440 in v0.2.6), not from the
+toolchain. It must be found and fixed before anything else, or the link can never complete.
+
+### These are the same class the 18 Windows fixes address
+
+Confirmed by inspection: `generate.cpp:6255` uses `const int64_t small = old_rule();` — `small` is a macro
+from `rpcndr.h`. The lab's `strata_win_undefs.h` exists precisely for this:
+
+```c
+#ifdef _WIN32
+#undef small
+#undef OUT
+#undef IN
+#endif
+```
+
+and `memmem` needs the fallback the 18-fix set provides. So the port inherits the *problem set* even though
+it cannot inherit the *patches* — those target `win-port` files that v0.2.7 has moved a long way from.
+
+### The 18-fix patch does NOT apply to v0.2.7
+
+`git apply --check` (literal paths, verified):
+
+```
+error: patch failed: sycl/CMakeLists.txt:50
+error: sycl/CMakeLists.txt: patch does not apply
+error: sycl/include/strata/core/ep_mem.hpp: No such file or directory
+error: patch failed: sycl/src/program/generate.cpp:1685
+error: sycl/src/program/generate.cpp: patch does not apply
+```
+
+### Why: `win-port` is not on the v0.2.x line at all
+
+| Ref | `sycl/include/strata/core/ep_mem.hpp` | dsv41 files |
+|---|---|---|
+| `win-port` HEAD (`1c360526`) | **1** | 0 |
+| `origin/main` | 0 | 0 |
+| `v0.2.6` | **0** | 131 |
+| `v0.2.7` | **0** | 138 |
+| `upstream/main` | 0 | 138 |
+
+`ep_mem.hpp` was introduced by commit `53402da22` ("Night base: Codex S148 working tree") **on the win-port
+line**. It does not exist upstream in any v0.2.x tag. Meanwhile v0.2.7 has added upstream's own
+`peer_experts.hpp`, `remote_experts.hpp`, `exchange_storage.hpp`, `dma_batch.hpp` — a different, newer
+take on the same problem.
+
+**Merge base of `win-port` and `v0.2.7` is `296b59d2` (`origin/main`).** Since then: **2,389 commits** on the
+v0.2.7 side, **26** on the win-port side.
+
+### Consequence for the plan
+
+The 18 fixes are **not** a patch to apply to v0.2.7. They are a **catalogue of the problems Windows presents**
+to this engine family, to be re-solved against v0.2.7's newer code:
+
+| Fix | v0.2.7 status |
+|---|---|
+| `strata_win_undefs.h` (`small`/`IN`/`OUT`) | **transfers unchanged** — pure header, no upstream dependency |
+| `memmem` fallback | transfers unchanged |
+| positioned reads (`ReadFile`), `unistd.h`/`mkdir` shims | transfers, may need new call sites |
+| shared-context expert parallel (`ep_mem.hpp`) | **superseded** — v0.2.7 has `peer_experts.hpp` / `exchange_storage.hpp`. Evaluate upstream's version first; do not re-port the 18-fix design. |
+| `STRATA_SYCL_XE2_JIT` define | check whether v0.2.7's CMakeLists already has it |
+| JIT-vs-AOT int8 correctness | **transfers as a warning**, must be re-measured on v0.2.7 |
+
+This is a genuine finding, not a setback: it means the port should **prefer upstream's newer expert-parallel
+machinery over the lab's older patch**, which is less work and better supported.
+
+### Status of this build
+
+`BUILD_EXIT=1`. Not a regression — this is the expected first-build state for a tree that has never been
+compiled on Windows. Recorded so the next session does not mistake it for a toolchain defect.
