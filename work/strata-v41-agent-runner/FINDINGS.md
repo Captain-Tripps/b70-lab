@@ -1406,3 +1406,91 @@ file and call that instead — same lesson as session 3, still catching me.
   Needs `dxdiag` or vendor tooling. Genuinely unresolved, not skipped for convenience.
 - **Strata checkout re-confirmation** and **1c360526 full commit**: needs `git fetch origin`
   in the strata tree; not re-asserted read-only here, so left OPEN rather than claimed.
+
+## Session 5 — source provenance + two corrections (read-only)
+
+### W-030 — The strata tree's "3043 modified files" is mostly CRLF churn, not real edits
+`git status --porcelain` in `%USERPROFILE%\strata-win` reports **3054** entries. `git diff --stat`
+reports 3043 files changed with 824,758 insertions / 824,624 deletions — a near-symmetric pair that
+is the signature of line-ending conversion, not code changes.
+
+```
+git diff --stat                      -> 3043 files, 824758 ins / 824624 del
+git diff --ignore-cr-at-eol --stat   ->   18 files,    157 ins /     23 del
+```
+
+**Real change set (18 files):**
+```
+34 |  8 | sycl/CMakeLists.txt
+24 |  1 | sycl/include/dpct/device.hpp
+ 1 |  0 | sycl/include/dpct/kernel.hpp
+ 1 |  0 | sycl/include/dpct/memory.hpp
+21 |  1 | sycl/include/strata/core/ep_mem.hpp
+ 1 |  0 | sycl/src/core/copy_queue.cpp
+ 1 |  0 | sycl/src/core/device.dp.cpp
+ 1 |  0 | sycl/src/core/expert_source.cpp
+27 |  0 | sycl/src/core/gguf_expert_source.cpp
+ 3 | 13 | sycl/src/core/pinned.dp.cpp
+ 1 |  0 | sycl/src/kernels/cuda/verify_kernels.dp.cpp
+ 4 |  0 | sycl/src/kernels/iq_multi_parity.cpp
+ 3 |  0 | sycl/src/kernels/kv_hybrid_parity.cpp
+ 3 |  0 | sycl/src/kernels/qsa_prompt_attn_parity.cpp
+ 4 |  0 | sycl/src/kernels/rope_parity.cpp
+ 4 |  0 | sycl/src/kernels/sampler_parity.cpp
+ 1 |  0 | sycl/src/platform/direct_file.cpp
+23 |  0 | sycl/src/program/generate.cpp
+```
+`core.autocrlf` is **unset**. Practical consequence: any diff review, patch export or
+"what changed here" question must use `--ignore-cr-at-eol`, or the 18 real files are invisible
+inside 3043 phantom ones. A patch exported without that flag would be 824k lines of noise.
+
+### L-032 — `rescue/working-tree.patch` DOES NOT EXIST. The "only backup" belief was false
+A prior session recorded that `rescue/working-tree.patch` was the sole backup of the tree's
+uncommitted work, and on that basis forbade resetting the tree. Verified today:
+
+```
+test -d rescue              -> NO
+find . -name working-tree.patch -> (no results)
+```
+
+There is **no rescue directory and no patch file**. The protection instruction in the earlier
+notes was therefore resting on a file that isn't there. Two consequences:
+
+1. The tree's 18 genuinely-modified files have **no known backup**. Do not reset, `stash -u`,
+   `clean -fd`, or switch branches in `strata-win` until a real backup exists.
+2. Do not repeat the claim that a patch protects it. If a backup is wanted, take one first:
+   `git diff --ignore-cr-at-eol > <somewhere-safe>` plus a tar of untracked files.
+
+### W-031 — Source provenance pinned
+| Item | Value |
+|---|---|
+| tree | `%USERPROFILE%\strata-win` |
+| HEAD | `1c360526bce659f45cec60b2e36c46b7770c5bf1` |
+| date | 2026-10-16 13:49:51 +0000 |
+| subject | `night: KREG BF16 GEMVs + indexer k/q one launch (agent mmvq, STRATA_NIGHT_BF16=1), MMVQ2 CAP_PCT knob` |
+| branch | `win-port` |
+| origin | `https://github.com/hotschmoe/Strata.git` |
+| upstream | `https://github.com/Niko1221/Strata.git` |
+
+Note the fork topology: `origin` is hotschmoe/Strata, `upstream` is Niko1221/Strata. The plan's
+"pin v0.2.6 and compare" step needs to know which remote actually carries that tag — not yet done.
+
+### L-033 — PCIe link telemetry cannot be closed with dxdiag
+`dxdiag /t` output (241,713 bytes) contains **no** link generation/width fields for the adapters.
+Combined with the earlier `DEVPKEY_PciDevice_*` result (all four cards report Max==Current==1, and
+the parent root ports expose no link keys at all), Windows-side telemetry is exhausted. Closing
+this requires either vendor tooling (Intel Arc Control) or an empirical bandwidth measurement.
+
+Recorded honestly as **UNKNOWN**, per PLAN.md:133 ("record unavailable link telemetry as unknown,
+not x16"). The suspicious `1` is NOT recorded as x1 either — both would be guesses.
+
+### GPU health snapshot (for the restart decision)
+| Signal | Result |
+|---|---|
+| uptime | 50.01 h (last boot 2026-10-25 11:08:30) |
+| TDR / display-driver reset (Event 4101) | **ZERO in 7 days** |
+| GPU/display device errors (7d) | **none** |
+| WHEA-Logger Id 22 | 8 in 7d, but strictly **one per boot, ~23 s after boot**; none at runtime |
+| Kernel-Power 41 / EventLog 6008 | 2 pairs, both on 2026-10-24 — **before** this boot |
+| VRAM free | 32520 / 32540 / 32541 / 32373 MiB of 32558 per card |
+| Device enumeration | 4x level_zero:gpu + 4x opencl:gpu, clean |
