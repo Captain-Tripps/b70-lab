@@ -444,3 +444,116 @@ matters (from §10d: plain decode 18.09 at 1.00 tok/round, spec 4 at 2.83 tok/ro
 
 So 97.6 needs roughly **0.95 acceptance** — near-perfect drafting. That is a different class of draft
 model than what is installed, not a tuning difference.
+
+-
+
+## 12. The official Intel docs, and `--spec-min-p` (the config we were missing)
+
+The prompt supplied upstream's own Intel documentation. It was fetched and read
+(`Niko1221/Strata`, `docs/INTEL.md`). Two things came out of it.
+
+### 12a. We had been running the wrong `--spec-min-p`
+
+Every measurement in §9-§11 used `--spec-min-p 0`. **Upstream's own setup writes `0.5`**
+(`INTEL.md`: "the setup default (4, 0.5) stays"). Testing it:
+
+| Prompt | `--spec-min-p` | tok/s | Accept | Drafts |
+|---|---:|---:|---:|---:|
+| code | 0 | **50.80** | 0.636 | 42 of 66 |
+| code | 0.5 | 49.02 | 0.719 | 41 of 57 |
+| code | 0.9 | 48.99 | 0.796 | 39 of 49 |
+| prose | 0 | 31.01 | 0.234 | 26 of 111 |
+| prose | **0.5** | **36.73** | 0.591 | 26 of 44 |
+| prose | 0.9 | 32.90 | 0.810 | 17 of 21 |
+
+**`--spec-min-p` is prompt-dependent, and it matters most where acceptance is worst.**
+
+- **Prose: +18%** (31.01 -> 36.73). Acceptance 0.234 -> 0.591, drafts offered 111 -> 44. At min-p 0
+  the drafter floods the window with 111 low-confidence drafts and only a quarter survive; at 0.5 it
+  offers 44 and most land. This is the single largest engine-side win found all session.
+- **Code: -3.5%** (50.80 -> 49.02). Acceptance rises (0.636 -> 0.719) but draft count falls faster
+  (66 -> 57), so tokens/round drops. Code was already drafting well at min-p 0.
+
+Note the mechanism: raising min-p always *raises* acceptance, and that is seductive — but throughput
+follows `acceptance x tokens_per_round`, and min-p trades the second term for the first. On a prompt
+whose acceptance is already good, that trade loses. This is why the doc's single 0.5 default is a
+reasonable single setting but not optimal for either end.
+
+**Practical: `0.5` for prose/chat, `0` for code.** Or ~0.2-0.3 as a compromise if one config must
+serve both.
+
+### 12b. The docs' own B70 numbers confirm our diagnosis
+
+`INTEL.md` measured on a single Arc Pro B70 32 GB, IQ3_S, `--spec 4 --spec-min-p 0.5`:
+
+| Workload | Theirs (1 card) | Ours (2 cards) |
+|---|---:|---:|
+| 200-token story, 66% accepted | 30.5 | **36.73** (0.591) |
+| 200-token code, 90% accepted | 40.8 | **50.80** (0.636) |
+
+**We are ahead of upstream's published single-card numbers on both**, and our two-card scaling
+(2.6x) is consistent with their single-card figures reaching ~97 on two cards *if* acceptance were
+90%. Their code run hit 90% acceptance; ours hits 63.6% on a different prompt.
+
+So the 97.6 gap is confirmed a third time, from upstream's own data: **it is acceptance, and
+acceptance depends on how predictable the text is.** Our 55 is not a port defect.
+
+Also from the docs, not yet tested: `--spec 6` against `--spec 4` at `--spec-min-p 0.5` is "+6.5% on
+code and -1.5% on prose".
+
+### 12c. `--spec-min-p` supersedes part of §9-§11
+
+The §9/§10/§11 sweeps all ran at min-p 0, so their **prose** figures understate this box by ~18%.
+Their **code** figures stand (min-p 0 was correct there). The best configuration is now:
+
+| Workload | Best flags | tok/s |
+|---|---|---:|
+| code | `--spec 4 --spec-min-p 0 --suffix-draft 0 --vram-reserve-mib 1024` | **50.80** |
+| prose | `--spec 4 --spec-min-p 0.5 --suffix-draft 0 --vram-reserve-mib 1024` | **36.73** |
+
+-
+
+## 13. DSpark — what it is, and why it does not help Qwen
+
+Researched because the prompt suggested it. Findings, from upstream docs and the model card ecosystem:
+
+**DSpark is DeepSeek's semi-autoregressive drafter, not a Qwen drafter.** It is a ~14B draft model
+(a parallel backbone plus a lightweight sequential module, so a whole block is drafted per forward
+pass) shipped *inside* the DeepSeek V4.1 checkpoint as `mtp.*` tensors with
+`dspark_block_size=5`, 128 draft experts / top-3, target layers 37-39. DeepSeek reports 57-85% faster
+inference, and it is lossless (the target verifies every drafted token).
+
+### 13a. It is probably the missing "8 GB drafter"
+
+The session-10 handoff recorded the 1017 pack as *"No drafter (needs 8 GB download)"*. The DSpark
+drafter is **8.04 GiB**, converted from DeepSeek's checkpoint with `gguf-tools/deepseek41_dspark.py`.
+Those are almost certainly the same artifact. **That download is the DSpark drafter**, and it is the
+prerequisite for any speculation work on 1017 — not just a nice-to-have.
+
+Candidate sources seen: `ursuciprian/DeepSeek-V4.1-Flash-1017-DSpark-D1` (HF), and the
+`MiaAI-Lab` / `0xBakeer` / `dwarfstar.sh` write-ups. None verified or downloaded yet.
+
+### 13b. It does not run on Intel, and upstream says so plainly
+
+`INTEL.md`, first section, verbatim:
+
+> **"DeepSeek V4.1-Flash does not run on Intel."**
+
+DSpark's published support is **Metal, CUDA and ROCm** — not SYCL/Level Zero. So DSpark cannot be
+used for Qwen (wrong model family) and cannot be used for dsv41 on this box unless the SYCL port
+grows a DSpark implementation, which nobody has written.
+
+This is a direct constraint on the dsv41 track:
+- DSpark is not a drafter we can adopt for Qwen. Different architecture, wrong vocab.
+- For dsv41 on B70, DSpark is *the* intended drafter and it has no SYCL path. That work would be
+  original porting, not configuration.
+
+### 13c. What this means for the two tracks
+
+| Track | Drafter situation |
+|---|---|
+| **Qwen** (today) | Stuck at ~50 (code) / ~37 (prose). The MTP layer is what it is; no better Qwen drafter located. |
+| **dsv41 on B70** | DSpark is the right drafter and is **8 GB, CUDA/Metal/ROCm only**. Porting it to SYCL is a real project. |
+
+Nothing found that improves Qwen today. DSpark is the correct answer *if* dsv41 runs on non-Intel
+hardware, which for this box it does not.
