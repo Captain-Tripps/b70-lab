@@ -485,3 +485,75 @@ and the binary starts and reports its CLI.
 STEP-003 — porting `src/dsv41/` (16,428 lines, 93 kernels) into `sycl/src/dsv41/` — has not started.
 The dpct pilot (§10) shows ~85% of those kernels convert automatically; the build fixes above are the
 substrate that port will land on, and they are now known rather than guessed.
+
+-
+
+## 14. Qwen smoke test on the new v0.2.7 binary — RUNS, but 7.5x slower (2026-10-27)
+
+First functional test of the freshly built `strata.exe` against a real model.
+
+### It works
+
+```
+strata generate: session is up (engine 0.1.52)
+strata generate: GPU 0: Intel(R) Arc(TM) Pro B70 Graphics, compute capability 20.2
+strata generate: profile fill: 20.15 GiB in 21.1 s (1.02 GB/s, pipelined)
+strata generate: pre-filled 10596 of 10596 slots from the profile in 21.1 s; slot 0 verified
+strata generate: R4 hit path ON - resident experts are computed on the GPU
+decode     32 tokens in 2470.1 ms  ->  12.95 tok/s
+prefill     7 tokens in 3753.0 ms  ->   1.87 tok/s  (time to first token 20003.5 ms)
+EXIT=0
+```
+
+The engine loads the 79 GB IQ3_S pack, builds the expert cache (10,618 slots / 20.15 GiB VRAM),
+verifies slot 0, and generates. No crashes. **The build is functionally sound, not just compiling.**
+
+### But it is far slower than the lab's known-good run
+
+| Setup | Cards | Decode | Prefill |
+|---|---:|---:|---:|
+| Lab, `win-r3-jit`, IQ3_S, int8 KV, 1x200k | **2** | **97.6 tok/s** | **1,415 tok/s @ 33.6k** |
+| This run, v0.2.7 JIT, IQ3_S, int8 KV, 8k | **1** | **12.95 tok/s** | 1.87 tok/s @ 7 tokens |
+
+### Why — and it is not a regression in upstream's code
+
+The lab config used `--expert-parallel-device 1` to put the *second* card to work. That flag no
+longer exists in v0.2.7; it was replaced by `--peer-device`. And `--peer-device` **is a stub in the
+SYCL port**:
+
+```
+strata generate: --peer-device: the second-GPU expert tier is not ported to SYCL yet
+EXIT=1
+```
+
+`sycl/CMakeLists.txt:280` says so directly: `remote_expert_opt_stub.cpp ... (a stub in the port: no
+second GPU tier yet)`.
+
+So this run used **one** B70 of the four available. 12.95 tok/s single-card is plausible; it is not
+evidence that v0.2.7 is slower than the deployed tree.
+
+### The caveats on these numbers
+
+- **7-token prompt.** Prefill `1.87 tok/s` is one chunk of 7 tokens — far too small to amortise
+  chunk overhead, and not comparable to the lab's 1,415 tok/s at 33.6k. Do not read it as a
+  regression.
+- **TTFT 20.0 s** includes engine start, the 21.1 s profile fill, and PLE setup. Not a token metric.
+- **One sample, no variance.** Per W-042, single samples on this box are unreliable. Treat as
+  indicative only.
+- `--expert-parallel-device` → `--peer-device` is a **semantic change**, not a rename: upstream's
+  peer is an adaptive expert-cache *tier*, not the symmetric expert parallelism the lab measured at
+  97.6 tok/s. Whether upstream's newer design reaches the same throughput is unmeasured.
+
+### Consequence for the port plan
+
+Getting Qwen "super fast" on four cards needs the multi-GPU expert tier, and in the SYCL port that
+tier does not exist. Two options, for the owner:
+
+1. **Single-card only** — accept ~13 tok/s, or tune context/KV/cache for one card. Cheap, but nowhere
+   near the lab's 97.6.
+2. **Port the peer/expert tier to SYCL** — that is new work beyond STEP-003, in `sycl/src/core/`
+   (`peer_experts.cpp`, `remote_experts.cpp`), not in `dsv41/`. The lab's `ep_mem.hpp` /
+   shared-context design is directly relevant prior art, but it targets the win-port line, not v0.2.7.
+
+**This does not block the dsv41 port.** It does mean the dsv41 engine should not expect a working
+multi-GPU tier to be inherited from the SYCL port — `PLAN.md`'s STEP-004 four-card split assumes one.
