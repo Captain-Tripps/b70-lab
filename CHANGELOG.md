@@ -3,6 +3,16 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-28
+- DeepSeek V4.1 Flash 1017 on the llama.cpp SYCL fork: first real numbers. Best 2.46 tok/s decode / 12.7 prompt read
+  (`-ncmoe 24 -t 46` plus one `EmptyWorkingSet` after load); CPU-only 1.65, so the CPU expert layers are the
+  bottleneck. [mirror-probe](work/strata-v41-agent-runner/mirror-probe/README.md).
+- Found why Windows holds ~1 GB of host RAM per GB on the GPUs: llama.cpp's Windows `unmap_fragment()` is a no-op;
+  the driver only reserves commit (standalone Level Zero probe). RAM watchdog made commit-aware.
+- Strata `--adapt-every 0`: +49% in CLI `generate` (v0.2.7) but served decode on the lab build drops 99-104 -> 38-40;
+  served config unchanged. RemoteExperts spin/host-metadata patch: no gain.
+  [STRATA-ADAPT-TIER](work/strata-v41-agent-runner/STRATA-ADAPT-TIER.md).
+
 ## 2026-10-26
 - Added STEP-000 to qualify DeepSeek V4.1 Flash 1017 through OpenRouter/OpenClaw with a native Windows runner,
   CPU-only lifecycle mocks and session resume. Added a copyable [agent starter prompt](deepseek-v4/strata-v41/OPENCLAW-START.md).
