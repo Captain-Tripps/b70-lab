@@ -1,0 +1,39 @@
+﻿=== deployed binary hashes + oneMKL identity ===
+captured_at_local: 2026-10-27 12:51:10 -05:00
+
+--- oneMKL ---
+mkl_dir: 2025.1
+mkl_dir: 2026.0
+mkl_dir: latest
+
+--- hashes of deployed binaries ---
+path: C:\Windows\System32\ze_loader.dll
+  bytes: 813864 | filever: 1.32.0 | sha256: BC43DC7C1F30814ADC01340390EE251868A22944A87EB237140F7B8799D45172
+path: C:\Program Files (x86)\Intel\oneAPI\compiler\2026.0\bin\sycl8.dll | ABSENT
+path: C:\Program Files (x86)\Intel\oneAPI\compiler\2026.0\bin\ur_loader.dll
+  bytes: 1530216 | filever: 0.12.0 | sha256: CA884A229A7896F1D717AE574768F7D8815AD00868F53E153863BBB37FC071C5
+path: C:\Program Files (x86)\Intel\oneAPI\2026.0\bin\ur_loader.dll
+  bytes: 0 | filever: 0.12.0 | sha256: CA884A229A7896F1D717AE574768F7D8815AD00868F53E153863BBB37FC071C5
+path: C:\Program Files (x86)\Intel\oneAPI\2026.0\bin\sycl8.dll | ABSENT
+
+--- oneMKL runtime dlls ---
+mkl: C:\Program Files (x86)\Intel\oneAPI\2025.1\bin\mkl_rt.2.dll
+  bytes: 0 | filever: 2025.1.1 | sha256: 698C867E771135911880FA3BA89BD02555607288DEE82EC012230BE1B30DE806
+mkl: C:\Program Files (x86)\Intel\oneAPI\2026.0\bin\mkl_rt.3.dll
+  bytes: 0 | filever: 2026.0.0 | sha256: 6A312EB1C4A92447E8D4C11D07420678BD07E0666C279FC621A3A6B03DB527D8
+mkl: C:\Program Files (x86)\Intel\oneAPI\mkl\2025.1\bin\mkl_rt.2.dll
+  bytes: 27561056 | filever: 2025.1.1 | sha256: 698C867E771135911880FA3BA89BD02555607288DEE82EC012230BE1B30DE806
+mkl: C:\Program Files (x86)\Intel\oneAPI\mkl\2026.0\bin\mkl_rt.3.dll
+  bytes: 27890848 | filever: 2026.0.0 | sha256: 6A312EB1C4A92447E8D4C11D07420678BD07E0666C279FC621A3A6B03DB527D8
+
+--- oneMKL version header ---
+header: C:\Program Files (x86)\Intel\oneAPI\mkl\2025.1\include\mkl_version.h
+  #define __INTEL_MKL__          2025
+  #define __INTEL_MKL_MINOR__    0
+  #define __INTEL_MKL_UPDATE__   1
+  #define INTEL_MKL_VERSION      20250100
+header: C:\Program Files (x86)\Intel\oneAPI\mkl\2026.0\include\mkl_version.h
+  #define __INTEL_MKL__          2026
+  #define __INTEL_MKL_MINOR__    0
+  #define __INTEL_MKL_UPDATE__   0
+  #define INTEL_MKL_VERSION      20260000

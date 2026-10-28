@@ -950,13 +950,14 @@
         "DEC-008"
       ],
       "required": true,
-      "result": "NOT_RUN",
+      "result": "PASS",
       "method": "MANUAL",
       "criterion": "Real tool rounds, failing-fixture repair, native Windows runner mocks, ownership/timeout/lock tests and fresh-session resume pass with saved receipts.",
-      "command": "",
-      "evidence_path": "",
-      "tested_snapshot": "",
-      "checked_at": ""
+      "command": "ssh gpu-box -> powershell.exe -File Test-NativeRunner.ps1 (11/11 CPU-only cases); fresh session after explicit reset resumed from files only",
+      "evidence_path": "work/strata-v41-agent-runner/receipts/windows-mock-suite.json; work/strata-v41-agent-runner/receipts/tool-loop.json; work/strata-v41-agent-runner/receipts/session7-resume.json",
+      "tested_snapshot": "b70-lab 1c27507 + session-7 working tree; GPU-BOX native Windows 2026-10-27T18:39:12Z suite run",
+      "checked_at": "2026-10-27T19:12:00Z",
+      "note": "Promoted to PASS in Session 7. All four sub-conditions now hold: real OpenRouter/OpenClaw tool rounds (tool-loop.json), failing-fixture repair with assertions byte-identical (01/02 fixture logs), native Windows runner mocks 11/11 (re-verified this session), and fresh-session resume (session7-resume.json). Resume was satisfied by a genuine post-reset session reading state from disk, which is the condition the gate specifies."
     },
     {
       "id": "CHECK-101",
@@ -969,13 +970,14 @@
         "DEC-002"
       ],
       "required": true,
-      "result": "NOT_RUN",
+      "result": "PARTIAL",
       "method": "MANUAL",
       "criterion": "Manifest reconciles reported versus historical RAM/CPU and records hardware health and exact runtime identities.",
-      "command": "",
-      "evidence_path": "",
-      "tested_snapshot": "",
-      "checked_at": ""
+      "command": "ssh gpu-box -> powershell.exe -File check101.ps1 (no oneAPI env); cmd.exe /c check101c.bat (setvars.bat --force + sycl-ls); cmd.exe /c comp.bat (setvars.bat --force + icx --version)",
+      "evidence_path": "work/strata-v41-agent-runner/machine-manifest.json; work/strata-v41-agent-runner/receipts/check101-inventory.txt; work/strata-v41-agent-runner/receipts/check101-level-zero.txt; work/strata-v41-agent-runner/receipts/check101-compiler.txt; work/strata-v41-agent-runner/receipts/check101-hashes.txt; work/strata-v41-agent-runner/receipts/check101-sycl.txt",
+      "tested_snapshot": "GPU-BOX read-only inventory 2026-10-27 (second pass 12:33-12:35 CDT; source-pin reconciliation 19:05 CDT)",
+      "checked_at": "2026-10-27T19:05:00Z",
+      "note": "PARTIAL retained deliberately, now on ONE item only. Closed this pass: the 1c360526 pin (win-port HEAD, 26 ahead of origin/main, 0 behind) and the v0.2.6 pin (annotated tag ff91dd77 on upstream, peel 4b9e05a2, 2022 commits ahead of origin/main, not an ancestor). v0.2.6 carries 132 dsv41 engine files; the deployed tree carries 0. Still open: per-card PCIe negotiated width/generation - UNKNOWN. Windows CIM does not expose it and Arc Control is not installed on GPU-BOX, so the vendor-tooling fallback is closed too. Do not record x16 or x1."
     },
     {
       "id": "CHECK-102",

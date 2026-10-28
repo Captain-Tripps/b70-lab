@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "step": "STEP-000/STEP-001",
+  "check": "CHECK-100",
+  "kind": "fresh-session-resume",
+  "satisfied": true,
+  "recorded_at": "2026-10-27T19:12:00Z",
+  "session_label": "Session 7 (fresh session after explicit reset)",
+  "preconditions": {
+    "started_from": "files on disk only; prior session transcript was reset out of context",
+    "files_read_in_order": [
+      "work/strata-v41-agent-runner/HANDOFF.md",
+      "deepseek-v4/strata-v41/PLAN.md",
+      "work/strata-v41-agent-runner/TASK-STATE.json",
+      "work/strata-v41-agent-runner/FINDINGS.md (incl. SESSION 3 - ROUTE DIVERGENCE)",
+      "deepseek-v4/strata-v41/OPENCLAW-START.md"
+    ],
+    "why_this_counts": "CHECK-100 requires that task state be dense enough for a new session to resume without repeating completed actions. A reread inside the same session would not prove that."
+  },
+  "what_the_session_did": [
+    "Verified the 2.1 GB backup with sha256sum -c: 4/4 OK (27.6 s).",
+    "Verified the full tar is restorable: 17,250 entries, 116 .git/ entries, real .git/objects/pack/*.pack and packed-refs present.",
+    "Verified the untracked tarball carries the 11 untracked entries including sycl/include/strata_win_undefs.h.",
+    "Re-verified three receipt hashes against machine-manifest.json: inventory f5bc30c0..., level-zero aa8dfa30..., compiler 64ef1d2e... all match.",
+    "Re-deployed bench/runner from this repo and re-ran the CPU-only suite on native Windows (GPU-BOX, PowerShell 5.1.26100.9711): 11/11 PASS.",
+    "Verified production state: llama-swap Running, listening on <gpu-host-ip>:8080 only, /v1/models = 9 models with 0 v41 entries, config SHA256 38a82777...ecda with 0 v41 refs.",
+    "Resolved the open v0.2.6 pin with git fetch origin --tags and ls-remote against both remotes.",
+    "Disproved the handoff's own L-034 claim by replaying the 18-file patch onto a clean HEAD export: 18/18 byte-identical.",
+    "Measured the 3043-entry dirty set: 3025 pure-CRLF phantoms + 18 real changes + 11 untracked."
+  ],
+  "corrections_made_to_handoff": [
+    {
+      "id": "L-034",
+      "handoff_claim": "Both .patch files fail git apply --check and cannot replay; restore only from the tar.",
+      "corrected": "The patch replays cleanly. The earlier test applied a FORWARD patch in place inside the already-modified worktree, which must fail. On a clean HEAD export both working-tree-real.patch and rescue/working-tree.patch apply with exit 0 and reproduce all 18 files byte-identically. The same session's successful reverse-direction check was the tell.",
+      "evidence": "TASK-STATE.json -> patch_replay; FINDINGS.md W-033"
+    },
+    {
+      "id": "dirty-count",
+      "handoff_claim": "3043 modified files, of which 18 are real.",
+      "corrected": "Confirmed and quantified per file: exactly 3025 files have CR_count == line_count (whole-file CRLF), 18 do not. Also HEAD blobs contain zero CR bytes while worktree copies carry CR on every line, so the phantom set is a checkout-wide line-ending conversion, not per-file editing.",
+      "operational_warning": "git diff --ignore-cr-at-eol --name-only returns 3043 files while --ignore-cr-at-eol --stat returns 18. Driving a loop from --name-only walks 3043 files and looks like a hang.",
+      "evidence": "FINDINGS.md W-034"
+    }
+  ],
+  "repeat_actions_declared": [
+    {
+      "action": "re-ran the 11/11 CPU-only runner suite on GPU-BOX",
+      "why": "verification that the deployed copy matches this repo's bench/runner, not new work",
+      "outcome": "identical result, no new state"
+    }
+  ],
+  "gate_effect": "CHECK-100 PARTIAL -> PASS. CHECK-101 remains PARTIAL on PCIe telemetry only; its source-pin item is now closed.",
+  "not_done_deliberately": [
+    "No STEP-002 work: no builds, no four-device probes, no GPU workload.",
+    "No checkout or merge of v0.2.6; inspection was via git show/ls-tree on the existing local object store.",
+    "No production service change; llama-swap read-only.",
+    "No reset, stash, or clean in strata-win."
+  ],
+  "boundaries_respected": [
+    "no GPU workload",
+    "no model download",
+    "no production service change",
+    "no driver/BIOS change",
+    "no merge or force-push",
+    "no secrets or raw host logs committed"
+  ]
+}

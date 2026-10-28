@@ -1,0 +1,29 @@
+ M sycl/CMakeLists.txt
+ M sycl/include/dpct/device.hpp
+ M sycl/include/dpct/kernel.hpp
+ M sycl/include/dpct/memory.hpp
+ M sycl/include/strata/core/ep_mem.hpp
+ M sycl/src/core/copy_queue.cpp
+ M sycl/src/core/device.dp.cpp
+ M sycl/src/core/expert_source.cpp
+ M sycl/src/core/gguf_expert_source.cpp
+ M sycl/src/core/pinned.dp.cpp
+ M sycl/src/kernels/cuda/verify_kernels.dp.cpp
+ M sycl/src/kernels/iq_multi_parity.cpp
+ M sycl/src/kernels/kv_hybrid_parity.cpp
+ M sycl/src/kernels/qsa_prompt_attn_parity.cpp
+ M sycl/src/kernels/rope_parity.cpp
+ M sycl/src/kernels/sampler_parity.cpp
+ M sycl/src/platform/direct_file.cpp
+ M sycl/src/program/generate.cpp
+?? build-aot2.cmd
+?? build-jit.cmd
+?? build-jitx.cmd
+?? build-parity.cmd
+?? build-vision.cmd
+?? build-win.cmd
+?? strata-stall-17212.dmp
+?? strata-stall-18284.dmp
+?? strata-stall-26476.dmp
+?? strata-stall-29476.dmp
+?? sycl/include/strata_win_undefs.h

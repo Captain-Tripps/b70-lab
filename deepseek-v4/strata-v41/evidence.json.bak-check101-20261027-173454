@@ -1,0 +1,1125 @@
+{
+  "schema_version": 1,
+  "run_id": "strata-v41",
+  "intent": "research-only",
+  "scope": {
+    "goal": "An actionable, evidence-backed native Windows Strata DeepSeek V4.1 port plan for the user's four B70s.",
+    "constraints": [
+      "Windows 11 Pro target; EPYC/ROMED8; reported 128 GB host RAM and 2 TB NVMe.",
+      "Planning-only change; preserve production and historical lab results.",
+      "Pin requested Strata v0.2.6; reuse existing lab foundation after source reconciliation."
+    ],
+    "non_goals": [
+      "Implementing/running the port in this change.",
+      "Buying hardware or migrating the OS.",
+      "Guaranteeing throughput before hardware measurements."
+    ]
+  },
+  "coverage": {
+    "depth": "default",
+    "reference_exception": "",
+    "rejection_note": "Reject full FP16 expansion and treating CUDA translation as proof; preserve the historical V4 expert-only rejection.",
+    "limitations": [
+      "No current hardware access or GPU test in this task.",
+      "Current RAM/driver/PCIe state and old local fork changes require STEP-001.",
+      "A supported-backend same-pack reference must be obtained before CHECK-103.",
+      "Exact OpenClaw/provider integration and task-specific coding ability are untested; STEP-000 qualifies the deployed route."
+    ]
+  },
+  "questions": [
+    {
+      "id": "Q-001",
+      "question": "Is Windows portability new work or reusable lab work?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": [
+        "EV-003",
+        "EV-004"
+      ],
+      "resolution": "Reuse the existing Windows Qwen port and DeepSeek host OS code; new work is V4.1 GPU execution and adaptation."
+    },
+    {
+      "id": "Q-002",
+      "question": "Which memory tier and initial multi-GPU strategy should the plan target?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": [
+        "EV-002",
+        "EV-006",
+        "EV-009"
+      ],
+      "resolution": "2.00-bit, 8K, layer split plus CPU overflow; actual budgets are a hardware execution gate."
+    },
+    {
+      "id": "Q-003",
+      "question": "What are today's usable RAM, driver/runtime versions and four negotiated PCIe links?",
+      "critical": false,
+      "status": "OPEN",
+      "evidence_ids": [
+        "EV-005"
+      ],
+      "resolution": "STEP-001 must resolve before heavy tests; not required to publish this research-only plan."
+    },
+    {
+      "id": "Q-004",
+      "question": "Where will same-pack CUDA/HIP reference logits and the deployed Windows patch history come from?",
+      "critical": false,
+      "status": "OPEN",
+      "evidence_ids": [
+        "EV-003",
+        "EV-004"
+      ],
+      "resolution": "Inventory in STEP-001; missing reference evidence blocks CHECK-103, not the plan document."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Turn the Strata DeepSeek analysis into a repository action plan for the user's four B70s.",
+      "origin": "USER_REQUIREMENT",
+      "source_locator": "Conversation 2026-10-26: get this analysis into an action plan in b70 lab.",
+      "acceptance": "A discoverable plan names dependencies, work packages, deliverables and observable gates.",
+      "critical": true
+    },
+    {
+      "id": "REQ-002",
+      "text": "Target the reported Windows 11 Pro / EPYC / ROMED8 / 128 GB / four-B70 / 2 TB NVMe system; reconcile historical differences.",
+      "origin": "USER_REQUIREMENT",
+      "source_locator": "User hardware replies on 2026-10-25/26.",
+      "acceptance": "Windows remains the intended target and the first gate captures actual hardware/runtime state.",
+      "critical": true
+    },
+    {
+      "id": "REQ-003",
+      "text": "Preserve existing lab deployments/history and qualify correctness before speed; deliver planning only in this change.",
+      "origin": "ASSUMPTION",
+      "source_locator": "Scope interpretation of the action-plan request and repository README result conventions.",
+      "acceptance": "No runtime or production configuration changes; future checks include parity, lifecycle isolation and soak.",
+      "critical": true
+    },
+    {
+      "id": "REQ-004",
+      "text": "Use hosted DeepSeek V4.1 Flash 1017 through OpenRouter and OpenClaw; update the milestone and provide an executable starter handoff.",
+      "origin": "USER_REQUIREMENT",
+      "source_locator": "Conversation 2026-10-26: update milestone, push to GitHub, and provide OpenClaw starter prompt.",
+      "acceptance": "Plan begins with a tool-loop/Windows runner gate and a bounded starter prompt; no local coding-model swapping required.",
+      "critical": true
+    }
+  ],
+  "references": [
+    {
+      "id": "REF-001",
+      "canonical_url": "https://github.com/Niko1221/Strata",
+      "relevance": "Separate V4.1 engine, packing, memory planning and existing SYCL migration mechanisms.",
+      "mismatch": "Released DeepSeek engine lacks Intel support; upstream Intel route is Linux and Qwen-focused.",
+      "selection_rationale": "Direct source being ported, pinned to the requested release.",
+      "activity": {
+        "description": "v0.2.6 resolved and selected files inspected.",
+        "source": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/docs/DEEPSEEK41.md",
+        "checked_at": "2026-10-27T02:04:49Z"
+      },
+      "license_record": {
+        "status": "INSPECTED",
+        "spdx": "MIT",
+        "locator": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/LICENSE",
+        "scope": "Root Strata license; dependencies and model files retain their own terms.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Planning only. Future source reuse must preserve notices and audit transitive dependencies/model rights."
+      }
+    },
+    {
+      "id": "REF-002",
+      "canonical_url": "https://github.com/Captain-Tripps/b70-lab",
+      "relevance": "Same machine's Windows port, probes, benchmarks and rejected strategies.",
+      "mismatch": "Existing working Strata model is Qwen; DeepSeek measurements concern V4 0731 and older driver/hardware states.",
+      "selection_rationale": "More applicable than a generic external runtime; includes the simpler layer-split baseline and rejection evidence.",
+      "activity": {
+        "description": "Current main resolved; dated notes through 2026-10-25 inspected.",
+        "source": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/CHANGELOG.md",
+        "checked_at": "2026-10-27T02:04:49Z"
+      },
+      "license_record": {
+        "status": "INSPECTED",
+        "spdx": "MIT",
+        "locator": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/LICENSE",
+        "scope": "Lab documentation/scripts; Strata/llama.cpp derivatives retain their MIT notices.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Only new planning prose and links; existing licensed patches are referenced, not copied."
+      }
+    },
+    {
+      "id": "REF-003",
+      "canonical_url": "https://docs.openclaw.ai/providers/openrouter",
+      "relevance": "Documented hosted model selection, tool metadata and reasoning replay.",
+      "mismatch": "Installed version and new snapshot compatibility require a real tool-loop test.",
+      "selection_rationale": "User-selected implementation-agent stack; inspect mechanisms needed for the milestone.",
+      "activity": {
+        "description": "Primary documentation inspected in this conversation.",
+        "source": "https://docs.openclaw.ai/providers/openrouter",
+        "checked_at": "2026-10-27T03:14:40Z"
+      },
+      "license_record": {
+        "status": "UNRECOGNIZED",
+        "spdx": "",
+        "locator": "",
+        "scope": "Documentation/API reference; license terms were not audited in this planning update.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Original planning prose and interface identifiers only; no third-party implementation copied."
+      }
+    },
+    {
+      "id": "REF-004",
+      "canonical_url": "https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017",
+      "relevance": "Exact requested hosted snapshot with tool/reasoning capability.",
+      "mismatch": "Catalog support and vendor descriptions do not prove SYCL port competence or deployment reliability.",
+      "selection_rationale": "User-selected implementation-agent stack; inspect mechanisms needed for the milestone.",
+      "activity": {
+        "description": "Primary documentation inspected in this conversation.",
+        "source": "https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017",
+        "checked_at": "2026-10-27T03:14:40Z"
+      },
+      "license_record": {
+        "status": "UNRECOGNIZED",
+        "spdx": "",
+        "locator": "",
+        "scope": "Documentation/API reference; license terms were not audited in this planning update.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Original planning prose and interface identifiers only; no third-party implementation copied."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "SRC-001",
+      "reference_id": "REF-001",
+      "url": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/docs/INTEL.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+        "path": "docs/INTEL.md",
+        "location": "Opening scope statement",
+        "version": "v0.2.6",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-001.md",
+      "limitations": [
+        "No Intel DeepSeek execution was performed."
+      ]
+    },
+    {
+      "id": "SRC-002",
+      "reference_id": "REF-001",
+      "url": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/strata_control/dsv41_fit.py",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "IMPLEMENTATION",
+      "locator": {
+        "revision": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+        "path": "strata_control/dsv41_fit.py",
+        "location": "ISTA_SETS, ISTA_ENGRAM_BYTES, ISTA_DSPARK_BYTES",
+        "version": "v0.2.6",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-002.md",
+      "limitations": [
+        "Planner is not a measured Windows B70 allocation or throughput result."
+      ]
+    },
+    {
+      "id": "SRC-003",
+      "reference_id": "REF-001",
+      "url": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/src/dsv41/ds4_model.cu",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "IMPLEMENTATION",
+      "locator": {
+        "revision": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+        "path": "src/dsv41/ds4_model.cu",
+        "location": "copy_experts, cpu_lane_fits_ram, store_gb, cuBLAS and CUDA calls",
+        "version": "v0.2.6",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-003.md",
+      "limitations": [
+        "Port dependency inventory and device behavior remain to be tested."
+      ]
+    },
+    {
+      "id": "SRC-004",
+      "reference_id": "REF-002",
+      "url": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/strata-windows-port/README.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "a9e900053adc73bda351f268488318694ac49754",
+        "path": "strata-windows-port/README.md",
+        "location": "Base, Windows / Level Zero findings, AOT miscompile",
+        "version": "main at inspection",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-004.md",
+      "limitations": [
+        "Two-card Qwen evidence; not four-card V4.1 parity or current-driver proof."
+      ]
+    },
+    {
+      "id": "SRC-005",
+      "reference_id": "REF-002",
+      "url": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/hardware-and-windows-notes.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "a9e900053adc73bda351f268488318694ac49754",
+        "path": "hardware-and-windows-notes.md",
+        "location": "WHEA, memory demotion, building on Windows",
+        "version": "main at inspection",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-005.md",
+      "limitations": [
+        "Current user report is 128 GB; these historical notes do not establish present hardware health."
+      ]
+    },
+    {
+      "id": "SRC-006",
+      "reference_id": "REF-002",
+      "url": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/deepseek-v4/PLAN-expert-parallel.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "a9e900053adc73bda351f268488318694ac49754",
+        "path": "deepseek-v4/PLAN-expert-parallel.md",
+        "location": "A0 result; Track B",
+        "version": "main at inspection",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-006.md",
+      "limitations": [
+        "Old-model bottleneck and old dependency choice do not determine V4.1 performance."
+      ]
+    },
+    {
+      "id": "SRC-007",
+      "reference_id": "REF-002",
+      "url": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/llama.cpp-sycl/TENSOR-SPLIT-DECODE.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "a9e900053adc73bda351f268488318694ac49754",
+        "path": "llama.cpp-sycl/TENSOR-SPLIT-DECODE.md",
+        "location": "Shared context attempt and review notes dated 2026-10-24/25",
+        "version": "main at inspection",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-007.md",
+      "limitations": [
+        "Different engine/workload; retain as versioned failure evidence, not universal SYCL prohibition."
+      ]
+    },
+    {
+      "id": "SRC-008",
+      "reference_id": "REF-002",
+      "url": "https://github.com/Captain-Tripps/b70-lab/blob/a9e900053adc73bda351f268488318694ac49754/bench/README.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "a9e900053adc73bda351f268488318694ac49754",
+        "path": "bench/README.md",
+        "location": "arm.ps1 lifecycle and ownership rules",
+        "version": "main at inspection",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-008.md",
+      "limitations": [
+        "A V4.1 Python wrapper/engine requires explicit adaptation; existing harness cannot be assumed compatible."
+      ]
+    },
+    {
+      "id": "SRC-009",
+      "reference_id": "REF-001",
+      "url": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/src/dsv41/ds4_os.hpp",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "IMPLEMENTATION",
+      "locator": {
+        "revision": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+        "path": "src/dsv41/ds4_os.hpp",
+        "location": "_WIN32 branches, read/mapping/allocation functions",
+        "version": "v0.2.6",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-009.md",
+      "limitations": [
+        "Host portability is not proof of an Intel GPU backend."
+      ]
+    },
+    {
+      "id": "SRC-010",
+      "reference_id": "REF-001",
+      "url": "https://github.com/Niko1221/Strata/blob/4b9e05a2a806a3fe24f7b2560d98626c37dade35/docs/DEEPSEEK41.md",
+      "accessed_at": "2026-10-27T02:04:49Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+        "path": "docs/DEEPSEEK41.md",
+        "location": "Official sets; setup; DSpark handling",
+        "version": "v0.2.6",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-010.md",
+      "limitations": [
+        "Do not treat a draft flag as proof that drafter VRAM is absent."
+      ]
+    },
+    {
+      "id": "SRC-011",
+      "reference_id": "REF-003",
+      "url": "https://docs.openclaw.ai/providers/openrouter",
+      "accessed_at": "2026-10-27T03:14:40Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "Model references; Thinking / reasoning injection; DeepSeek V4 reasoning replay",
+        "version": "Live docs inspected 2026-10-26 America/Chicago",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-011.md",
+      "limitations": [
+        "Documented capability, not a GPU-BOX integration test."
+      ]
+    },
+    {
+      "id": "SRC-012",
+      "reference_id": "REF-003",
+      "url": "https://docs.openclaw.ai/tools/bash",
+      "accessed_at": "2026-10-27T03:14:40Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "Exec tool; host routing; completion lifecycle",
+        "version": "Live docs inspected 2026-10-26 America/Chicago",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-012.md",
+      "limitations": [
+        "Documented capability, not a GPU-BOX integration test."
+      ]
+    },
+    {
+      "id": "SRC-013",
+      "reference_id": "REF-004",
+      "url": "https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017/providers",
+      "accessed_at": "2026-10-27T03:14:40Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "API model ID; tool calling and reasoning",
+        "version": "Live docs inspected 2026-10-26 America/Chicago",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-013.md",
+      "limitations": [
+        "Documented capability, not a GPU-BOX integration test."
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "EV-001",
+      "statement": "Upstream v0.2.6 Intel docs explicitly exclude DeepSeek V4.1.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-001"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Pinned upstream release.",
+      "limitations": []
+    },
+    {
+      "id": "EV-002",
+      "statement": "The two target sets have 132.07/149.06 decimal GB of experts and share a 110.60 GB Engram table.",
+      "class": "OPEN_SOURCE_IMPLEMENTATION",
+      "source_ids": [
+        "SRC-002"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Constants in upstream fit planner.",
+      "limitations": [
+        "Not a B70 allocation measurement."
+      ]
+    },
+    {
+      "id": "EV-003",
+      "statement": "The separate DeepSeek engine contains CUDA/cuBLAS orchestration and existing Windows host I/O branches.",
+      "class": "OPEN_SOURCE_IMPLEMENTATION",
+      "source_ids": [
+        "SRC-003",
+        "SRC-009"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Inspected execution/OS source.",
+      "limitations": []
+    },
+    {
+      "id": "EV-004",
+      "statement": "The lab documents an existing native Windows Qwen Strata port and shared-context host exchange with JIT correctness evidence.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-004"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Historical two-card Qwen results.",
+      "limitations": [
+        "Not rerun here; old fork patches require adaptation."
+      ]
+    },
+    {
+      "id": "EV-005",
+      "statement": "Lab notes record reduced usable RAM, WHEA boot errors, WDDM demotion and a no-AVX512 host.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-005"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Historical lab notes.",
+      "limitations": [
+        "Current machine configuration must be measured."
+      ]
+    },
+    {
+      "id": "EV-006",
+      "statement": "V4 0731 expert-only parallelism was rejected in the lab; its older V4.1 route waited on llama.cpp.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-006"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Historical strategy and profiler results.",
+      "limitations": []
+    },
+    {
+      "id": "EV-007",
+      "statement": "Shared context alone did not make Windows v2 barrier exchange safe; per-card submission threads failed in serving tests.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-007"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Dated lab tests on other workloads.",
+      "limitations": [
+        "Not universal driver behavior."
+      ]
+    },
+    {
+      "id": "EV-008",
+      "statement": "The documented benchmark lifecycle currently identifies llama-server, requiring adaptation for a Strata V4.1 wrapper.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-008"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Harness documentation.",
+      "limitations": []
+    },
+    {
+      "id": "EV-009",
+      "statement": "The compressed models plausibly fit GPU plus host tiers, but not necessarily with the entire Engram table cached.",
+      "class": "INFERENCE",
+      "source_ids": [
+        "SRC-002",
+        "SRC-005"
+      ],
+      "premise_claim_ids": [
+        "EV-002",
+        "EV-005"
+      ],
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "support_explanation": "Subtracting the illustrative GPU expert budget from planner constants leaves room for overflow in the user-reported RAM; runtime overhead remains unknown.",
+      "scope": "Illustrative 110-120 GB GPU-expert budget; user-reported 128 GB host RAM.",
+      "limitations": [
+        "Actual WDDM budgets, context, buffers and hardware health unresolved."
+      ]
+    },
+    {
+      "id": "EV-010",
+      "statement": "V4.1's no-drafter baseline needs allocation verification; --dspark off is not proof of unloaded draft weights.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-010"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [],
+      "support_explanation": "Direct inspection of the linked primary file and recorded locator.",
+      "scope": "Upstream setup/model notes.",
+      "limitations": []
+    },
+    {
+      "id": "EV-011",
+      "statement": "OpenClaw documents OpenRouter model selection and host execution; the requested hosted snapshot advertises tool calling and reasoning.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": [
+        "SRC-011",
+        "SRC-012",
+        "SRC-013"
+      ],
+      "premise_claim_ids": [],
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "support_explanation": "Inspected provider integration, exec and exact model catalog documentation.",
+      "scope": "Published interfaces only.",
+      "limitations": [
+        "Exact installed route, reasoning replay and native Windows execution remain untested.",
+        "No claim that this model alone can complete the port."
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "Port Strata V4.1 with existing Windows/SYCL patterns",
+      "outcome": "ADOPT",
+      "evidence_ids": [
+        "EV-001",
+        "EV-003",
+        "EV-004"
+      ],
+      "rationale": "Preserve model/pack/CPU semantics and reuse existing lab work.",
+      "alternatives": [
+        "Wait for llama.cpp V4.1 support"
+      ],
+      "complexity_cost": "Adapt old fork patches and port DeepSeek GPU operations.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "An upstream Intel V4.1 implementation becomes available and passes the same gates."
+    },
+    {
+      "id": "DEC-002",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "JIT, AVX2 host, explicit synchronization and isolated lifecycle",
+      "outcome": "ADOPT",
+      "evidence_ids": [
+        "EV-004",
+        "EV-005",
+        "EV-007",
+        "EV-008"
+      ],
+      "rationale": "Start from lab evidence while revalidating versions and hardware.",
+      "alternatives": [
+        "AOT and concurrent device submission"
+      ],
+      "complexity_cost": "Runtime manifest, small probes, watchdog and harness adaptation.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "AOT/concurrent paths independently pass parity and soak with demonstrated benefit."
+    },
+    {
+      "id": "DEC-003",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "Layer split, host-staged transfers, CPU overflow, 2.00-bit 8K text baseline",
+      "outcome": "ADOPT",
+      "evidence_ids": [
+        "EV-002",
+        "EV-006",
+        "EV-009",
+        "EV-010"
+      ],
+      "rationale": "Minimize multi-device synchronization and establish correct execution first.",
+      "alternatives": [
+        "Expert/tensor parallelism immediately"
+      ],
+      "complexity_cost": "Explicit budgets and transfer lifetimes; not maximum GPU utilization.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "Measured V4.1 profile and transfer costs justify another placement."
+    },
+    {
+      "id": "DEC-004",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "Full-model FP16 expansion",
+      "outcome": "REJECT",
+      "evidence_ids": [
+        "EV-002",
+        "EV-009"
+      ],
+      "rationale": "Would invalidate the compressed-memory design.",
+      "alternatives": [
+        "Bounded per-tile dequantization or fused quantized kernels"
+      ],
+      "complexity_cost": "Large temporary allocations and host spill.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "Only bounded scratch experiments within recorded budgets."
+    },
+    {
+      "id": "DEC-005",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "Automated CUDA translation or emulation as proof of support",
+      "outcome": "REJECT",
+      "evidence_ids": [
+        "EV-003",
+        "EV-007"
+      ],
+      "rationale": "Translation does not establish correctness or Windows synchronization behavior.",
+      "alternatives": [
+        "Use translation as scaffolding followed by reference tests"
+      ],
+      "complexity_cost": "Review subgroup, pointer, event and allocation semantics.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "A supported implementation demonstrates all required gates."
+    },
+    {
+      "id": "DEC-006",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "Tensor/expert parallelism, graph capture, per-card submission threads",
+      "outcome": "DEFER",
+      "evidence_ids": [
+        "EV-006",
+        "EV-007"
+      ],
+      "rationale": "Prior lab results reject assuming these are unconditional speedups.",
+      "alternatives": [
+        "Single-owner submission and layer split"
+      ],
+      "complexity_cost": "Cross-device reductions, capture limitations and possible driver deadlocks.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "V4.1 profile shows sufficient ceiling and isolated proof passes."
+    },
+    {
+      "id": "DEC-007",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "candidate": "AOT, DSpark, vision, concurrency and extended context",
+      "outcome": "DEFER",
+      "evidence_ids": [
+        "EV-004",
+        "EV-010"
+      ],
+      "rationale": "Keep correctness and memory attribution clear.",
+      "alternatives": [
+        "Text-only JIT baseline without speculative execution"
+      ],
+      "complexity_cost": "More kernels, shapes, state and allocation paths.",
+      "scale_fit": "One Windows workstation, four B70s, one initial request.",
+      "revisit_trigger": "Baseline parity, four-card execution and soak pass; each gets a separate decision."
+    },
+    {
+      "id": "DEC-008",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "candidate": "Hosted DeepSeek through OpenRouter; OpenClaw with native Windows runner",
+      "outcome": "ADOPT",
+      "evidence_ids": [
+        "EV-011",
+        "EV-008"
+      ],
+      "rationale": "Keeps coding inference off GPU-BOX GPUs while retaining local execution and observable acceptance gates.",
+      "alternatives": [
+        "Local Qwen/GLM with coding-model load/unload supervisor"
+      ],
+      "complexity_cost": "Qualify tool-message continuity, provider settings, Windows dispatch, process ownership and persisted resume.",
+      "scale_fit": "One implementation agent and one exclusive GPU test at a time.",
+      "revisit_trigger": "Repeated integration failures or unresolved correctness bugs justify a different model/harness; local inference only if its overhead is accepted."
+    }
+  ],
+  "plan_units": [
+    {
+      "id": "STEP-000",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "decision_ids": [
+        "DEC-008"
+      ],
+      "outcome": "Qualify hosted agent tool loop and native Windows runner without GPU loads",
+      "acceptance_checks": [
+        "CHECK-100"
+      ]
+    },
+    {
+      "id": "STEP-001",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-002"
+      ],
+      "outcome": "Reconcile hardware, runtime and source provenance",
+      "acceptance_checks": [
+        "CHECK-101"
+      ]
+    },
+    {
+      "id": "STEP-002",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "outcome": "Qualify native Windows build and four-device operations",
+      "acceptance_checks": [
+        "CHECK-102"
+      ]
+    },
+    {
+      "id": "STEP-003",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002"
+      ],
+      "outcome": "Port required model operations and validate numerical behavior",
+      "acceptance_checks": [
+        "CHECK-103"
+      ]
+    },
+    {
+      "id": "STEP-004",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-003"
+      ],
+      "outcome": "Complete four-card V4.1 execution with CPU overflow",
+      "acceptance_checks": [
+        "CHECK-104"
+      ]
+    },
+    {
+      "id": "STEP-005",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "outcome": "Integrate serving, lifecycle isolation, idle/resume and soak",
+      "acceptance_checks": [
+        "CHECK-105"
+      ]
+    },
+    {
+      "id": "STEP-006",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "outcome": "Profile and optimize the qualified baseline",
+      "acceptance_checks": [
+        "CHECK-106"
+      ]
+    },
+    {
+      "id": "STEP-007",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "outcome": "Publish reproducible build/patch/configuration handoff",
+      "acceptance_checks": [
+        "CHECK-107"
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "id": "CHECK-001",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "DEC-007",
+        "DEC-008"
+      ],
+      "required": true,
+      "result": "PASS",
+      "method": "SOURCE_AUDIT",
+      "criterion": "Audit core claims and reconcile existing Windows support, hardware conflicts and V4/V4.1 scope against pinned sources. Audit hosted-agent interfaces separately from untested runtime integration.",
+      "command": "Manual inspection through GitHub connector; no GPU execution.",
+      "evidence_path": "checks/SOURCE_AUDIT.md",
+      "tested_snapshot": "Strata 4b9e05a2a806a3fe24f7b2560d98626c37dade35; b70-lab a9e900053adc73bda351f268488318694ac49754; OpenClaw/OpenRouter live documentation inspected 2026-10-26 America/Chicago",
+      "checked_at": "2026-10-27T03:14:40Z"
+    },
+    {
+      "id": "CHECK-100",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "decision_ids": [
+        "DEC-008"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Real tool rounds, failing-fixture repair, native Windows runner mocks, ownership/timeout/lock tests and fresh-session resume pass with saved receipts.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-101",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-002"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Manifest reconciles reported versus historical RAM/CPU and records hardware health and exact runtime identities.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-102",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Three fresh four-device probe runs pass exact transfer checksums without timeout/device loss; bounded >4 GiB tests included.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-103",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Required quant/attention/routing fixtures and same-pack real-layer/logit reference comparisons pass frozen tolerances.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-104",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-003"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Complete 2.00-bit model passes three cold starts, mixed expert routing and multi-token parity within measured memory budgets.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-105",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Ownership mocks, serving checks, 300-second idle/resume and two-hour soak pass without affecting production stand-ins.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-106",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Reproducible correctness-qualified A/B results record variance, memory and latency; no unmeasured throughput promise.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-107",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Clean-directory build/launch is reproducible from pinned sources and manifests with rollback instructions.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-108",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "decision_ids": [
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "DEC-007"
+      ],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "DIFF_REVIEW",
+      "criterion": "Final implementation diff excludes rejected/deferred complexity unless a new decision and gate explicitly qualifies it.",
+      "command": "",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    }
+  ]
+}

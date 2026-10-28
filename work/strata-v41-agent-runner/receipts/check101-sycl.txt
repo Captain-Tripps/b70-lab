@@ -1,0 +1,33 @@
+﻿=== resolve sycl dll + zero-byte anomaly ===
+
+--- sycl*.dll in compiler 2026.0 ---
+  sycl-jit.dll | bytes=190298984 | ver=0
+  sycl-ls.exe | bytes=455528 | ver=
+  sycl.conf | bytes=997 | ver=
+  sycl9-preview.dll | bytes=3795304 | ver=2026.0.0.0
+  sycl9-previewd.dll | bytes=5806440 | ver=2026.0.0.0
+  sycl9.dll | bytes=3795304 | ver=2026.0.0.0
+  sycl9d.dll | bytes=5806440 | ver=2026.0.0.0
+  syclbin-dump.exe | bytes=1141608 | ver=
+
+--- sycl*.dll in oneAPI 2026.0 bin ---
+  sycl-jit.dll | bytes=0 | ver=0
+  sycl-ls.exe | bytes=0 | ver=
+  sycl.conf | bytes=0 | ver=
+  sycl9-preview.dll | bytes=0 | ver=2026.0.0.0
+  sycl9-previewd.dll | bytes=0 | ver=2026.0.0.0
+  sycl9.dll | bytes=0 | ver=2026.0.0.0
+  sycl9d.dll | bytes=0 | ver=2026.0.0.0
+  syclbin-dump.exe | bytes=0 | ver=
+
+--- are the 0-byte paths reparse points? ---
+path: C:\Program Files (x86)\Intel\oneAPI\2026.0\bin
+  Attributes: Directory
+  LinkType:  | Target: 
+path: C:\Program Files (x86)\Intel\oneAPI\compiler\2026.0\bin
+  Attributes: Directory
+  LinkType:  | Target: 
+
+--- direct length via .NET for ur_loader ---
+  C:\Program Files (x86)\Intel\oneAPI\2026.0\bin\ur_loader.dll => Length=0 Exists=True
+  C:\Program Files (x86)\Intel\oneAPI\mkl\2026.0\bin\mkl_rt.3.dll => Length=27890848 Exists=True

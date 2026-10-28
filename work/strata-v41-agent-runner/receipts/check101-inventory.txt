@@ -1,0 +1,97 @@
+﻿=== CHECK-101 read-only inventory probe ===
+captured_at_local: 2026-10-27 12:33:51 -05:00
+hostname: GPU-BOX
+ps_version: 5.1.26100.9711
+
+--- sycl-ls (full) ---
+sycl_ls_path: C:\Program Files (x86)\Intel\oneAPI\compiler\latest\bin\sycl-ls.exe
+[opencl:gpu][opencl:0] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:gpu][opencl:1] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:gpu][opencl:2] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:gpu][opencl:3] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B70 Graphics OpenCL 3.0 NEO  [32.0.101.8976]
+[opencl:cpu][opencl:4] Intel(R) OpenCL, AMD EPYC 7402P 24-Core Processor                OpenCL 3.0 (Build 0) [2025.19.4.0.18_160000.xmain-hotfix]
+[opencl:cpu][opencl:5] Intel(R) OpenCL, AMD EPYC 7402P 24-Core Processor                OpenCL 3.0 (Build 0) [2026.21.3.0.31_160000]
+
+--- GPU / display driver ---
+gpu: Microsoft Basic Display Adapter | driver=10.0.26100.1 | date=06/20/2006 19:00:00 | pnp=PCI\VEN_1A03&DEV_2000&SUBSYS_20001849&REV_41\5&2E810BAC&0&00000D
+gpu: Microsoft Remote Display Adapter | driver=10.0.26100.9711 | date=06/20/2006 19:00:00 | pnp=SWD\REMOTEDISPLAYENUM\RDPIDD_INDIRECTDISPLAY&SESSIONID_0001
+gpu: Intel(R) Arc(TM) Pro B70 Graphics | driver=32.0.101.8976 | date=08/27/2026 19:00:00 | pnp=PCI\VEN_8086&DEV_E223&SUBSYS_0105172F&REV_00\6&2C26ECC2&0&00080009
+gpu: Intel(R) Arc(TM) Pro B70 Graphics | driver=32.0.101.8976 | date=08/27/2026 19:00:00 | pnp=PCI\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00\6&A0CECBF&0&00080019
+gpu: Intel(R) Arc(TM) Pro B70 Graphics | driver=32.0.101.8976 | date=08/27/2026 19:00:00 | pnp=PCI\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00\6&2CA3521A&0&00080009
+gpu: Intel(R) Arc(TM) Pro B70 Graphics | driver=32.0.101.8976 | date=08/27/2026 19:00:00 | pnp=PCI\VEN_8086&DEV_E223&SUBSYS_17018086&REV_00\6&1D38AD12&0&00080009
+
+--- GPU PnP device IDs (all) ---
+pnp: Unknown | Intel(R) Arc(TM) Pro B70 Graphics | PCI\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00\A&198A08B&0&0008004000400011
+pnp: OK | Microsoft Basic Display Adapter | PCI\VEN_1A03&DEV_2000&SUBSYS_20001849&REV_41\5&2E810BAC&0&00000D
+pnp: OK | Microsoft Remote Display Adapter | SWD\REMOTEDISPLAYENUM\RDPIDD_INDIRECTDISPLAY&SESSIONID_0001
+pnp: Unknown | Microsoft Remote Display Adapter | SWD\REMOTEDISPLAYENUM\RDPIDD_INDIRECTDISPLAY&SESSIONID_0002
+pnp: Unknown | Microsoft Remote Display Adapter | SWD\REMOTEDISPLAYENUM\RDPIDD_INDIRECTDISPLAY&SESSIONID_0003
+pnp: Unknown | Microsoft Remote Display Adapter | SWD\REMOTEDISPLAYENUM\RDPIDD_INDIRECTDISPLAY&SESSIONID_0004
+pnp: Unknown | Microsoft Remote Display Adapter | SWD\REMOTEDISPLAYENUM\RDPIDD_INDIRECTDISPLAY&SESSIONID_0005
+pnp: OK | Intel(R) Arc(TM) Pro B70 Graphics | PCI\VEN_8086&DEV_E223&SUBSYS_0105172F&REV_00\6&2C26ECC2&0&00080009
+pnp: Unknown | Intel(R) Arc(TM) Pro B70 Graphics | PCI\VEN_8086&DEV_E223&SUBSYS_17018086&REV_00\6&2098F97A&0&00080009
+pnp: Unknown | AMD Radeon(TM) Graphics | PCI\VEN_1002&DEV_13C0&SUBSYS_7E701462&REV_C5\4&2B49E1C6&0&0041
+pnp: OK | Intel(R) Arc(TM) Pro B70 Graphics | PCI\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00\6&A0CECBF&0&00080019
+pnp: OK | Intel(R) Arc(TM) Pro B70 Graphics | PCI\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00\6&2CA3521A&0&00080009
+pnp: OK | Intel(R) Arc(TM) Pro B70 Graphics | PCI\VEN_8086&DEV_E223&SUBSYS_17018086&REV_00\6&1D38AD12&0&00080009
+pnp: Unknown | Microsoft Basic Display Adapter | PCI\VEN_1A03&DEV_2000&SUBSYS_20001849&REV_41\5&3743B885&0&00000D
+
+--- oneAPI components ---
+component: .toolkit_linking_tool
+component: 2025.1
+component: 2026.0
+component: advisor
+component: common
+component: compiler
+component: compiler_ide
+component: dal
+component: debugger
+component: dev-utilities
+component: dnnl
+component: dpcpp-ct
+component: dpl
+component: Installer
+component: ipp
+component: ippcp
+component: licensing
+component: logs
+component: mkl
+component: mpi
+component: ocloc
+component: oneapi-base-toolkit
+component: oneapi-toolkit
+component: pti
+component: tbb
+component: tcm
+component: toolkit_linking_tool
+component: umf
+component: vtune
+
+--- ze_loader.dll versions ---
+ze_loader: C:\Windows\System32\ze_loader.dll | 1.32.0
+ze_loader: C:\Windows\System32\DriverStore\FileRepository\iigd_dch_d.inf_amd64_eebe517ae5149ae4\ze_loader.dll | 1.32.0
+ze_loader: C:\Windows\System32\DriverStore\FileRepository\iigd_dch_d.inf_amd64_f69d39497e4a3af5\ze_loader.dll | 1.28.2
+
+--- sycl / ur dll versions ---
+sycl8.dll: C:\Program Files (x86)\Intel\oneAPI\2025.1\bin\sycl8.dll | 2025.1.0.0
+sycl8.dll: C:\Program Files (x86)\Intel\oneAPI\compiler\2025.1\bin\sycl8.dll | 2025.1.0.0
+sycl7.dll: not found
+ur_loader.dll: C:\Program Files (x86)\Intel\oneAPI\2025.1\bin\ur_loader.dll | 0.11.10
+ur_loader.dll: C:\Program Files (x86)\Intel\oneAPI\2026.0\bin\ur_loader.dll | 0.12.0
+ur_loader.dll: C:\Program Files (x86)\Intel\oneAPI\compiler\2025.1\bin\ur_loader.dll | 0.11.10
+pi_level_zero.dll: not found
+
+--- memory ---
+total_physical_GiB: 95.87
+dimm: DIMM 0 | 16 GiB | 2133 MT/s | Micron Technology 36ASF2G72PZ-2G1A2   
+dimm: DIMM 0 | 16 GiB | 2133 MT/s | Micron Technology 36ASF2G72PZ-2G1A2   
+dimm: DIMM 0 | 16 GiB | 2133 MT/s | Micron Technology 36ASF2G72PZ-2G1A2   
+dimm: DIMM 0 | 16 GiB | 2133 MT/s | Micron Technology 36ASF2G72PZ-2G1A2   
+dimm: DIMM 0 | 16 GiB | 2133 MT/s | Micron Technology 36ASF2G72PZ-2G1A2   
+dimm: DIMM 0 | 16 GiB | 2133 MT/s | Micron Technology 36ASF2G72PZ-2G1A2   
+
+--- CPU ---
+cpu: AMD EPYC 7402P 24-Core Processor                | cores=24 | threads=48
+
+--- OS ---
+os: Microsoft Windows 11 Pro | version=10.0.26200 | build=26200

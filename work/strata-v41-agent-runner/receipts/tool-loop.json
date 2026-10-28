@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "step": "STEP-000",
+  "check": "CHECK-100",
+  "kind": "tool-loop-fixture-repair",
+  "performed_at": "2026-10-27T05:42:51.882044+00:00",
+  "host": "gateway-host",
+  "execution_host": "GPU-BOX",
+  "gateway_host": "gateway-host",
+  "repair_target": "work/strata-v41-agent-runner/fixtures/greeting.py",
+  "failing_state": {
+    "sha256": "756090ea66d037d3536d42f7eb041498a1c06eaeaa7cdba828d0532da7f50ac3",
+    "pytest_exit": 1,
+    "result": "1 failed, 1 passed",
+    "log": "receipts/01-fixture-failing.log"
+  },
+  "passing_state": {
+    "sha256": "adc405561b3321fbc0b653bd24ea42126453133cf060148cd7f7bb06a5ae644b",
+    "pytest_exit": 0,
+    "result": "2 passed",
+    "log": "receipts/02-fixture-passing.log"
+  },
+  "assertions_unchanged": true,
+  "assertions_sha256": "e2aed2d24391aebf32c9e0c8f2d6c23f4ee9cf4f16e32477036f99d42e762cd6",
+  "defect": "greeting() returned 'Hello:{name}' (colon, no space) instead of 'Hello, {name}!'",
+  "repair": "changed the f-string separator/spacing in greeting(); test assertions untouched",
+  "continuity_note": "The failing pytest output was read back as a tool result and used to choose the repair; the repaired fixture was then re-run and its result written to disk. Both states and their hashes are recorded so a later session can verify the sequence without a transcript."
+}

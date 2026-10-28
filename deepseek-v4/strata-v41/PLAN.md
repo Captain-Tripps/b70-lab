@@ -4,6 +4,30 @@ Status: **planned; no DeepSeek V4.1 Intel implementation or performance measurem
 Prepared 2026-10-26. Updated for hosted DeepSeek/OpenClaw execution. Start with STEP-000, then STEP-001; later gates retain their IDs.
 This is a research-only handoff, not a claim that the model can currently launch.
 
+> ### Checkpoint 2026-10-28 09:30 CDT — llama.cpp-side measurement update
+>
+> This plan routes through the **Strata `strata-dsv41` engine**. Parallel work in a llama.cpp
+> SYCL fork (`C:\llamacpp-v41`) has meanwhile produced measurements that are **input to route
+> assessment, not passed gates**. No CHECK-102..108 gate moved. Recorded here so the numbers are
+> not re-derived.
+>
+> | Fact | Value |
+> |---|---|
+> | Pack | DeepSeek-V4.1-Flash-1017 GSQ-RCO IQ2_XXS, 128.74 GiB, 1008 tensors, 551.88 B params |
+> | Tensor composition | **95.5% MoE experts (123.00 GiB)**; attention 3.56, dense 1.05, embd 0.85, **Engram 0.20** |
+> | Engram correction | The 110 GB Engram figure is the separate `-Engram-IQ4_NL.gguf` (103 GB), **never loaded**. In-pack Engram is 0.20 GiB, so NVMe-Engram is not a capacity lever. |
+> | Device buffers | 119.4 GiB across 4 cards — **fits** 130 GiB of VRAM |
+> | Server status | **loads and serves** (`model loaded`, `listening`, `health 200`) on 4x B70 |
+> | Outstanding | **no prefill or decode token rate has been obtained**; inference request dies at ~85.7 GB host WS |
+> | Root cause of earlier `exit -1` | **not a crash** — `ram-watchdog.ps1` calls `TerminateProcess(h,-1)`; verified by control test |
+>
+> Full detail: `work/strata-v41-agent-runner/SESSION-13-CHECKPOINT.md` and `HANDOFF-SESSION-13.md`.
+>
+> **Open question that decides viability:** host RAM tracks the GPU allocation ~1:1 regardless of how
+> many experts sit on CPU (`-ncmoe 5` and `-ncmoe 18` both peak at 85.7 GB WS). If a small-model
+> control shows the same, the backend mirrors device memory into system RAM and 1017 needs ~160 GB
+> RAM or a ~70 GB pack — independent of which engine is used.
+
 ## Outcome and scope
 
 Build a native Windows SYCL version of Strata's separate `strata-dsv41` engine for DeepSeek-V4.1-Flash-1017,
@@ -34,6 +58,75 @@ No performance target is promised before measurement. This plan does not start h
   and a Level Zero submission deadlock. These are version-scoped observations; re-test the intended runtime.
   Shared context alone does not make the newer queue-barrier path safe on the default v2 adapter.
 
+## Route decision — CONFIRMED 2026-10-27 by the owner
+
+The owner has re-confirmed that **porting the Strata engine is the intended route**, and that this is how the
+project started. This is not a change of direction; it is a correction of a divergence.
+
+A prior session (recorded in `FINDINGS.md` as SESSION 3 — ROUTE DIVERGENCE) did the work in a llama.cpp SYCL
+fork at `C:\llamacpp-v41` instead. That tree crossed three boundaries this plan fences off. Its measurements
+are retained as **input**, but they are not Strata-engine evidence and no CHECK-102..108 gate moved.
+
+### Newly established scope fact — the engine is CUDA/HIP only
+
+Verified against the upstream object store on GPU-BOX (`git ls-tree -r --name-only`):
+
+| Ref | dsv41 files | SYCL dsv41 files |
+|---|---:|---:|
+| `v0.2.6` | 131 | **0** |
+| `v0.2.7` | 138 | **0** |
+
+Extensions present in `v0.2.6`: 42 `.py`, 22 `.cpp`, 17 `.hpp`, **14 `.cu`, 12 `.cuh`**, 5 `.inc`, plus scripts.
+The engine lives at `src/dsv41/` as `ds4_model.cu`, `ds4_kernels.cu`, `ds4_iq.cu`, `ds4_gguf.cu` and headers.
+`packaging/build_dsv41_windows.bat` and `tools/dsv41/win/*.bat` exist — so Windows is a supported *host*, but
+through HIP/CUDA.
+
+**Consequence:** "build `strata-dsv41` with Windows SYCL" is not a build-configuration change. The engine's
+compute code is CUDA/HIP and has no SYCL implementation. Porting means translating that code, which is exactly
+STEP-003. This plan's "Automatic CUDA translation as a complete port — Reject" decision stands: translation
+tooling may scaffold, but cannot satisfy CHECK-103.
+
+Measured scope, kernel counts, the in-tree SYCL template, and the base-version decision are in
+[PORT-SCOPE.md](PORT-SCOPE.md). Two items there supersede this file:
+
+- **Base is `v0.2.7` (`5e8a4cca7`), not the `v0.2.6` pin below.** v0.2.7 adds ~1,000 engine lines
+  (incl. a new `ds4_wmma.cuh`) one day after v0.2.6. Porting a stale tree then re-porting is waste.
+- **`sycl/src/` already contains 108,675 lines of working Windows SYCL**, structurally mirroring
+  `src/`, with expert placement, host staging, graph capture and MTP already implemented. The port is
+  `sycl/src/dsv41/` following that pattern — not translation from first principles.
+
+Port surface: **16,428 lines of CUDA/HIP compute, 93 `__global__` kernels, 130 launch sites, 41
+`__shfl` shuffles**; 5,790 lines of CPU/host code compile unchanged; `ds4_vision.cu` (519 lines) is
+out of scope for the first deliverable.
+
+### What the llama.cpp detour actually bought us
+
+Retained as route-relevant input, explicitly **not** as Strata evidence:
+
+| Finding | Value |
+|---|---|
+| Pack integrity | 128.74 GiB, 551.88 B params, 2.0625 bpw; loads and generates on 4x B70 |
+| Prefill baseline | ~11-12 t/s at b=128; b=256 collapses to 0.70 t/s (reproduced) |
+| Decode baseline | ~3.9 t/s at b=32/ub=512; ~3.65 layer split |
+| Split behaviour | `-sm layer` > `-sm tensor` by 65%; `-sm row` aborts on I32/I64 |
+| Memory ceiling | ~955 MiB overrun at `-ngl 99`; `-ngl 38` leaves 3/41 layers on CPU |
+| Failure modes | SYCL alloc OOM at large ubatch; server `-1` at `llama_context`; pinned-host alloc failure |
+| Comparison | Strata's engine does ~1,415 t/s prefill on 2 cards; the fork does ~11.4 on 4 |
+
+That last row is the argument for the port, and it is now measured rather than assumed. It also sets the
+target: a successful port should approach Strata's own numbers, not merely improve on the fork.
+
+### Performance variance is unresolved and may invalidate several recorded numbers
+
+A `-r 3` flash-attention-on run measured `pp128 = 39.63 ± 31.48` t/s. A standard deviation of 31 on a mean of
+39 is not a measurement, it is a bimodal distribution. Earlier single-sample runs gave 0.33 for the same
+configuration. Both cannot be a stable configuration. The same pattern appears in the prefill sweep
+(b=512: 41.87 on one run, 0.61 on the next).
+
+Until per-sample data exists, treat every single-sample throughput figure in this plan as **provisional**.
+`llama-bench -o json` retains individual samples and should be used from here. Any optimisation retained
+without variance data fails CHECK-106 by its own wording.
+
 ## Agent execution arrangement
 
 Use OpenClaw with `openrouter/deepseek/deepseek-v4.1-flash-1017` as the implementation agent.
@@ -55,7 +148,7 @@ builds/tests to native Windows explicitly; this does not introduce WSL as an inf
 | Extend Strata's V4.1 engine using SYCL/oneMKL and the lab's Windows patterns | Adopt | Preserves model semantics, packer, CPU experts, Engram I/O, and API integration |
 | JIT build, AVX2-compatible host code, explicit synchronization | Adopt first | Existing lab evidence includes bad AOT output and EPYC illegal-instruction failures |
 | Layer split with host-staged device transfers in a shared context | Adopt first | Works without assuming GPU peer access; each GPU owns a block of layers |
-| Automatic CUDA translation as a complete port | Reject | Migration scaffolding does not establish numerical, subgroup, lifetime, or synchronization correctness |
+| Automatic CUDA translation as a complete port | **Partially superseded 2026-10-27** | dpct was run: it converts ~85% of 93 kernels (96 `parallel_for` emitted, 14 launch sites + 2 kernels need hand work). Translation is now the *method*; it is still not the *acceptance* — CHECK-103 alone decides. See [PORT-SCOPE.md](PORT-SCOPE.md) §10 |
 | CUDA compatibility/emulation as the main strategy | Reject for this plan | No inspected evidence it implements this engine correctly on this Windows/B70 stack |
 | Four-way expert/tensor parallelism, graph capture and per-card submission threads | Defer | Profile V4.1 first; current lab has measured low ceilings and crash/hang cases on other workloads |
 | AOT, DSpark, 2.25-bit, longer context | Defer | Separate correctness and memory/performance campaigns after the baseline |
@@ -257,6 +350,146 @@ or production deployment. Future STEP-002 work starts from the recorded readines
 This is not a calendar promise: the initial reconciliation/probe is roughly 2-4 engineering days, while a
 correct full engine plus qualification is a multi-week effort. Compiler/runtime failures may extend it.
 Re-estimate after CHECK-102 and CHECK-103 instead of treating the earlier generic estimate as a commitment.
+
+## Measured findings (2026-10-27, GPU-BOX, 4x Arc Pro B70)
+
+These are real measurements taken on the lab box, not planning estimates. They correct two
+conclusions recorded earlier and should feed STEP-006 (profile/optimize) directly. The full
+detail, with configs and raw numbers, lives in
+[`work/strata-v41-agent-runner/FINDINGS.md`](../../work/strata-v41-agent-runner/FINDINGS.md)
+sessions 7-8 and in [`machine-manifest.json`](../../work/strata-v41-agent-runner/machine-manifest.json).
+
+### Prefill throughput depends on prompt length; the good setting is `-b 128`
+
+> **CORRECTED 2026-10-27 (Session 9).** A b=512 figure of 41.87 t/s did **not** reproduce — a
+> repeat measured **0.61 t/s**. Prefill peaks at **b=128 (~11-12 t/s)** and degrades above it;
+> the b=256 collapse to 0.70 t/s is real and reproduced twice. "Big batch for prefill" is WRONG;
+> the setting is b=128 specifically.
+>
+> **Not independently confirmed.** A later run at `-p 512 -b 128` gave 12.25 t/s once and
+> 40.47 +/- 24.69 at r=3 — but that r=3 run was **contended** (a concurrent agent session's
+> workload was resident; see `c53aad2` and FINDINGS W-056). The apparent agreement at
+> "11-12 t/s" is therefore not corroboration. What survives without contention: b=128 is where
+> prefill behaves best and very large batches are worse; the exact rate is unqualified.
+
+`llama-bench`, `-ngl 38 -t 12 -lm none --no-warmup -r 1`, layer split:
+
+| config | prefill t/s | decode t/s |
+|---|---:|---:|
+| `-p 32 -b 32` | 0.55 | 3.65 |
+| `-p 32 -b 32 -ub 512` | 0.60 | 3.69 |
+| `-p 256 -b 256` | 6.19 | 0.35 |
+| `-p 512 -b 128` | **12.25** | — |
+
+**This corrects the earlier "batching is broken / pp is 9x slower than tg" conclusion**, which was
+read from `-p 32` alone. At longer prompts prefill is far faster than decode and behaves sanely.
+
+> **All numbers in this table are single-sample and several were taken while another agent
+> session was running on the same GPUs.** Treat them as directional only. Throughput on this pack
+> is bimodal (one r=3 run reported 61% relative stddev), so single runs cannot separate a
+> configuration change from noise. No row here should be quoted as a qualified rate.
+
+**Caveat on mechanism:** the pp32 -> pp512 rows change prompt length *and* batch size together, so
+they do not isolate batch width. `pp512 @ b=128` (12.25) also beat `pp256 @ b=256` (6.19), which
+argues the gain is per-token amortisation of fixed per-batch overhead rather than batch width per
+se. Do not read this table as "raise `-b` for a 22x win" — the supported setting is b=128, and
+beyond it throughput falls. A clean batch sweep at fixed prompt length is still unrun because
+`llama-bench` multi-value sweeps abort in this build (FINDINGS L-043); it needs separate
+invocations.
+
+### Prefill and decode want opposite configurations
+
+> **CORRECTED 2026-10-27.** "Prefill peaks at large batch (`-b 128`+)" is wrong — b=512 measured
+> 0.61 t/s on repeat. Prefill peaks at **b=128**. Decode still peaks at b=32/ub=512.
+
+Prefill peaks at large batch (`-b 128`+). Decode collapses at `-b 256` (0.35 t/s) and peaks at
+`-b 32 -ub 512` (3.69 t/s). No single configuration is optimal for both, which is a direct input
+to STEP-005/006: either pick per workload, or run separate instances. This also argues against
+judging the model on a single blended tok/s number.
+
+### Split mode: layer, not tensor
+
+At identical flags, layer split decodes at 3.65 t/s vs tensor split at 2.21 t/s, a 65% advantage.
+Tensor split is not the fast path for this model on this box.
+
+### Row split is broken for this pack, and the cause is identified
+
+`-sm row` aborts immediately at `ggml-sycl.cpp:1419` inside `get_row_rounding()`, exit
+`-1073740791` (0xC0000409). A GGUF header scan of shard 1 shows 42 tensors: 30x IQ1_M, 8x IQ2_XXS,
+3x **I64**, 1x **I32**. The I32/I64 tensors are the Engram lookup tables
+(`engram_token_map.weight` I32; `engram_primes/offsets/multipliers.weight` I64). The row-rounding
+switch handles IQ1_M and IQ2_XXS but has no case for I32/I64, so it reaches
+`default: GGML_ABORT`. Row split is unusable until those cases exist, and lookup tables
+arguably should not be row-split at all.
+
+### PCIe is ~12 GB/s per card — the "link width 1" reading was an artifact
+
+Empirical host↔device probe (`icx-cl -fsycl`, 512 MB transfers, all four cards):
+
+| device | H2D GB/s | D2H GB/s |
+|---|---:|---:|
+| 0 | 11.63 | 11.25 |
+| 1 | 11.68 | 11.19 |
+| 2 | 12.60 | 11.42 |
+| 3 | 11.66 | 11.31 |
+
+Peaks 12.1-13.2 GB/s. PCIe 4.0 x16 is ~25-28 GB/s and x8 is ~12-14 GB/s, so this is **PCIe 4.0
+x8 per card**, decisively not x1 (~0.9-1 GB/s). Windows PnP reported `link width = 1` for all
+four endpoints, which measurement contradicts; treat that reading as a reporting artifact.
+Caveat: this is bandwidth evidence, not a negotiated-link-state read. A x16 slot bifurcated to
+two x8 links, or a chipset x8 uplink, produces the same numbers.
+
+At ~12 GB/s per card, host-staged weight streaming is first-order for a 128.74 GiB pack, which
+supports the CPU-overflow/placement decisions already in the architecture table.
+
+### The serving path is blocked by an intermittent ~9.1 GiB host buffer allocation
+
+`llama-server` consistently places 38/41 layers and needs a **SYCL_Host buffer of 9,762,838,016 B
+(9.09 GiB)**. That allocation is unreliable:
+
+| env | outcome |
+|---|---|
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=1` (default) | `ggml_backend_sycl_host_malloc: failed to allocate 9310.57 MiB of pinned memory` |
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0` | **sometimes succeeds** — model loads, `/health` returns 200, `listening on :9036`, all slots idle |
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0`, retried | falls back to `ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer of size 9762838016` |
+
+So the pinned-memory path is a real and separate defect, and disabling it is necessary but **not
+sufficient** — the plain host allocation also fails intermittently.
+
+**This is host-RAM exhaustion, and the cause is the RAM watchdog.** An earlier note in this
+section claimed otherwise from a `FreePhysicalGB=84.65` reading — that reading was taken *after*
+the process died and released memory, so it described the idle box, not the failure. Corrected.
+
+The authoritative account is `WATCHDOG-KILL-FINDING.md` and `HOST-COMMIT-CONTROL.md`:
+
+- `C:\llama-swap\ram-watchdog.ps1` kills `llama-server` when available RAM drops below **6 GB**,
+  using `Stop-Process -Force` -> `TerminateProcess(h,-1)` -> **exit code -1**. Every recorded
+  `exit -1` on this track is that kill, not an abort in the deepseek41 code.
+- Private commit tracks **~1.0-1.14x model size** on this SYCL path, established against a
+  17.28 GB control model that loads and serves normally (priv 19.66 GB, ratio 1.138, `health 200`).
+- 1017 therefore needs roughly **148 GB** of host commitment against **95.9 GB** installed. The
+  shortfall is 33-43 GB and no load-mode or offload flag closes it.
+
+Direct confirmation from `ram-watchdog.log` at 2026-10-28 07:45:52:
+`KILLED 1 llama-server (avail=5.28 GB below 6 GB): pid=12604 priv=95.1GB ws=79.1GB`.
+
+Also confirmed: omitting `-fit off` fails differently and worse, attempting a 19.1 GiB
+allocation on SYCL0. `-fit off` is mandatory for this model on this box.
+
+So the serving path is **not** blocked on a fixable allocation defect. It is blocked on arithmetic:
+this pack does not fit in this machine's RAM. Viable directions are a pack of ~<=70 GB with
+`deepseek41` support, or ~160 GB of RAM. `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0` changing the failure
+signature is a symptom of *when* the watchdog fires, not a fix.
+
+### GPU health: TDR count is genuinely zero, but the "clean" framing needs nuance
+
+Confirmed independently: **`Display` provider TDR (Event 4101) = 0 over 7 days.** The handoff's
+claim holds.
+
+However, the Application log also carries **3,790 LiveKernelEvent entries in 7 days**, dominated
+by `P1: 141` (2,827) with `P1: 193` (455), `P1: 124` (262). These are not TDRs and did not
+correlate with any of today's llama-server exits, but "zero TDRs" should not be read as "no GPU
+diagnostic events at all". Worth identifying what 0x141 is on this driver before a long soak.
 
 ## Evidence and status
 

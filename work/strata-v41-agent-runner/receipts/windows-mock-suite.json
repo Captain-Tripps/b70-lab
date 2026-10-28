@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "label": "native-runner-mock-suite",
+  "host": "GPU-BOX",
+  "platform": "native-windows",
+  "powershell": "5.1.26100.9711",
+  "started_root": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z",
+  "total": 11,
+  "passed": 11,
+  "failed": 0,
+  "outcome": "PASS",
+  "note": "CPU-only contract tests. Not a GPU result and not a qualification of real Strata builds.",
+  "cases": [
+    {
+      "name": "success-exit-zero",
+      "status": "PASS",
+      "detail": "PASS/exit 0, stdout captured to file",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-success"
+    },
+    {
+      "name": "nonzero-exit-propagates",
+      "status": "PASS",
+      "detail": "child exit 7 preserved as FAIL, not confused with timeout",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-nonzero"
+    },
+    {
+      "name": "nonzero-stderr-captured",
+      "status": "PASS",
+      "detail": "child stderr written to its own file",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-nonzero\\stderr.log"
+    },
+    {
+      "name": "timeout-kills-tree",
+      "status": "PASS",
+      "detail": "TIMEOUT after 6s; grandchild 13260 reaped; killed=5812,26716,13260,26480",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-timeout"
+    },
+    {
+      "name": "paths-with-spaces",
+      "status": "PASS",
+      "detail": "spaced cwd, spaced exe path, spaced run dir; argument kept as one element",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\dir with space\\run out"
+    },
+    {
+      "name": "no-shell-injection",
+      "status": "PASS",
+      "detail": "quoted payload stayed an argument; no side-effect file created",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-injection"
+    },
+    {
+      "name": "sentinel-survives-cleanup",
+      "status": "PASS",
+      "detail": "unrelated PID 16176 still running after a timed-out kill",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-sentinel"
+    },
+    {
+      "name": "competing-lock-busy",
+      "status": "PASS",
+      "detail": "second acquire refused with BUSY while a live holder held the lease",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\gpu-test.lock"
+    },
+    {
+      "name": "live-lease-not-breakable",
+      "status": "PASS",
+      "detail": "Break refused while the recorded holder was alive",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\gpu-stale.lock"
+    },
+    {
+      "name": "stale-lease-recovery",
+      "status": "PASS",
+      "detail": "dead holder -> STALE -> Break -> FREE",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\gpu-stale.lock"
+    },
+    {
+      "name": "missing-cwd-is-error",
+      "status": "PASS",
+      "detail": "absent cwd reported as ERROR, never PASS",
+      "evidence": "%USERPROFILE%\\AppData\\Local\\Temp\\b70-runner-tests-20261027T054122Z\\case-badcwd"
+    }
+  ]
+}

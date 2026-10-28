@@ -1,0 +1,18 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+____________________________ test_greeting_contract ____________________________
+
+    def test_greeting_contract():
+>       assert greeting("Zeus") == "Hello, Zeus!"
+E       AssertionError: assert 'Hello:Zeus' == 'Hello, Zeus!'
+E         
+E         - Hello, Zeus!
+E         ?      ^^    -
+E         + Hello:Zeus
+E         ?      ^
+
+work/strata-v41-agent-runner/fixtures/greeting.py:15: AssertionError
+=========================== short test summary info ============================
+FAILED work/strata-v41-agent-runner/fixtures/greeting.py::test_greeting_contract
+1 failed, 1 passed in 0.01s
+exit=1
