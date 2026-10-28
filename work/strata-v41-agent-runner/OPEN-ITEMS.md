@@ -1,5 +1,11 @@
 # Open items — updated 2026-10-28 09:30 (checkpoint)
 
+> **2026-10-28 ~10:50 — all three P0s below are DONE; see `SESSION-14-RESULTS.md`.**
+> Watchdog is commit-aware; the control showed the backend mirrors device allocations into resident
+> host RAM about 1:1; 1017 benched at `-ncmoe 24`: warm prefill 7.0 tok/s, decode 0.93 tok/s
+> (NVMe-bound). New P0: run the 16 GB Level Zero alloc+copy test on native Linux to find out whether
+> the mirror is Windows-specific.
+
 Ordered by value. `SESSION-13-CHECKPOINT.md` and `HANDOFF-SESSION-13.md` carry the detail.
 
 -
