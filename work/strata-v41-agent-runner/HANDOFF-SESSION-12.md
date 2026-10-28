@@ -2,6 +2,22 @@
 
 Written for a fresh session. Read this, then act. Do not repeat completed work.
 
+> ## ⚠️ SUPERSEDED 2026-10-28 07:00 — read `WATCHDOG-KILL-FINDING.md` first
+>
+> **§3, §4 and the `-ngl` reasoning below are wrong.** The `exit -1` is not an unhandled abort.
+> It is `C:\llama-swap\ram-watchdog.ps1` calling `TerminateProcess` when host RAM drops below
+> 6 GB — verified by control test (`.Kill()` → exit `-1`) and by the watchdog's own log, which
+> timestamps every kill with pid and private bytes.
+>
+> Consequences:
+> - **Do not bisect the three patches.** Nothing implicates them.
+> - `CHECKPOINT-FIX-NEGATIVE.md` is invalid in both claim and direction of inference.
+> - **0.85 tok/s is not a prefill measurement** — it is 27 tokens of a process being starved.
+> - Host commit runs 121–133 GB against a 128.74 GB pack **in every load mode** (`none`, `auto`,
+>   `dio`). Device buffers are only 119.4 GB and do fit VRAM. Host staging is the blocker.
+>
+> Read `WATCHDOG-KILL-FINDING.md` §5–§7 before proposing any next step.
+
 Branch: `work/strata-v41-agent-runner`, remote `Captain-Tripps/b70-lab`.
 HEAD at handoff: `6964acb`. Tree clean, all pushed.
 
@@ -16,8 +32,8 @@ HEAD at handoff: `6964acb`. Tree clean, all pushed.
 
 ## 1. One-line state
 
-**1017 loads and runs on an idle box, processes prompt tokens at 0.85 tok/s, then dies with a silent
-`exit -1`. Prefill improved 2.6x over the old 0.33 figure. The crash is not a config problem.**
+**1017 loads and runs on an idle box, processes prompt tokens at 0.85 tok/s, then is killed by the
+host-RAM watchdog. The `exit -1` is external, not a crash. See `WATCHDOG-KILL-FINDING.md`.**
 
 -
 
@@ -39,7 +55,11 @@ Fusion is enabled and batching splits at 166. Do not re-investigate that.
 
 -
 
-## 3. The actual blocker: a silent abort
+## 3. The actual blocker: ~~a silent abort~~ → host-RAM exhaustion (SUPERSEDED)
+
+**Corrected 2026-10-28 07:00.** The text below is retained for context but its conclusion is
+wrong. There is no abort. `WATCHDOG-KILL-FINDING.md` has the evidence.
+
 
 Two configurations, two different death points, same silent `exit -1`:
 
@@ -77,7 +97,11 @@ after that success. An interaction between these is the most likely cause.
 
 ## 4. What to do next, in order
 
-1. **Get the abort site.** `GGML_SYCL_DEBUG=1`, or attach a debugger / enable Windows WER dumps. Do not
+**SUPERSEDED — none of the below applies.** See `WATCHDOG-KILL-FINDING.md` §7. The real next step
+is to settle whether host commit ≈ model size is loader staging or xe/TTM staging, because that
+decides whether 1017 can run on 96 GB at all.
+
+1. ~~**Get the abort site.**~~ `GGML_SYCL_DEBUG=1`, or attach a debugger / enable Windows WER dumps. Do not
    try more flag combinations first — we have ruled out the two most plausible ones.
 2. **Bisect the three patches.** `git stash` them one at a time (backups exist as `.orig-*` files) and
    see which one makes it survive past 27 tokens. This is cheap and high-information.

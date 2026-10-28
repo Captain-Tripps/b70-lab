@@ -1,5 +1,18 @@
 # 1017 prefill — MEASURED (2026-10-28 00:48)
 
+> ## ⚠️ NOT A PREFILL MEASUREMENT — see `WATCHDOG-KILL-FINDING.md`
+>
+> The process was killed by the host-RAM watchdog at **00:48:05**, and the `print_timing` line is
+> stamped 00:48:24. So "27 tokens in 31.75 s / 0.85 tok/s" is **27 tokens processed while the
+> box was out of memory and the process was being torn down**. It is not a measure of the batch
+> path.
+>
+> Do not quote 0.85 tok/s as a 1017 prefill rate. The improvement from 0.33 → 0.85 is not evidence
+> the HC-fusion patch works; both figures are starvation artifacts.
+>
+> The load-mode matrix (private commit 121–133 GB in every mode) is in
+> `WATCHDOG-KILL-FINDING.md` §5.
+
 First clean measurement on a fully idle box, with llama-swap stopped. This supersedes the
 "no number produced" state in `PREFILL-INVESTIGATION.md`.
 

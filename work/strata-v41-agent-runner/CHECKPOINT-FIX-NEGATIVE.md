@@ -1,5 +1,25 @@
 # 1017 checkpoint-fix test: NEGATIVE result (2026-10-28 00:55)
 
+> ## ⚠️ INVALIDATED 2026-10-28 07:00 — see `WATCHDOG-KILL-FINDING.md`
+>
+> **Both runs in this document were killed by the host-RAM watchdog, not by a crash.**
+> `C:\llama-swap\ram-watchdog.ps1` logs every kill with pid, private bytes and free RAM:
+>
+> ```
+> 2026-10-28 00:48:05 KILLED 1 llama-server (avail=5.58 GB below 6 GB): pid=3120  priv=133.4GB
+> 2026-10-28 00:54:44 KILLED 1 llama-server (avail=4.91 GB below 6 GB): pid=19612 priv=129.9GB
+> ```
+>
+> So the conclusion below — "disabling checkpoints makes it fail earlier" — describes the
+> *position in load* each process had reached when RAM ran out, not any causal effect of the
+> checkpoint flags. **`srv-nockpt` did reach `llama_context` and then stalled ~90 s before being
+> shot; it did not "die at `llama_context` construction".** §2's inference that the checkpoint
+> line "is a symptom of the shutdown path" also has the direction backwards: that line is
+> stamped 20 s *after* the kill.
+>
+> The checkpoint flags were never the variable under test that mattered. Treat this file as a
+> record of two host-OOM kills, nothing more.
+
 Tested `--cache-ram 0 --ctx-checkpoints 0` as the candidate fix for the crash-after-checkpoint
 observed in `PREFILL-MEASURED.md`. **It does not fix it, and it makes the failure earlier.**
 
