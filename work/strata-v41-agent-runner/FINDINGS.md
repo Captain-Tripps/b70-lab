@@ -2055,3 +2055,52 @@ Caveat: `llama-bench` reports ± as the sample stddev across reps. A 61% relativ
 underlying distribution is almost certainly bimodal (fast mode / slow mode), not Gaussian — so the
 mean is a weak summary and the per-run spread should be quoted instead. Recommend recording
 individual rep times going forward rather than only mean ± sd.
+
+### L-046 — Measuring without the GPU lease wasted a whole round; the lease exists and was ignored
+
+Both sessions on 2026-10-28 measured on the same four B70s at the same time and then withdrew
+each other's conclusions:
+
+- This session started `qual.bat` after seeing zero llama processes, and called the result
+  "QUALIFIED (idle box)". It was not idle — the other session's bench was resident moments later,
+  and my own bench (pid 29500, priv 129.66 GB) was in turn named as contention in their commit
+  `c53aad2`.
+- `CommitUsed` reached 153-155 GB against a 154.8 GB limit. Both runs were starved and both sets
+  of numbers are unqualified.
+
+**`bench/runner/GpuTestLock.ps1` exists in this repo for exactly this purpose** and neither session
+took the lease. "Check tasklist, see nothing, go" is not a lock — it races, and the window between
+check and start is exactly when the other agent starts.
+
+Procedure that should have been followed, and is now required:
+
+```powershell
+# before any GPU work
+powershell -File GpuTestLock.ps1 -Action Acquire -LockPath C:\b70-work\gpu-test.lock -HolderPid <pid> -EmitJson
+#   ... run the benchmark ...
+powershell -File GpuTestLock.ps1 -Action Release -LockPath C:\b70-work\gpu-test.lock -HolderPid <pid> -EmitJson
+```
+
+The lock already implements BUSY refusal, live-holder protection, stale recovery and sentinel
+safety, and was qualified 11/11 in CHECK-100. It was built for this and then not used for the
+measuring it was built to protect.
+
+**Consequence for the ledger:** every throughput number recorded on 2026-10-28 by either session is
+contended and must be re-taken under the lease before being quoted. That includes W-056, W-038,
+W-039, W-041..W-044 and the PLAN.md table.
+
+### W-057 — Reading the free-memory metric wrong is why the watchdog looks like a bug
+
+Independent of the contention issue, `c53aad2` records a genuine measurement trap worth keeping:
+`ram-watchdog.ps1:32` reads `FreePhysicalMemory`, which **excludes standby** cache. Observed
+`free=0.00` while `available=58.19`. A healthy mmap load can therefore be killed by a watchdog that
+thinks the box is out of memory when it is only holding reclaimable pages.
+
+This reconciles two things that looked contradictory earlier:
+- mmap'd model pages are file-backed and evictable (`CPU_Mapped 35,201 MiB`), so they are not a
+  hard commitment;
+- yet the watchdog still fires, because it is reading the wrong counter.
+
+So "host commit ~= model size" (HOST-COMMIT-CONTROL) and "mmap is evictable" are both true, and the
+watchdog's metric is the thing that turned them into a false "1017 cannot load" verdict. Fix the
+watchdog to use `AvailableMBytes`/`AvailableBytes` before drawing any more load conclusions.
