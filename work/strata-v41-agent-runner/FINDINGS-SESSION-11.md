@@ -298,3 +298,87 @@ per round against our 2.83. Holding our 53.2 ms round fixed:
 Not spec depth — that is tuned. The drafter (`D:\AI\Strata-data\mtp\rt`) is the constraint. Options:
 a larger draft head for this model, or `--lookup-chain` / `--suffix-draft` which have never actually
 engaged here.
+
+-
+
+## 10. Lever sweep (prompt supplied an external tuning table; tested each against the binary)
+
+### 10a. Most of the supplied table does not apply to Strata
+
+The external table is llama.cpp / llama-swap vocabulary. Verified each against the binary, which
+errors loudly on unknown flags (`unknown argument: --bogus-flag-xyz`):
+
+| Supplied param | In Strata? | Finding |
+|---|---|---|
+| `--vram-reserve-mib` | **yes** | Already passed at 1024 in every run. Tested 2048 below. |
+| `--vram-reserve-later-mib` | **yes, but N/A** | Parsed (`generate.cpp:1924`), but only used as `later &&` in the layer-split stage sizing (`:3685`). We use the expert-cache tier (`--expert-cache-device*`), not `--layer-split`, so it never applies. |
+| `--kv-cache-precision` | **no** | `unknown argument`. Strata spells it `--kv int8\|fp16\|q4_0\|k8v4`. We already use int8. |
+| `--parallel` | **no** | `unknown argument`. That is a llama-server concept; Strata has `--batch` slots and the help explicitly warns slot batching costs VRAM per slot. |
+| `gpu` / `gpu_order` | **no** | Not flags at all — llama-swap config keys. Strata selects devices by `--expert-cache-device1\|2\|3` and `--layer-split`. |
+
+So of five suggested levers, **one was already in use and one is inapplicable by design**. The other
+three are for a different engine. This is worth recording: that table should not be applied to Strata
+without translation.
+
+### 10b. Nine variants, code prompt, `--spec 4`, 2 cards, `--max-new 64`
+
+| Variant | Flags | tok/s | Accept | tok/round | Round ms |
+|---|---|---:|---:|---:|---:|
+| base | (none) | **53.02** | 42 of 64 (0.656) | 2.83 | 53.4 |
+| sd0 | `--suffix-draft 0` | **54.92** | 43 of 63 (0.683) | 2.83 | 51.5 |
+| sd8 | `--suffix-draft 8` | 53.80 | 43 of 63 (0.683) | 2.83 | 52.6 |
+| kvg | `--kv-grow` | 52.88 | 42 of 64 (0.656) | 2.83 | 53.5 |
+| lk2 | `--lookup-chain 2` | 52.47 | 41 of 71 (0.577) | 1.86 | 35.4* |
+| hnstr | `--mtp-hnorm stream` | 52.29 | 42 of 65 (0.646) | 2.83 | 54.1 |
+| lk4 | `--lookup-chain 4` | 51.38 | 41 of 71 (0.577) | 1.86 | 36.2* |
+| vr2k | `--vram-reserve-mib 2048` | 47.24 | 41 of 66 (0.621) | 2.83 | 59.9 |
+| mtpq4 | `--mtp-q4 all` | **18.09** | **0 of 189 (0.000)** | 1.00 | 55.3 |
+
+\* The lk2/lk4 round-time figure is anomalously low against a nearly identical tok/round. Do not build
+on it; the tok/s number is the reliable one.
+
+**Nothing beats baseline beyond noise.** `sd0` leads by 3.6%, which is inside single-sample spread on
+this box. Baseline itself reproduced at 53.02 vs 53.16 earlier, so ±0.3% run-to-run is normal — 3.6%
+is not clearly outside it.
+
+### 10c. Two real findings
+
+**`--vram-reserve-mib 2048` is a 10.9% regression.** Not neutral: at 2048 the expert cache drops from
+10,618 to 10,091 slots and CUDA1 takes 527 more experts (14,485 vs 13,958). Round time rises 53.4 ->
+59.9 ms. On this box the 1024 default is correct, and the external table's "1024 to 2048" advice is
+wrong for it — more reserve means more experts pulled over the host path.
+
+**`--mtp-q4 all` is broken, not slow.** 0 of 189 drafts accepted across 64 rounds, every round
+exactly 1 token. The 4-bit draft head produces drafts that never match. Worth reporting upstream.
+
+### 10d. Unintended gift: the non-speculative baseline
+
+`--spec 0` is refused on native IQ packs, so I said earlier there was no non-spec baseline. `mtpq4`
+accidentally provided one: with the drafter producing garbage, every round degenerated to exactly
+1 token — i.e. plain decode.
+
+| | tok/s | tok/round | round ms |
+|---|---:|---:|---:|
+| plain decode (mtpq4, 0 accepted) | 18.09 | 1.00 | 55.3 |
+| spec 4 (base) | 53.02 | 2.83 | 53.4 |
+
+**Round cost is essentially identical (55.3 vs 53.4 ms).** Speculation is worth **2.93x**, and it is
+worth it entirely through tokens-per-round, not through cheaper rounds. This is the cleanest
+confirmation yet of §9c: the engine is round-cost-bound, and the only lever that matters is how many
+tokens a round produces.
+
+### 10e. Correction to an earlier claim
+
+I wrote in §9d that `--suffix-draft` reported zero windows in every run. That was true of the
+token-soup prompt only. On the code prompt, base and sd8 both show `2 windows, drafts accepted 4 of 4`
+while sd0 shows `0 windows`. So suffix drafting does engage on realistic text — it is just worth ~2
+tokens out of 64, which is why `sd0` and `sd8` are indistinguishable.
+
+### 10f. Where this leaves the gap
+
+Best measured on this box: **54.92 tok/s** (sd0) vs the lab's 97.6. Acceptance is 0.683 against their
+implied ~0.9, and tokens/round is 2.83 against their implied ~5.5, at the same per-round cost.
+
+Raising spec depth does not help (prose peaks at 3, code at 4, depth 8 regresses). Every engine-side
+flag tried here is neutral or worse. **The remaining gap is the draft model's quality.** A better MTP
+head is the only lever left that the measurements point to — nothing in the flag surface moves it.
