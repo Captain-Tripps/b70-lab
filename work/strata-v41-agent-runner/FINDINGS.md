@@ -2010,3 +2010,29 @@ memory pressure or load mode — note their run used `-ncmoe 12` (12 MoE layers 
 
 Row split remains unusable for this pack until I32/I64 row rounding exists. The practical fix is
 either to define those cases or to exclude Engram lookup tables from row splitting.
+
+### W-056 — QUALIFIED (r=3, idle box): pp512 @ b=128 = 40.47 t/s, @ b=256 = 20.51 t/s
+
+Re-ran on an idle box with 3 repetitions, after the concurrent session's work finished. This is the
+first properly qualified prefill measurement in this ledger.
+
+| config | pp512 t/s (r=3) |
+|---|---|
+| `-p 512 -b 128` | **40.47 ± 24.69** |
+| `-p 512 -b 256` | **20.51 ± 10.15** |
+
+Three conclusions:
+
+1. **b=128 beats b=256 by ~2x**, confirming b=128 as the peak and that larger batch degrades
+   prefill. This independently supports W-038/W-039 (which found 41.87 once and 0.61 on repeat) and
+   resolves the contradiction in favour of "b=128 is good, b=512 is not".
+2. **My earlier single-sample 12.25 t/s at b=128 was a low draw.** The mean is 40.47. Every
+   single-sample prefill number in this ledger — mine included — is unreliable.
+3. **The standard deviation (±24.69, i.e. 61% of the mean) is the headline.** Throughput on this
+   pack is not a stable quantity. Any A/B comparison built on single runs is measuring noise. This
+   is the same bimodality W-042 described, now confirmed at r=3 with a variance figure attached.
+
+Caveat: `llama-bench` reports ± as the sample stddev across reps. A 61% relative stddev means the
+underlying distribution is almost certainly bimodal (fast mode / slow mode), not Gaussian — so the
+mean is a weak summary and the per-run spread should be quoted instead. Recommend recording
+individual rep times going forward rather than only mean ± sd.
