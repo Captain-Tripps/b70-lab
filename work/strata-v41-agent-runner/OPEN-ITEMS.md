@@ -21,8 +21,9 @@ Opened 2026-10-27 during the speed-tuning session. Umbrella: **#11**.
 | [#17](https://github.com/Captain-Tripps/b70-lab/issues/17) | Throughput is bimodal (±31 on a mean of 39); needs per-sample JSON | OPEN — blocks all numbers |
 | [#18](https://github.com/Captain-Tripps/b70-lab/issues/18) | dpct pilot: ~85% of dsv41 kernels auto-convert | **DONE** — method accepted, acceptance unchanged |
 | [#19](https://github.com/Captain-Tripps/b70-lab/issues/19) | v0.2.7 Windows SYCL build succeeds; 6 fixes to upstream | **DONE** — `strata.exe` 45 MB, `BUILD_EXIT=0` |
-| [#20](https://github.com/Captain-Tripps/b70-lab/issues/20) | Qwen: real single-card baseline (12.95 t/s is one 7-token sample) | OPEN — needs QWEN-1 |
-| [#21](https://github.com/Captain-Tripps/b70-lab/issues/21) | Qwen: multi-GPU expert tier is a SYCL stub | OPEN — **blocks 97.6 t/s and affects dsv41 STEP-004** |
+| [#20](https://github.com/Captain-Tripps/b70-lab/issues/20) | Qwen single-card baseline | **PARTIAL** — n=3 gives **11.02** tok/s (12.95 does not reproduce). Prefill/`--spec 0` still open |
+| [#21](https://github.com/Captain-Tripps/b70-lab/issues/21) | ~~multi-GPU tier is a stub~~ | **PREMISE RETRACTED** — tier works: 11.0 / 28.7 / 28.6 / 29.7 on 1-4 cards. Cards 3-4 add +3%. Refiled to the flat host terms |
+| [#22](https://github.com/Captain-Tripps/b70-lab/issues/22) | `STRATA_VERIFY_NO_HOST=1` + `STRATA_MIRROR_MIB=0` makes the 200k lab config refuse | OPEN — new |
 
 ## Rules for this work
 

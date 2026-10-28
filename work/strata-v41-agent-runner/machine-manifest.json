@@ -1,425 +1,455 @@
 {
-  "schema_version": 1,
-  "step": "STEP-001",
-  "check": "CHECK-101",
-  "inventory_kind": "read-only",
-  "captured_at": "2026-10-27T05:35:00Z",
-  "captured_via": "ssh gpu-box -> powershell.exe (native Windows)",
-  "note": "SSH lands in WSL2 bash on GPU-BOX; all Windows facts below came from powershell.exe, not WSL.",
-  "os": {
-    "caption": "Microsoft Windows 11 Pro",
-    "version": "10.0.26200",
-    "build": 26200,
-    "install_date": "2026-06-30T06:17:34"
-  },
-  "cpu": {
-    "name": "AMD EPYC 7402P 24-Core Processor",
-    "physical_cores": 24,
-    "logical_processors": 48,
-    "max_clock_mhz": 2801,
-    "l3_kb": 131072,
-    "isa_note": "Zen 2 - AVX2 only; no AVX-512. Plan requires host code compiled without AVX-512."
-  },
-  "memory": {
-    "dimm_count": 6,
-    "dimm_capacity_bytes_each": 17179869184,
-    "dimm_total_bytes": 103079215104,
-    "reported_total_physical_bytes": 102941720576,
-    "reported_total_gib": 95.87,
-    "speed_mt": 2133,
-    "manufacturer": "Micron Technology",
-    "part_number": "36ASF2G72PZ-2G1A2",
-    "channels_populated": [
-      "A",
-      "B",
-      "C",
-      "D",
-      "E",
-      "F"
-    ],
-    "reconciliation": {
-      "reported_128_gb_claim": "NOT confirmed. Six 16 GiB DIMMs populate 6 of 8 channels.",
-      "historical_112_gb": "not reproduced today",
-      "historical_95_9_gb": "MATCHES today's 95.87 GiB exactly",
-      "conclusion": "The box currently has 6 DIMMs / 95.87 GiB usable. The 128 GB figure in the plan is the board's 8-slot capacity, not installed memory. Any earlier 112 GB reading is not reproduced."
-    }
-  },
-  "whea": {
-    "provider": "Microsoft-Windows-WHEA-Logger",
-    "event_id": 22,
-    "pattern": {
-      "occurrences": "exactly one per boot, ~23 s after boot",
-      "last_boot": "2026-10-25T11:08:30",
-      "last_event": "2026-10-25T11:08:53",
-      "seconds_after_boot": 23.0,
-      "events_since_boot": 1,
-      "uptime_hours_at_check": 37.62,
-      "runtime_recurrence": "none observed in 37.6 h of continuous uptime"
-    },
-    "recent_occurrences": [
-      "2026-10-25T11:08:53",
-      "2026-10-24T08:59:47",
-      "2026-10-24T08:38:08",
-      "2026-10-22T08:35:54",
-      "2026-10-21T11:41:12",
-      "2026-10-21T11:30:12",
-      "2026-10-21T11:07:42",
-      "2026-10-21T10:16:57",
-      "2026-10-19T12:34:26",
-      "2026-10-17T14:00:02"
-    ],
-    "unresolved_hardware_fault": true,
-    "revised_interpretation": "This is a BOOT-TIME memory-path fault, not a runtime one. It fires once per boot ~23 s in, then does not recur for the life of the uptime (37.6 h clean at time of check). The practical consequence is a permanently reduced DIMM population (6 of 8 slots usable), not an expectation that a long GPU workload will crash the box.",
-    "check_101_consequence": "UPDATED: heavy testing is NOT gated by runtime instability on this evidence. What CHECK-101 still lacks is a resolved root cause and a repaired DIMM/CPU path. Treat the machine as stable-but-degraded: 95.87 GiB usable is the budget, and any future RAM change invalidates A/B comparisons across it. The earlier 'pause heavy testing' reading in commit ecaad19 overstated the risk; this supersedes it.",
-    "root_cause_status": "unresolved; prior lab note attributes it to the CPU socket. Unverified here."
-  },
-  "storage": {
-    "physical_disks": [
-      {
-        "model": "WD_BLACK SN770 2TB",
-        "size_bytes": 2000396321280,
-        "interface": "SCSI"
-      },
-      {
-        "model": "KINGSTON SNV3S1000G",
-        "size_bytes": 1000202273280,
-        "interface": "SCSI"
-      }
-    ],
-    "volumes": [
-      {
-        "drive": "C:",
-        "used_gb": 577.82,
-        "free_gb": 52.81
-      },
-      {
-        "drive": "D:",
-        "used_gb": 1223.44,
-        "free_gb": 639.56
-      },
-      {
-        "drive": "E:",
-        "used_gb": 0.1,
-        "free_gb": 298.85
-      }
-    ],
-    "note": "A 257 GB model download does not fit on C:. D: has 639 GB free and E: has 298 GB free."
-  },
-  "gpu": {
-    "count_b70": 4,
-    "model": "Intel(R) Arc(TM) Pro B70 Graphics",
-    "driver_version": "32.0.101.8976",
-    "driver_date": "2026-08-27",
-    "pci_ids": [
-      "PCI\\VEN_8086&DEV_E223&SUBSYS_0105172F&REV_00",
-      "PCI\\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00",
-      "PCI\\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00",
-      "PCI\\VEN_8086&DEV_E223&SUBSYS_17018086&REV_00"
-    ],
-    "adapter_ram_reported_bytes": 4293918720,
-    "adapter_ram_note": "WMI AdapterRAM is a 32-bit field and caps at ~4 GiB; real per-card capacity is 32 GB. Do not use this value as a budget.",
-    "display_adapter_separate": "Microsoft Basic Display Adapter (ASPEED, VEN_1A03&DEV_2000) - desktop is on the BMC, not a B70. Good: no B70 loses VRAM to dwm.",
-    "pcie_link_telemetry": "UNKNOWN - not captured. Windows does not expose negotiated link generation/width for these adapters via the CIM classes available here; requires vendor tooling or dxdiag.",
-    "pnp_device_status": {
-      "note": "Get-PnpDevice reports Status=Unknown for several B70 entries. That is a PnP state-reporting quirk for these adapters, not a fault: all four enumerate in sycl-ls and all four were exercised successfully in session 3 GPU runs.",
-      "status_ok_count": 3,
-      "status_unknown_count": 2,
-      "separate_amd_igpu": "PCI\\VEN_1002&DEV_13C0 (AMD Radeon integrated) present but unused for this work"
-    }
-  },
-  "missing_access": {
-    "pcie_link_width_generation": "still not captured - Windows does not expose negotiated generation/width for these adapters via available CIM classes; requires dxdiag or vendor tooling. Genuinely open.",
-    "oneapi_compiler_version": "CLOSED - 2026.0.0.20260331 (see runtime_identities)",
-    "level_zero_loader_version": "CLOSED - 1.32.0",
-    "ur_adapter_version": "CLOSED - ur_loader 0.12.0 (2026.0) / 0.11.10 (2025.1)",
-    "strata_source_checkout": "not verified in this pass. Earlier session located %USERPROFILE%\\strata-win @ 1c360526 with 29 dirty files, but that path belongs to the deprecated llama.cpp route context and was not re-confirmed read-only here. Leave OPEN rather than assert.",
-    "windows_fork_base_1c360526_full_commit": "still unresolved - requires git fetch origin in the strata tree"
-  },
-  "captured_at_second_pass": "2026-10-27T17:34:45Z",
-  "second_pass_note": "Second read-only pass closed the runtime-identity gaps listed in the original missing_access block. Method: sycl-ls run both WITHOUT and WITH the oneAPI setvars environment. The no-env run exposes only OpenCL devices; Level Zero devices appear only with setvars applied. Capturing only the no-env run would have under-reported the GPU backends actually in use.",
-  "runtime_identities": {
-    "oneapi_compiler": {
-      "icx_version": "2026.0.0.20260331",
-      "banner": "Intel(R) oneAPI DPC++/C++ Compiler for applications running on Intel(R) 64, Version 2026.0.0 Build 20260331",
-      "target": "x86_64-pc-windows-msvc",
-      "thread_model": "posix",
-      "icx_path": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe",
-      "installed_toolkits": [
-        "2025.1",
-        "2026.0"
-      ],
-      "dpcpp_note": "dpcpp is deprecated by Intel; wrapper prints 'use icx -fsycl'. Both resolve to the 2026.0 compiler.",
-      "note_on_sycl_dll": "SYCL runtime naming differs by toolkit. 2025.1 ships sycl8.dll; the 2026.0 compiler ships sycl9.dll (3795304 bytes, 2026.0.0.0). There is NO sycl8.dll in the 2026.0 tree - that is expected, not a defect.",
-      "sycl_dll_actual": {
-        "toolkit_2025_1": "sycl8.dll 2025.1.0.0",
-        "toolkit_2026_0": "sycl9.dll 2026.0.0.0 (3795304 bytes); sycl9-preview.dll same size; debug sycl9d.dll 5806440 bytes",
-        "sycl_jit": "sycl-jit.dll 190298984 bytes, filever reports 0"
-      },
-      "sycl7_dll": "absent everywhere - the earlier 'sycl7 not found' result stands and is not a gap"
-    },
-    "level_zero_loader": {
-      "version": "1.32.0",
-      "path": "C:\\Windows\\System32\\ze_loader.dll",
-      "additional_copy": "DriverStore iigd_dch_d.inf_amd64_eebe517ae5149ae4\\ze_loader.dll = 1.32.0",
-      "stale_copy": "DriverStore iigd_dch_d.inf_amd64_f69d39497e4a3af5\\ze_loader.dll = 1.28.2 (older, not on PATH)"
-    },
-    "unified_runtime": {
-      "ur_loader_2025_1": "0.11.10",
-      "ur_loader_2026_0": "0.12.0",
-      "note": "Two UR loader versions on disk; setvars selects the toolkit on PATH (2026.0).",
-      "pi_level_zero_dll": "not found as a standalone file (absorbed into the UR/L0 adapter layout)"
-    },
-    "sycl_runtime": {
-      "sycl8_dll": "2025.1.0.0",
-      "sycl7_dll": "absent"
-    },
-    "gpu_driver": {
-      "version": "32.0.101.8976",
-      "date": "2026-08-27",
-      "opencl_neo": "32.0.101.8976"
-    },
-    "level_zero_device_version": "1.15.39183+4",
-    "level_zero_extension_version": "20.2.0",
-    "one_mkl": {
-      "toolkits": [
-        "2025.1",
-        "2026.0",
-        "latest"
-      ],
-      "mkl_rt_2025_1": {
-        "file": "mkl_rt.2.dll",
-        "bytes": 27561056,
-        "filever": "2025.1.1",
-        "sha256": "698C867E771135911880FA3BA89BD02555607288DEE82EC012230BE1B30DE806",
-        "header": "INTEL_MKL_VERSION 20250100"
-      },
-      "mkl_rt_2026_0": {
-        "file": "mkl_rt.3.dll",
-        "bytes": 27890848,
-        "filever": "2026.0.0",
-        "sha256": "6A312EB1C4A92447E8D4C11D07420678BD07E0666C279FC621A3A6B03DB527D8",
-        "header": "INTEL_MKL_VERSION 20260000"
-      },
-      "note": "setvars puts 2026.0 on PATH; mkl_rt.3.dll is what a 2026.0 build will load"
-    },
-    "deployed_binary_hashes": {
-      "ze_loader.dll": {
-        "path": "C:\\Windows\\System32\\ze_loader.dll",
-        "bytes": 813864,
-        "filever": "1.32.0",
-        "sha256": "BC43DC7C1F30814ADC01340390EE251868A22944A87EB237140F7B8799D45172"
-      },
-      "ur_loader.dll_2026_0": {
-        "path": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\2026.0\\bin\\ur_loader.dll",
-        "bytes": 1530216,
-        "filever": "0.12.0",
-        "sha256": "CA884A229A7896F1D717AE574768F7D8815AD00868F53E153863BBB37FC071C5"
-      },
-      "note": "Hashes are SHA256 of the real files under the mkl/compiler tool trees. Paths under oneAPI\\2026.0\\bin report Length=0 for several files while returning valid hashes - see measurement_anomaly."
-    }
-  },
-  "sycl_devices": {
-    "method": "sycl-ls with oneAPI setvars applied (Level Zero visible); repeat without setvars shows OpenCL only",
-    "level_zero_gpus": [
-      {
-        "index": 0,
-        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
-        "l0_version": "1.15.39183+4",
-        "ext": "20.2.0"
-      },
-      {
-        "index": 1,
-        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
-        "l0_version": "1.15.39183+4",
-        "ext": "20.2.0"
-      },
-      {
-        "index": 2,
-        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
-        "l0_version": "1.15.39183+4",
-        "ext": "20.2.0"
-      },
-      {
-        "index": 3,
-        "name": "Intel(R) Arc(TM) Pro B70 Graphics",
-        "l0_version": "1.15.39183+4",
-        "ext": "20.2.0"
-      }
-    ],
-    "opencl_gpus": 4,
-    "opencl_cpu_devices": 2,
-    "opencl_cpu_detail": "AMD EPYC 7402P appears twice: 2025.19.4.0.18_160000.xmain-hotfix and 2026.21.3.0.31_160000",
-    "sl_count": 4,
-    "env_note": "ONEAPI_DEVICE_SELECTOR and SYCL_DEVICE_FILTER are both EMPTY after setvars. This matters: setting either one is what silently killed llama_context construction in this session's earlier work."
-  },
-  "evidence_receipts": [
-    {
-      "file": "receipts/check101-inventory.txt",
-      "sha256": "f5bc30c05f568d95ff2200f859726b3d8d5ed22d4128a86a59cc0a9b75ff867f",
-      "bytes": 5662,
-      "captured": "2026-10-27T12:33:51-05:00",
-      "method": "powershell.exe, no oneAPI env",
-      "contents": "OS, CPU, DIMMs, GPU CIM, PnP, DLLs, sycl-ls (OpenCL only)"
-    },
-    {
-      "file": "receipts/check101-level-zero.txt",
-      "sha256": "aa8dfa3066bba3743290300a8da1490a36f924cab857185110913a31ad3a4e54",
-      "bytes": 1411,
-      "captured": "2026-10-27T12:34",
-      "method": "cmd.exe + setvars.bat + sycl-ls",
-      "contents": "4x level_zero:gpu devices, env emptiness, exit 0"
-    },
-    {
-      "file": "receipts/check101-compiler.txt",
-      "sha256": "64ef1d2e9aa3f594cdbd870ce545ca95d378e197135b87cbe8a61c4d918039ea",
-      "bytes": 1064,
-      "captured": "2026-10-27T12:35",
-      "method": "cmd.exe + setvars.bat + icx --version",
-      "contents": "compiler banner, target, installed dir"
-    },
-    {
-      "file": "receipts/check101-hashes.txt",
-      "captured": "2026-10-27T12:51:10-05:00",
-      "method": "powershell.exe, file hashes + oneMKL headers",
-      "contents": "ze_loader/ur_loader SHA256, mkl_rt 2025.1/2026.0 SHA256 + INTEL_MKL_VERSION headers"
-    },
-    {
-      "file": "receipts/check101-sycl.txt",
-      "captured": "2026-10-27T12:52",
-      "method": "powershell.exe, sycl dll enumeration + reparse/length check",
-      "contents": "sycl9 vs sycl8 resolution, 0-byte-length anomaly evidence"
-    }
+ "schema_version": 1,
+ "step": "STEP-001",
+ "check": "CHECK-101",
+ "inventory_kind": "read-only",
+ "captured_at": "2026-10-27T05:35:00Z",
+ "captured_via": "ssh gpu-box -> powershell.exe (native Windows)",
+ "note": "SSH lands in WSL2 bash on GPU-BOX; all Windows facts below came from powershell.exe, not WSL.",
+ "os": {
+  "caption": "Microsoft Windows 11 Pro",
+  "version": "10.0.26200",
+  "build": 26200,
+  "install_date": "2026-06-30T06:17:34"
+ },
+ "cpu": {
+  "name": "AMD EPYC 7402P 24-Core Processor",
+  "physical_cores": 24,
+  "logical_processors": 48,
+  "max_clock_mhz": 2801,
+  "l3_kb": 131072,
+  "isa_note": "Zen 2 - AVX2 only; no AVX-512. Plan requires host code compiled without AVX-512."
+ },
+ "memory": {
+  "dimm_count": 6,
+  "dimm_capacity_bytes_each": 17179869184,
+  "dimm_total_bytes": 103079215104,
+  "reported_total_physical_bytes": 102941720576,
+  "reported_total_gib": 95.87,
+  "speed_mt": 2133,
+  "manufacturer": "Micron Technology",
+  "part_number": "36ASF2G72PZ-2G1A2",
+  "channels_populated": [
+   "A",
+   "B",
+   "C",
+   "D",
+   "E",
+   "F"
   ],
-  "captured_at_third_pass": "2026-10-27T17:52:01Z",
-  "measurement_anomaly": {
-    "what": "Files under C:\\Program Files (x86)\\Intel\\oneAPI\\2026.0\\bin report Length=0 via both Get-Item and System.IO.FileInfo, yet Get-FileHash returns the SAME SHA256 as the real, non-zero file in the sibling tool tree (e.g. mkl_rt.3.dll: 0 bytes at oneAPI\\2026.0\\bin, 27890848 bytes at oneAPI\\mkl\\2026.0\\bin, identical hash).",
-    "checked": [
-      "fsutil reparsepoint query on oneAPI\\2026.0 -> 'The file or directory is not a reparse point'",
-      "Get-Item -Force Attributes -> 'Directory' (no LinkType, no Target)",
-      "Same behaviour for sycl9.dll, sycl-ls.exe, sycl-jit.dll in that directory"
-    ],
-    "status": "UNRESOLVED - do not diagnose from this",
-    "guidance": "Treat Length reported for paths directly under oneAPI\\<ver>\\bin as unreliable. For sizes and hashes, read the corresponding file in the component tool tree (oneAPI\\mkl\\2026.0\\bin, oneAPI\\compiler\\2026.0\\bin). Do not conclude 'corrupt install' or 'zero-byte stub' from it."
-  },
-  "captured_at_fourth_pass": "2026-10-27T18:00:35Z",
-  "pcie_link_telemetry": {
-    "status": "PARTIAL / AMBIGUOUS - do not treat as resolved x16",
-    "method": "Get-PnpDeviceProperty DEVPKEY_PciDevice_CurrentLinkSpeed/CurrentLinkWidth/MaxLinkSpeed/MaxLinkWidth on each B70 endpoint, then on each parent root port.",
-    "endpoint_result_all_four_cards": {
-      "CurrentLinkSpeed": 1,
-      "CurrentLinkWidth": 1,
-      "MaxLinkSpeed": 1,
-      "MaxLinkWidth": 1,
-      "ExpressSpecVersion": 2,
-      "CurrentPayloadSize": 1,
-      "MaxPayloadSize": 1,
-      "MaxReadRequestSize": 2,
-      "AERCapabilityPresent": false,
-      "AtomicsSupported": false,
-      "AcsSupport": 2,
-      "AriSupport": true,
-      "AtsSupport": true
-    },
-    "parent_ports": [
-      {
-        "card": 0,
-        "parent": "PCI\\VEN_8086&DEV_E2F0&SUBSYS_00008086&REV_00\\5&1b017b79&0&080009",
-        "bus": 2,
-        "link_keys": "none exposed"
-      },
-      {
-        "card": 1,
-        "parent": "PCI\\VEN_8086&DEV_E2F0&SUBSYS_00008086&REV_00\\5&29004935&0&080019",
-        "bus": 134,
-        "link_keys": "none exposed"
-      },
-      {
-        "card": 2,
-        "parent": "PCI\\VEN_8086&DEV_E2F0&SUBSYS_00008086&REV_00\\5&2acee51&0&080009",
-        "bus": 194,
-        "link_keys": "none exposed"
-      },
-      {
-        "card": 3,
-        "parent": "PCI\\VEN_8086&DEV_E2F0&SUBSYS_00008086&REV_00\\5&256346ac&0&080009",
-        "bus": 130,
-        "link_keys": "none exposed"
-      }
-    ],
-    "interpretation": "Max == Current == 1 on every endpoint, and the parent root ports expose no link keys at all. Two readings, NOT yet distinguished: (a) Windows did not populate these values and '1' is a default/placeholder, or (b) all four cards are genuinely negotiating a x1 link at 2.5 GT/s. Reading (b) would be a serious hardware/config fault and would substantially explain the 1-3 t/s prompt-processing figures recorded in session 3.",
-    "why_not_conclusive": "DEVPKEY values of 1 for BOTH max and current on all four identical cards is implausible for B70 hardware, which is PCIe 4.0 x8/x16 capable. Placeholder is the more likely explanation, but it cannot be asserted without vendor telemetry.",
-    "required_to_close": [
-      "dxdiag display-section output per adapter (reports PCIe link gen/width on Windows)",
-      "or Intel Arc Control / vendor tooling",
-      "or a bandwidth measurement: a bounded host<->device transfer sized to distinguish x1 from x8/x16"
-    ],
-    "guidance": "Do NOT record as x16 and do NOT record as x1. PLAN.md:133 explicitly says record unavailable link telemetry as unknown, not x16. Same discipline applies to a suspicious 1.",
-    "follow_up_priority": "ELEVATED. If the link really is x1, the session-3 throughput blocker is a link/BIOS/slot-configuration problem rather than a SYCL kernel problem, which changes what STEP-002 should investigate first."
-  },
-  "source_provenance": {
-    "tree": "%USERPROFILE%\\strata-win",
-    "head_commit": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
-    "head_short": "1c360526",
-    "head_date": "2026-10-16 13:49:51 +0000",
-    "head_subject": "night: KREG BF16 GEMVs + indexer k/q one launch (agent mmvq, STRATA_NIGHT_BF16=1), MMVQ2 CAP_PCT knob",
-    "branch": "win-port",
-    "remotes": {
-      "origin": "https://github.com/hotschmoe/Strata.git",
-      "upstream": "https://github.com/Niko1221/Strata.git"
-    },
-    "dirty_entries": 3054,
-    "dirty_note": "3054 dirty entries, not the 29 recorded earlier. The 29 figure referred to a narrower count (tracked modifications) at an earlier moment; this is the full porcelain count including untracked. NOT reconciled here - needs a breakdown before any reliance.",
-    "warning": "Do not reset, stash -u, or clean this tree. There is no verified backup of the untracked content. PLAN.md:28 requires resolving the full commit and the actual deployed local changes during STEP-001; that is now started, not finished."
-  },
-  "source_pin_reconciliation": {
-    "captured_at": "2026-10-27T19:05:00-05:00",
-    "method": "git fetch origin --tags in %USERPROFILE%\\strata-win, then ls-remote --tags against origin and upstream; read-only, no checkout",
-    "deployed_tree": {
-      "head": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
-      "describe": "v0.1.44.1-26-g1c360526b",
-      "branch": "win-port",
-      "tracking": "NONE - no upstream configured for win-port; 1c360526 is published only as refs/heads/b70-night-20261016 on origin",
-      "origin_main": "296b59d2f73c8f04a805df29c2fa97655adace78",
-      "ahead_of_origin_main": 26,
-      "behind_origin_main": 0,
-      "merge_base_with_v026": "296b59d2f73c8f04a805df29c2fa97655adace78"
-    },
-    "pin_v0_2_6": {
-      "tag_object": "ff91dd77a13857ccc2f1bd67edc9a8ecd4ecdfa4",
-      "annotated": true,
-      "peeled_code_commit": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
-      "tagger": "Niko1221",
-      "tagger_date": "2026-10-25T14:25:46+01:00",
-      "tag_subject": "Strata 0.2.6 (code commit 4b9e05a2...; the tag commit adds README and docs only)",
-      "remote_carrying_tag": "upstream (https://github.com/Niko1221/Strata.git)",
-      "origin_refs_matching": "0",
-      "upstream_refs_matching": "2",
-      "is_ancestor_of_head": false,
-      "head_is_ancestor_of_it": false,
-      "commits_ahead_of_origin_main": 2022
-    },
-    "engine_presence": {
-      "deployed_head_dsv41_files": 0,
-      "v0_2_6_dsv41_files": 132,
-      "v0_2_6_has_docs_DEEPSEEK41_md": true,
-      "v0_2_6_has_data_dsv41_profile_2_00_bin": true,
-      "v0_2_6_has_include_strata_dsv41_exl3_hpp": true,
-      "doc_excerpt": "Strata runs it with its own engine, strata-dsv41 (src/dsv41, ported from Project Maya maya-ds4)"
-    },
-    "local_fix_overlap": {
-      "checked_markers": [
-        "strata_win_undefs",
-        "STRATA_SYCL_XE2_JIT",
-        "strata_device_context",
-        "STRATA_WIN_SHARED_CONTEXT",
-        "STRATA_WIN_TIMER_MS",
-        "zeMemAllocHost(r.owner_ctx"
-      ],
-      "present_in_v0_2_6": 0,
-      "strata_win_undefs_h_in_v0_2_6": "ABSENT",
-      "if_WIN32_in_v0_2_6_sycl_CMakeLists": "absent",
-      "conclusion": "none of the 18 Windows-port changes are superseded by the pin; they are additive work that must be re-applied onto a v0.2.6 base or upstreamed"
-    },
-    "pcie_link_telemetry_note": "Arc Control is not installed on GPU-BOX (no Intel Arc Control directory under Program Files or Program Files (x86), no igcl*.dll in System32). The vendor-tooling route suggested in HANDOFF section 5 is therefore closed as well. Status stays UNKNOWN."
+  "reconciliation": {
+   "reported_128_gb_claim": "NOT confirmed. Six 16 GiB DIMMs populate 6 of 8 channels.",
+   "historical_112_gb": "not reproduced today",
+   "historical_95_9_gb": "MATCHES today's 95.87 GiB exactly",
+   "conclusion": "The box currently has 6 DIMMs / 95.87 GiB usable. The 128 GB figure in the plan is the board's 8-slot capacity, not installed memory. Any earlier 112 GB reading is not reproduced."
   }
+ },
+ "whea": {
+  "provider": "Microsoft-Windows-WHEA-Logger",
+  "event_id": 22,
+  "pattern": {
+   "occurrences": "exactly one per boot, ~23 s after boot",
+   "last_boot": "2026-10-25T11:08:30",
+   "last_event": "2026-10-25T11:08:53",
+   "seconds_after_boot": 23.0,
+   "events_since_boot": 1,
+   "uptime_hours_at_check": 37.62,
+   "runtime_recurrence": "none observed in 37.6 h of continuous uptime"
+  },
+  "recent_occurrences": [
+   "2026-10-25T11:08:53",
+   "2026-10-24T08:59:47",
+   "2026-10-24T08:38:08",
+   "2026-10-22T08:35:54",
+   "2026-10-21T11:41:12",
+   "2026-10-21T11:30:12",
+   "2026-10-21T11:07:42",
+   "2026-10-21T10:16:57",
+   "2026-10-19T12:34:26",
+   "2026-10-17T14:00:02"
+  ],
+  "unresolved_hardware_fault": true,
+  "revised_interpretation": "This is a BOOT-TIME memory-path fault, not a runtime one. It fires once per boot ~23 s in, then does not recur for the life of the uptime (37.6 h clean at time of check). The practical consequence is a permanently reduced DIMM population (6 of 8 slots usable), not an expectation that a long GPU workload will crash the box.",
+  "check_101_consequence": "UPDATED: heavy testing is NOT gated by runtime instability on this evidence. What CHECK-101 still lacks is a resolved root cause and a repaired DIMM/CPU path. Treat the machine as stable-but-degraded: 95.87 GiB usable is the budget, and any future RAM change invalidates A/B comparisons across it. The earlier 'pause heavy testing' reading in commit ecaad19 overstated the risk; this supersedes it.",
+  "root_cause_status": "unresolved; prior lab note attributes it to the CPU socket. Unverified here."
+ },
+ "storage": {
+  "physical_disks": [
+   {
+    "model": "WD_BLACK SN770 2TB",
+    "size_bytes": 2000396321280,
+    "interface": "SCSI"
+   },
+   {
+    "model": "KINGSTON SNV3S1000G",
+    "size_bytes": 1000202273280,
+    "interface": "SCSI"
+   }
+  ],
+  "volumes": [
+   {
+    "drive": "C:",
+    "used_gb": 577.82,
+    "free_gb": 52.81
+   },
+   {
+    "drive": "D:",
+    "used_gb": 1223.44,
+    "free_gb": 639.56
+   },
+   {
+    "drive": "E:",
+    "used_gb": 0.1,
+    "free_gb": 298.85
+   }
+  ],
+  "note": "A 257 GB model download does not fit on C:. D: has 639 GB free and E: has 298 GB free."
+ },
+ "gpu": {
+  "count_b70": 4,
+  "model": "Intel(R) Arc(TM) Pro B70 Graphics",
+  "driver_version": "32.0.101.8976",
+  "driver_date": "2026-08-27",
+  "pci_ids": [
+   "PCI\\VEN_8086&DEV_E223&SUBSYS_0105172F&REV_00",
+   "PCI\\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00",
+   "PCI\\VEN_8086&DEV_E223&SUBSYS_60251849&REV_00",
+   "PCI\\VEN_8086&DEV_E223&SUBSYS_17018086&REV_00"
+  ],
+  "adapter_ram_reported_bytes": 4293918720,
+  "adapter_ram_note": "WMI AdapterRAM is a 32-bit field and caps at ~4 GiB; real per-card capacity is 32 GB. Do not use this value as a budget.",
+  "display_adapter_separate": "Microsoft Basic Display Adapter (ASPEED, VEN_1A03&DEV_2000) - desktop is on the BMC, not a B70. Good: no B70 loses VRAM to dwm.",
+  "pcie_link_telemetry": "UNKNOWN - not captured. Windows does not expose negotiated link generation/width for these adapters via the CIM classes available here; requires vendor tooling or dxdiag.",
+  "pnp_device_status": {
+   "note": "Get-PnpDevice reports Status=Unknown for several B70 entries. That is a PnP state-reporting quirk for these adapters, not a fault: all four enumerate in sycl-ls and all four were exercised successfully in session 3 GPU runs.",
+   "status_ok_count": 3,
+   "status_unknown_count": 2,
+   "separate_amd_igpu": "PCI\\VEN_1002&DEV_13C0 (AMD Radeon integrated) present but unused for this work"
+  }
+ },
+ "missing_access": {
+  "pcie_link_width_generation": "still not captured - Windows does not expose negotiated generation/width for these adapters via available CIM classes; requires dxdiag or vendor tooling. Genuinely open.",
+  "oneapi_compiler_version": "CLOSED - 2026.0.0.20260331 (see runtime_identities)",
+  "level_zero_loader_version": "CLOSED - 1.32.0",
+  "ur_adapter_version": "CLOSED - ur_loader 0.12.0 (2026.0) / 0.11.10 (2025.1)",
+  "strata_source_checkout": "not verified in this pass. Earlier session located %USERPROFILE%\\strata-win @ 1c360526 with 29 dirty files, but that path belongs to the deprecated llama.cpp route context and was not re-confirmed read-only here. Leave OPEN rather than assert.",
+  "windows_fork_base_1c360526_full_commit": "still unresolved - requires git fetch origin in the strata tree"
+ },
+ "captured_at_second_pass": "2026-10-27T17:34:45Z",
+ "second_pass_note": "Second read-only pass closed the runtime-identity gaps listed in the original missing_access block. Method: sycl-ls run both WITHOUT and WITH the oneAPI setvars environment. The no-env run exposes only OpenCL devices; Level Zero devices appear only with setvars applied. Capturing only the no-env run would have under-reported the GPU backends actually in use.",
+ "runtime_identities": {
+  "oneapi_compiler": {
+   "icx_version": "2026.0.0.20260331",
+   "banner": "Intel(R) oneAPI DPC++/C++ Compiler for applications running on Intel(R) 64, Version 2026.0.0 Build 20260331",
+   "target": "x86_64-pc-windows-msvc",
+   "thread_model": "posix",
+   "icx_path": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe",
+   "installed_toolkits": [
+    "2025.1",
+    "2026.0"
+   ],
+   "dpcpp_note": "dpcpp is deprecated by Intel; wrapper prints 'use icx -fsycl'. Both resolve to the 2026.0 compiler.",
+   "note_on_sycl_dll": "SYCL runtime naming differs by toolkit. 2025.1 ships sycl8.dll; the 2026.0 compiler ships sycl9.dll (3795304 bytes, 2026.0.0.0). There is NO sycl8.dll in the 2026.0 tree - that is expected, not a defect.",
+   "sycl_dll_actual": {
+    "toolkit_2025_1": "sycl8.dll 2025.1.0.0",
+    "toolkit_2026_0": "sycl9.dll 2026.0.0.0 (3795304 bytes); sycl9-preview.dll same size; debug sycl9d.dll 5806440 bytes",
+    "sycl_jit": "sycl-jit.dll 190298984 bytes, filever reports 0"
+   },
+   "sycl7_dll": "absent everywhere - the earlier 'sycl7 not found' result stands and is not a gap"
+  },
+  "level_zero_loader": {
+   "version": "1.32.0",
+   "path": "C:\\Windows\\System32\\ze_loader.dll",
+   "additional_copy": "DriverStore iigd_dch_d.inf_amd64_eebe517ae5149ae4\\ze_loader.dll = 1.32.0",
+   "stale_copy": "DriverStore iigd_dch_d.inf_amd64_f69d39497e4a3af5\\ze_loader.dll = 1.28.2 (older, not on PATH)"
+  },
+  "unified_runtime": {
+   "ur_loader_2025_1": "0.11.10",
+   "ur_loader_2026_0": "0.12.0",
+   "note": "Two UR loader versions on disk; setvars selects the toolkit on PATH (2026.0).",
+   "pi_level_zero_dll": "not found as a standalone file (absorbed into the UR/L0 adapter layout)"
+  },
+  "sycl_runtime": {
+   "sycl8_dll": "2025.1.0.0",
+   "sycl7_dll": "absent"
+  },
+  "gpu_driver": {
+   "version": "32.0.101.8976",
+   "date": "2026-08-27",
+   "opencl_neo": "32.0.101.8976"
+  },
+  "level_zero_device_version": "1.15.39183+4",
+  "level_zero_extension_version": "20.2.0",
+  "one_mkl": {
+   "toolkits": [
+    "2025.1",
+    "2026.0",
+    "latest"
+   ],
+   "mkl_rt_2025_1": {
+    "file": "mkl_rt.2.dll",
+    "bytes": 27561056,
+    "filever": "2025.1.1",
+    "sha256": "698C867E771135911880FA3BA89BD02555607288DEE82EC012230BE1B30DE806",
+    "header": "INTEL_MKL_VERSION 20250100"
+   },
+   "mkl_rt_2026_0": {
+    "file": "mkl_rt.3.dll",
+    "bytes": 27890848,
+    "filever": "2026.0.0",
+    "sha256": "6A312EB1C4A92447E8D4C11D07420678BD07E0666C279FC621A3A6B03DB527D8",
+    "header": "INTEL_MKL_VERSION 20260000"
+   },
+   "note": "setvars puts 2026.0 on PATH; mkl_rt.3.dll is what a 2026.0 build will load"
+  },
+  "deployed_binary_hashes": {
+   "ze_loader.dll": {
+    "path": "C:\\Windows\\System32\\ze_loader.dll",
+    "bytes": 813864,
+    "filever": "1.32.0",
+    "sha256": "BC43DC7C1F30814ADC01340390EE251868A22944A87EB237140F7B8799D45172"
+   },
+   "ur_loader.dll_2026_0": {
+    "path": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\2026.0\\bin\\ur_loader.dll",
+    "bytes": 1530216,
+    "filever": "0.12.0",
+    "sha256": "CA884A229A7896F1D717AE574768F7D8815AD00868F53E153863BBB37FC071C5"
+   },
+   "note": "Hashes are SHA256 of the real files under the mkl/compiler tool trees. Paths under oneAPI\\2026.0\\bin report Length=0 for several files while returning valid hashes - see measurement_anomaly."
+  }
+ },
+ "sycl_devices": {
+  "method": "sycl-ls with oneAPI setvars applied (Level Zero visible); repeat without setvars shows OpenCL only",
+  "level_zero_gpus": [
+   {
+    "index": 0,
+    "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+    "l0_version": "1.15.39183+4",
+    "ext": "20.2.0"
+   },
+   {
+    "index": 1,
+    "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+    "l0_version": "1.15.39183+4",
+    "ext": "20.2.0"
+   },
+   {
+    "index": 2,
+    "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+    "l0_version": "1.15.39183+4",
+    "ext": "20.2.0"
+   },
+   {
+    "index": 3,
+    "name": "Intel(R) Arc(TM) Pro B70 Graphics",
+    "l0_version": "1.15.39183+4",
+    "ext": "20.2.0"
+   }
+  ],
+  "opencl_gpus": 4,
+  "opencl_cpu_devices": 2,
+  "opencl_cpu_detail": "AMD EPYC 7402P appears twice: 2025.19.4.0.18_160000.xmain-hotfix and 2026.21.3.0.31_160000",
+  "sl_count": 4,
+  "env_note": "ONEAPI_DEVICE_SELECTOR and SYCL_DEVICE_FILTER are both EMPTY after setvars. This matters: setting either one is what silently killed llama_context construction in this session's earlier work."
+ },
+ "evidence_receipts": [
+  {
+   "file": "receipts/check101-inventory.txt",
+   "sha256": "f5bc30c05f568d95ff2200f859726b3d8d5ed22d4128a86a59cc0a9b75ff867f",
+   "bytes": 5662,
+   "captured": "2026-10-27T12:33:51-05:00",
+   "method": "powershell.exe, no oneAPI env",
+   "contents": "OS, CPU, DIMMs, GPU CIM, PnP, DLLs, sycl-ls (OpenCL only)"
+  },
+  {
+   "file": "receipts/check101-level-zero.txt",
+   "sha256": "aa8dfa3066bba3743290300a8da1490a36f924cab857185110913a31ad3a4e54",
+   "bytes": 1411,
+   "captured": "2026-10-27T12:34",
+   "method": "cmd.exe + setvars.bat + sycl-ls",
+   "contents": "4x level_zero:gpu devices, env emptiness, exit 0"
+  },
+  {
+   "file": "receipts/check101-compiler.txt",
+   "sha256": "64ef1d2e9aa3f594cdbd870ce545ca95d378e197135b87cbe8a61c4d918039ea",
+   "bytes": 1064,
+   "captured": "2026-10-27T12:35",
+   "method": "cmd.exe + setvars.bat + icx --version",
+   "contents": "compiler banner, target, installed dir"
+  },
+  {
+   "file": "receipts/check101-hashes.txt",
+   "captured": "2026-10-27T12:51:10-05:00",
+   "method": "powershell.exe, file hashes + oneMKL headers",
+   "contents": "ze_loader/ur_loader SHA256, mkl_rt 2025.1/2026.0 SHA256 + INTEL_MKL_VERSION headers"
+  },
+  {
+   "file": "receipts/check101-sycl.txt",
+   "captured": "2026-10-27T12:52",
+   "method": "powershell.exe, sycl dll enumeration + reparse/length check",
+   "contents": "sycl9 vs sycl8 resolution, 0-byte-length anomaly evidence"
+  }
+ ],
+ "captured_at_third_pass": "2026-10-27T17:52:01Z",
+ "measurement_anomaly": {
+  "what": "Files under C:\\Program Files (x86)\\Intel\\oneAPI\\2026.0\\bin report Length=0 via both Get-Item and System.IO.FileInfo, yet Get-FileHash returns the SAME SHA256 as the real, non-zero file in the sibling tool tree (e.g. mkl_rt.3.dll: 0 bytes at oneAPI\\2026.0\\bin, 27890848 bytes at oneAPI\\mkl\\2026.0\\bin, identical hash).",
+  "checked": [
+   "fsutil reparsepoint query on oneAPI\\2026.0 -> 'The file or directory is not a reparse point'",
+   "Get-Item -Force Attributes -> 'Directory' (no LinkType, no Target)",
+   "Same behaviour for sycl9.dll, sycl-ls.exe, sycl-jit.dll in that directory"
+  ],
+  "status": "UNRESOLVED - do not diagnose from this",
+  "guidance": "Treat Length reported for paths directly under oneAPI\\<ver>\\bin as unreliable. For sizes and hashes, read the corresponding file in the component tool tree (oneAPI\\mkl\\2026.0\\bin, oneAPI\\compiler\\2026.0\\bin). Do not conclude 'corrupt install' or 'zero-byte stub' from it."
+ },
+ "captured_at_fourth_pass": "2026-10-27T18:00:35Z",
+ "pcie_link_telemetry": {
+  "status": "MEASURED_2026_10_27",
+  "method": "empirical host<->device bandwidth probe compiled with icx-cl -fsycl, run on native Windows against all 4 B70s (source pcie_bw.cpp in C:\\b70-work\\bw)",
+  "result_gb_s": {
+   "device0": {
+    "h2d": 11.63,
+    "d2h": 11.25,
+    "peak_h2d": 12.1,
+    "peak_d2h": 11.21
+   },
+   "device1": {
+    "h2d": 11.68,
+    "d2h": 11.19,
+    "peak_h2d": 12.49,
+    "peak_d2h": 11.59
+   },
+   "device2": {
+    "h2d": 12.6,
+    "d2h": 11.42,
+    "peak_h2d": 13.19,
+    "peak_d2h": 11.54
+   },
+   "device3": {
+    "h2d": 11.66,
+    "d2h": 11.31,
+    "peak_h2d": 12.28,
+    "peak_d2h": 11.52
+   }
+  },
+  "interpretation": "Sustained ~11.6-12.6 GB/s H2D and ~11.0-11.6 GB/s D2H on all four cards. Real PCIe 4.0 x16 is ~25-28 GB/s and x8 is ~12-14 GB/s, so this is consistent with PCIe 4.0 x8 per card. It is decisively NOT x1 (~0.9-1 GB/s). The earlier 'link width = 1' PnP reading is contradicted by measurement and should be treated as a reporting artifact.",
+  "caveat": "This is bandwidth evidence, not a negotiated-link-state read. Windows exposes no API for the latter. Two-link bifurcation on a x16 slot or a chipset x8 uplink would also produce these numbers; the probe cannot distinguish those from a plain x8 slot.",
+  "why_it_matters": "At ~12 GB/s per card, host-staged weight streaming is the likely bottleneck for this 128.74 GiB pack, so split mode and upload staging matter more than raw compute tuning.",
+  "arc_control_fallback": "CLOSED - Arc Control not installed, igcl*.dll absent.",
+  "superseded_pnp_reading": {
+   "note": "Retained for the record. This PnP property read reported link width/speed = 1 on all four cards, which the empirical bandwidth probe contradicts by ~12x. Do not use these values; they are a reporting artifact.",
+   "reported": {
+    "CurrentLinkSpeed": 1,
+    "CurrentLinkWidth": 1,
+    "MaxLinkSpeed": 1,
+    "MaxLinkWidth": 1,
+    "ExpressSpecVersion": 2
+   },
+   "verdict": "SUPERSEDED by result_gb_s above. See issue #15."
+  },
+  "verified_by": "session-11: 2-card vs 1-card decode scaling is consistent with ~12 GB/s host staging, and full expert residency (24576 slots = 10618 + 13958) loaded without bandwidth stalls"
+ },
+ "source_provenance": {
+  "tree": "%USERPROFILE%\\strata-win",
+  "head_commit": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
+  "head_short": "1c360526",
+  "head_date": "2026-10-16 13:49:51 +0000",
+  "head_subject": "night: KREG BF16 GEMVs + indexer k/q one launch (agent mmvq, STRATA_NIGHT_BF16=1), MMVQ2 CAP_PCT knob",
+  "branch": "win-port",
+  "remotes": {
+   "origin": "https://github.com/hotschmoe/Strata.git",
+   "upstream": "https://github.com/Niko1221/Strata.git"
+  },
+  "dirty_entries": 3054,
+  "dirty_note": "3054 dirty entries, not the 29 recorded earlier. The 29 figure referred to a narrower count (tracked modifications) at an earlier moment; this is the full porcelain count including untracked. NOT reconciled here - needs a breakdown before any reliance.",
+  "warning": "Do not reset, stash -u, or clean this tree. There is no verified backup of the untracked content. PLAN.md:28 requires resolving the full commit and the actual deployed local changes during STEP-001; that is now started, not finished."
+ },
+ "source_pin_reconciliation": {
+  "captured_at": "2026-10-27T19:05:00-05:00",
+  "method": "git fetch origin --tags in %USERPROFILE%\\strata-win, then ls-remote --tags against origin and upstream; read-only, no checkout",
+  "deployed_tree": {
+   "head": "1c360526bce659f45cec60b2e36c46b7770c5bf1",
+   "describe": "v0.1.44.1-26-g1c360526b",
+   "branch": "win-port",
+   "tracking": "NONE - no upstream configured for win-port; 1c360526 is published only as refs/heads/b70-night-20261016 on origin",
+   "origin_main": "296b59d2f73c8f04a805df29c2fa97655adace78",
+   "ahead_of_origin_main": 26,
+   "behind_origin_main": 0,
+   "merge_base_with_v026": "296b59d2f73c8f04a805df29c2fa97655adace78"
+  },
+  "pin_v0_2_6": {
+   "tag_object": "ff91dd77a13857ccc2f1bd67edc9a8ecd4ecdfa4",
+   "annotated": true,
+   "peeled_code_commit": "4b9e05a2a806a3fe24f7b2560d98626c37dade35",
+   "tagger": "Niko1221",
+   "tagger_date": "2026-10-25T14:25:46+01:00",
+   "tag_subject": "Strata 0.2.6 (code commit 4b9e05a2...; the tag commit adds README and docs only)",
+   "remote_carrying_tag": "upstream (https://github.com/Niko1221/Strata.git)",
+   "origin_refs_matching": "0",
+   "upstream_refs_matching": "2",
+   "is_ancestor_of_head": false,
+   "head_is_ancestor_of_it": false,
+   "commits_ahead_of_origin_main": 2022
+  },
+  "engine_presence": {
+   "deployed_head_dsv41_files": 0,
+   "v0_2_6_dsv41_files": 132,
+   "v0_2_6_has_docs_DEEPSEEK41_md": true,
+   "v0_2_6_has_data_dsv41_profile_2_00_bin": true,
+   "v0_2_6_has_include_strata_dsv41_exl3_hpp": true,
+   "doc_excerpt": "Strata runs it with its own engine, strata-dsv41 (src/dsv41, ported from Project Maya maya-ds4)"
+  },
+  "local_fix_overlap": {
+   "checked_markers": [
+    "strata_win_undefs",
+    "STRATA_SYCL_XE2_JIT",
+    "strata_device_context",
+    "STRATA_WIN_SHARED_CONTEXT",
+    "STRATA_WIN_TIMER_MS",
+    "zeMemAllocHost(r.owner_ctx"
+   ],
+   "present_in_v0_2_6": 0,
+   "strata_win_undefs_h_in_v0_2_6": "ABSENT",
+   "if_WIN32_in_v0_2_6_sycl_CMakeLists": "absent",
+   "conclusion": "none of the 18 Windows-port changes are superseded by the pin; they are additive work that must be re-applied onto a v0.2.6 base or upstreamed"
+  },
+  "pcie_link_telemetry_note": "Arc Control is not installed on GPU-BOX (no Intel Arc Control directory under Program Files or Program Files (x86), no igcl*.dll in System32). The vendor-tooling route suggested in HANDOFF section 5 is therefore closed as well. Status stays UNKNOWN."
+ },
+ "benchmark_findings_2026_10_27": {
+  "harness": "llama-bench.exe in C:\\llamacpp-v41\\build-sycl\\bin, build de5122d (50), 4x Arc Pro B70, -ngl 38 -t 12 -lm none --no-warmup -r 1",
+  "results": [
+   {
+    "config": "layer split, -p 32 -b 32",
+    "pp32_t_s": 0.55,
+    "tg8_t_s": 3.65
+   },
+   {
+    "config": "tensor split, -p 32 -b 32",
+    "pp32_t_s": 0.56,
+    "tg8_t_s": 2.21
+   },
+   {
+    "config": "layer split, -p 32 -b 32 -ub 512",
+    "pp32_t_s": 0.6,
+    "tg8_t_s": 3.69
+   },
+   {
+    "config": "layer split, -p 256 -b 256",
+    "pp256_t_s": 6.19,
+    "tg8_t_s": 0.35
+   },
+   {
+    "config": "row split, -p 32 -b 32",
+    "result": "CRASH",
+    "detail": "fatal error in ggml-sycl.cpp:1419 get_row_rounding; exit -1073740791 (0xC0000409 stack buffer overrun / fail-fast)"
+   }
+  ],
+  "key_observations": [
+   "Prefill scales ~11x from b=32 to b=256 (0.55 -> 6.19 t/s), so small batches were throttling prompt processing.",
+   "Decode at b=256 collapses to 0.35 t/s, while b=32 with ub 512 reaches 3.69 t/s. Prefill and decode want opposite batch settings.",
+   "Layer split beats tensor split for decode 3.65 vs 2.21 t/s (+65%). Tensor split is not the fast path here.",
+   "Row split aborts the process on this model; it is unusable as-is.",
+   "ub 512 lifted decode from 3.65 to 3.69 t/s and prefill 0.55 to 0.60, a small but consistent gain."
+  ]
+ },
+ "updated_at": "2026-10-27T20:20:00Z"
 }

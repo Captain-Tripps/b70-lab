@@ -27,21 +27,41 @@ Measured, not inferred:
   configs cannot reproduce on v0.2.7 as written. That is a real, separate fact — but it does not
   make `--peer-device` the successor, and it does not mean multi-GPU is unavailable.
 
-### 1a. Measured decode, per tier
+### 1a. Measured decode, per tier — FINAL, n=3 per tier
 
-One prompt set (`--tokens "9707,11,1879,13,374,264,1293,13" --max-new 32`), one build,
-only the `--expert-cache-device*` flags varied. Logs: `ep1c/ep1d` (1 card), `ep2b/ep2d/ep2_clean`
-(2), `ep3_clean` (3), `ep4`/`clean3` (4).
+One prompt set (`--tokens "9707,11,1879,13,374,264,1293,13" --max-new 32`), one build, only the
+`--expert-cache-device*` flags varied between configs. Scripts `g{1..4}_r{1..3}.cmd`, logs
+`g{1..4}_r{1..3}.txt` in `D:\strata-dsv41-port\`.
 
-| Cards | Devices in use | Decode tok/s (per run) | n |
-|---|---:|---|---:|
-| 1 | GPU0 only | 10.92, 11.08 | 2 |
-| 2 | + CUDA1 13,958 experts | 27.75, 27.39, 29.33, 29.39 | 4 |
-| 3 | + CUDA2 6,979 | 28.26 | 1 |
-| 4 | + CUDA3 4,653 | 29.78 | 1 |
+| Cards | Flag set | Runs | Median | vs 1 card |
+|---|---|---|---:|---:|
+| 1 | (none) | 10.83 / 11.08 / 11.02 | **11.02** | 1.00x |
+| 2 | `--expert-cache-device1 auto` | 29.42 / 28.74 / 27.38 | **28.74** | **2.61x** |
+| 3 | `+ device2` | 28.64 / 29.06 / 28.24 | **28.64** | 2.60x |
+| 4 | `+ device2 + device3` | 29.70 / 29.85 / 29.48 | **29.70** | 2.69x |
 
-**Card 2 buys 2.5x. Cards 3 and 4 buy +7% together.** That is the number that matters for
-planning, and it is the exact opposite of the handoff's framing.
+All runs `EXIT=0`. Spreads are tight (±1.1 on 2 cards, ±0.15 on 4), so these are not the bimodal
+variance regime W-042 warned about — that was the llama.cpp path.
+
+**Card 2 buys 2.6x. Cards 3 and 4 together buy +3% over card 2.** That is the number that matters
+for planning, and it is the exact opposite of the handoff's framing.
+
+At 2 cards: `CUDA1: 13958 additional experts`, and 10,618 + 13,958 = 24,576 = **exactly the full
+expert set**, so this is measured with every expert resident on the GPUs.
+
+### 1a-bis. Context scaling (2 cards, plain config, `--max-new 16`)
+
+| Context | Slots GPU0 | CUDA1 experts | Decode |
+|---|---:|---:|---:|
+| 32k | 10,425 | 14,151 | 27.00 |
+| 64k | 10,173 | 14,403 | 23.74 |
+| 200k | 9,131 | 15,445 | 22.56 |
+
+All `EXIT=0`. **200k runs fine on this build.** Decode falls ~17% from 32k to 200k as the KV takes
+VRAM away from the expert cache.
+
+> Not directly comparable to the 32-token runs above: `--max-new 16` here, so speculative decoding
+> had fewer rounds to amortise. Read the trend, not the absolute value.
 
 ### 1b. Why cards 3-4 are nearly free of value — the constraint is not matmul
 
@@ -119,7 +139,7 @@ and `--expert-parallel-device 1`. I reconstructed it with the flag remapped to
 | lab config, 83 env vars | 4 | 8k | 21.71 |
 | lab config | 4 | 200k | **REFUSED**, EXIT=2 |
 
-The lab config is **slower**, not faster. Its 200k setting refuses outright on this build:
+The lab config is **slower**, not faster. At 200k it refuses:
 
 ```
 strata generate: REFUSED: 14754 experts are neither in VRAM nor mirrored; with
@@ -127,13 +147,21 @@ STRATA_VERIFY_NO_HOST the device plan cannot run them and generation would lack 
 host fallback - raise STRATA_MIRROR_MIB or the free RAM, or lower --max-context
 ```
 
-So 97.6 is not explained by the env sweep, and the 200k configuration **does not currently run
-at all** on the v0.2.7 port. That is a genuine blocker for the headline lab result and should be
-its own issue.
+### 4a. CORRECTED — the refusal is the env pair, not the context length
 
-Caveat on this section: the lab config was also written for `--expert-parallel-device`, whose
-semantics differ from `--expert-cache-device*`. A remapped config is not the lab's config. Treat
-21.71 as "the env sweep does not close the gap", not as a measurement of the lab setup.
+An earlier draft of this file said "200k does not currently run on the port". **That is wrong** and
+was over-generalised from one config. The plain config runs 200k at 2 cards, `EXIT=0`, 22.56 tok/s
+(§1a-bis).
+
+The refusal is specifically the lab config's `STRATA_VERIFY_NO_HOST=1` combined with
+`STRATA_MIRROR_MIB=0`: no host fallback, and the mirror explicitly zeroed. Filed as issue **#22**.
+
+So the correct statement is narrow: **the published 200k lab config is internally unsatisfiable at
+its own context length on this box, but the context length itself is fine.**
+
+Caveat that still stands: the lab config was written for `--expert-parallel-device`, whose semantics
+differ from `--expert-cache-device*`. A remapped config is not the lab's config. Treat 21.71 as "the
+env sweep does not close the gap", not as a measurement of the lab setup.
 
 -
 
@@ -159,27 +187,41 @@ semantics differ from `--expert-cache-device*`. A remapped config is not the lab
 
 -
 
-## 7. Recommended next actions
+## 7. Actions taken (session 11, same day)
 
-1. **Correct `QWEN-SPEED.md` §4 and `HANDOFF-SESSION-10.md` §3-4 before they are used to plan.**
-   The 4-card prediction (180-220) and the "tier is a stub" premise are both contradicted by
-   measurement. This is the highest-value edit in the repo right now.
-2. **Refile QWEN-3** from "port the multi-GPU tier" to "reduce the flat per-layer host terms"
-   (CPU pool ~15-17 ms/round, wait-for-rings ~20 ms/round). That is where 29.78 is being spent.
-3. **New issue: the 200k lab config refuses on v0.2.7** (section 4). Either the mirror budget
-   or `STRATA_MIRROR_MIB` handling changed, and nothing in the port is currently validated at
-   the context length the 97.6 headline was measured at.
-4. **#20 remains valid** but restate the target: ~11 tok/s single-card with n>=3, not 12.95.
-5. **Commit the machine-manifest PCIe block** or revert it — a repo that records "ambiguous"
-   while the working tree holds measured 12 GB/s will mislead the next reader.
+All five of the originally-recommended items were completed:
+
+1. **`QWEN-SPEED.md` corrected.** §4 replaced with measured data; the 180-220 prediction is gone and
+   labelled as retracted. §3's "why it is 7.5x slower" corrected in place with the old text kept for
+   the record. §5 QWEN-2 marked answered, QWEN-3 **refiled** from "port the tier" to "attack the
+   flat per-layer host terms". §6's dsv41 dependency claim withdrawn.
+2. **`HANDOFF-SESSION-10.md` corrected.** Banner at the top, plus inline **[S11 CORRECTED]** markers
+   on #20, #21, Track A and Track B.
+3. **Issue #21** retitled and commented — premise retracted, measured grid posted, impact on STEP-004
+   removed. **Issue #20** commented with the n=3 baseline and the remaining open items.
+4. **Issue #22 filed** — the 200k refusal, correctly scoped to the env pair rather than to context.
+5. **`machine-manifest.json`** — the measured ~12 GB/s PCIe block committed, with the old PnP
+   "link width = 1" reading retained as an explicitly superseded record rather than deleted.
+
+### Still open
+
+- QWEN-3 as refiled (host terms) — not started.
+- #20's prefill measurement, `--spec 0` control, and the 7-prompt set — not done.
+- dsv41 STEP-003 — untouched, as instructed.
 
 -
 
 ## 8. Honest limits of this pass
 
-- 3- and 4-card figures are **n=1** each. Direction is unambiguous (they are flat), exact values
-  are not. Redo with n>=3 before quoting.
-- One prompt, one seed, `--max-new 32`, 8k context. Nothing here speaks to prefill at length or
-  to the 200k regime.
+- The grid in §1a is **n=3 per tier**, which is enough to see that 3-4 cards are flat, not enough to
+  claim the third digit. Treat 28.6 vs 28.7 vs 29.7 as "the same".
+- One prompt, one seed, `--max-new 32`, 8k context for the tier grid. Nothing here speaks to prefill
+  at length.
+- The context sweep (§1a-bis) used `--max-new 16`, so it is not directly comparable to the tier grid.
 - All runs used `--stream-experts`, so "residency" means the VRAM cache tier, not a host arena.
   A non-streaming setup may order the tiers differently.
+- **Process note:** I lost time to two self-inflicted errors worth recording. (a) A detached
+  `nohup` loop was started over ssh and its parent died, silently killing the run — use `setsid`
+  or foreground. (b) I generated configs with an off-by-one in the tier-to-flags mapping and
+  briefly mislabelled 1/2/4-card scripts. The measurements above come from the corrected `g*`
+  scripts, verified by their own `CUDA1/2/3: N additional experts` log lines.

@@ -74,22 +74,29 @@ Compared to the lab's known-good run:
 | Lab `win-r3-jit`, IQ3_S, int8 KV, 1x200k | **2** | **97.6 tok/s** | **1,415 tok/s @ 33.6k** |
 | v0.2.7 today | **1** | **12.95 tok/s** | 1.87 tok/s @ 7 tok (not comparable) |
 
-### Why it is 7.5x slower — and it is not an upstream regression
+### Why it is 7.5x slower — CORRECTED in session 11, see below
 
-The lab config used `--expert-parallel-device 1` to engage the second card. **That flag no longer
-exists in v0.2.7**; it was replaced by `--peer-device`, and `--peer-device` is a **stub in the SYCL
-port**:
+> **This section was wrong. Kept for the record; the correction is authoritative.**
 
-```
-strata generate: --peer-device: the second-GPU expert tier is not ported to SYCL yet
-EXIT=1
-```
+It claimed `--expert-parallel-device` was replaced by `--peer-device`, that `--peer-device` is a
+SYCL stub, and therefore that v0.2.7 cannot use a second card. **All three are false.**
 
-`sycl/CMakeLists.txt:280`: `remote_expert_opt_stub.cpp ... (a stub in the port: no second GPU tier
-yet)`.
+Measured facts (session 11, full detail in
+[`FINDINGS-SESSION-11.md`](../../work/strata-v41-agent-runner/FINDINGS-SESSION-11.md)):
 
-So this ran on **one** B70 of the four. 12.95 tok/s single-card is plausible and is not evidence that
-v0.2.7 is slower than the deployed tree.
+| Claim | Reality |
+|---|---|
+| `--peer-device` is the only multi-GPU path | `--expert-cache-device1\|2\|3 N\|auto` is a **separate, live** path |
+| the tier is a stub | `peer_experts.cpp` (41 lines) **is** a stub; `remote_experts.cpp` (**482 lines**) is live ported SYCL, wired at `sycl/CMakeLists.txt:200` |
+| `--expert-parallel-device` was renamed | it was **removed upstream** — 0 hits in `generate.cpp`, 0 in the binary's `--help` |
+
+`--expert-parallel-device` being gone is real and matters (the lab configs under
+`strata-windows-port/configs/` still pass it, so they cannot run on v0.2.7 as written), but it does
+**not** mean multi-GPU is unavailable. The successor in practice is `--expert-cache-device*`, whose
+semantics are an expert-cache tier rather than symmetric expert parallelism.
+
+So the 12.95 run used one card **by choice of flags, not by port limitation**. That distinction is
+the whole reason §4 below had to be rewritten.
 
 ### Caveats on these numbers
 
@@ -97,95 +104,92 @@ v0.2.7 is slower than the deployed tree.
 - **TTFT 20.0 s** includes engine start, the 21.1 s profile fill, and PLE setup. Not a token metric.
 - **One sample, no variance.** Per `FINDINGS.md` W-042, single samples on this box are unreliable
   (bimodal throughput was measured on the llama.cpp path). Treat as indicative.
-
-### Semantic change, not a rename
-
-`--expert-parallel-device` → `--peer-device` is **not** a straight rename. Upstream's peer is an
-adaptive **expert-cache tier**; the lab's flag was symmetric **expert parallelism**. Whether
-upstream's newer design reaches the same throughput is unmeasured.
+- **12.95 does not reproduce.** Session 11 re-ran the identical command twice: **10.92 and 11.08**
+  tok/s. ~18% spread on the same binary and flags. Quote single-card as **~11 tok/s**, never 12.95.
 
 -
 
-## 4. Theory: what four cards would look like
+## 4. MEASURED: what four cards actually do
 
-Reasoning from measured constants, not benchmarks. Flagged as theory throughout.
+**The previous version of this section was theory and it was wrong.** It predicted 180–220 tok/s on
+four cards. Measurement says **29.78**. Everything below is measured on the v0.2.7 build, one
+prompt set, only the `--expert-cache-device*` flags varied.
 
-### 4a. The structural fact that reframes it
+Full method and caveats: [`FINDINGS-SESSION-11.md`](../../work/strata-v41-agent-runner/FINDINGS-SESSION-11.md) §1.
 
-```
-10,618 slots = 20.15 GiB  ->  2.04 MB per expert
-24,576 experts (512 x 48) x 2.04 MB  =  50.1 GB   (the whole expert set)
-```
+### 4a. Decode by tier (measured)
 
-Four cards = **136.6 GB** VRAM. Two cards = ~65 GB.
+| Cards | Devices engaged | Decode tok/s | n |
+|---|---:|---|---:|
+| 1 | GPU0 only, 10,618 slots | 10.92, 11.08 | 2 |
+| 2 | + CUDA1, 13,958 experts | 27.75, 27.39, 29.33, 29.39 | 4 |
+| 3 | + CUDA2, 6,979 | 28.26 | 1 |
+| 4 | + CUDA3, 4,653 | 29.78 | 1 |
 
-**Two cards already reach effectively full expert residency.** Cards 3 and 4 buy *compute*, not
-cache. Which means 97.6 t/s was never cache-limited — it is the **one-card compute ceiling**.
+**Card 2 buys 2.5x. Cards 3 and 4 together buy +7%.**
 
-### 4b. Why 97.6 is arithmetic, not a tuning result
+All 24,576 experts reached full residency across cards 1-2 (10,618 + 13,958 = 24,576 exactly), so
+this is measured with the whole expert set on the GPUs — the residency question is closed.
 
-From the engine's own measured int8 kernel timings (~21 µs per expert at 16 rows):
+### 4b. Why 3-4 cards add almost nothing: the flat host terms
 
-```
-480 expert calls/token (48 layers x 10 active)
-x 21 us  = 10.1 ms/token  ->  99 tok/s
-```
+From the engine's own per-round instrumentation:
 
-Measured 97.6. Effectively exact. **Decode on Qwen is expert-matmul-bound** once residency is
-complete.
-
-### 4c. So 4 cards divide the 480, they do not grow the cache
-
-| Split | Expert calls/card | Expert time | Compute ceiling |
+| ms/round | 1 card | 2 cards | 4 cards |
 |---|---:|---:|---:|
-| 1 card | 480 | 10.1 ms | ~99 t/s |
-| 2 cards | 240 | 5.0 ms | ~198 t/s |
-| 4 cards | 120 | 2.5 ms | ~396 t/s |
+| dispatch `run` (GPU expert work) | 9.62 | 5.77 | 3.83 |
+| CPU pool call | 15.99 | 15.07 | 17.13 |
+| verify window `wait for rings` | 20.00 | 19.97 | 19.81 |
 
-The lab's 97.6 on two cards happened because its EP was **enabling residency**, not halving expert
-work. Residency alone hit the one-card ceiling.
+GPU expert work **does** divide: 9.62 -> 5.77 -> 3.83. It is no longer the binding term. What does
+not divide is the per-layer CPU pool call and the wait-for-rings, both ~flat across tiers and now
+dominating the round.
 
-### 4d. The binding constraint: Windows has no peer access
+### 4c. The old arithmetic, and why it failed
 
-Measured by the lab's `ep_probe`: **56–64 µs host round trip** per exchange. Over 48 layers:
+It reasoned: `480 expert calls x 21 us = 10.1 ms/token -> 99 tok/s`, therefore one card should hit
+99 and four cards 396. Measured one card: **10.9**. Measured two cards: **27.8**, not 198.
+
+The 480x21us term is real but it is not the critical path at this window size. The pool call and
+the ring wait are. Any model of this engine's decode that omits per-layer host work will be wrong
+by roughly an order of magnitude on one card.
+
+### 4d. The 97.6 number has no working repro on v0.2.7
+
+The lab config (`strata-windows-port/configs/strata-iq3s-200k1-pf8k.json`, 83 env vars) was
+reconstructed with `--expert-parallel-device 1` remapped to `--expert-cache-device1..3 auto`:
+
+| Config | Cards | Context | Decode |
+|---|---:|---:|---:|
+| plain (this pass) | 4 | 8k | **29.70** |
+| lab config, 83 env vars | 4 | 8k | 21.71 |
+| lab config | 4 | 200k | **REFUSED, EXIT=2** |
+| **plain config** | **2** | **200k** | **22.56, EXIT=0** |
+
+The env sweep makes it **slower**, not faster. At its own 200k the config refuses outright:
 
 ```
-48 x 57 us = 2.74 ms/token  ->  365 t/s ceiling from exchange alone
+strata generate: REFUSED: 14754 experts are neither in VRAM nor mirrored; with
+STRATA_VERIFY_NO_HOST the device plan cannot run them and generation would lack a safe
+host fallback - raise STRATA_MIRROR_MIB or the free RAM, or lower --max-context
 ```
 
-Serialized with compute:
+**The refusal is the env pair, not the context length.** A plain config at 200k runs fine (22.56
+tok/s, EXIT=0). What breaks is `STRATA_VERIFY_NO_HOST=1` + `STRATA_MIRROR_MIB=0`: no host fallback
+and an explicitly zeroed mirror. Filed as issue **#22**. Narrow statement: *the published 200k lab
+config is unsatisfiable on this box**, not *200k is broken*.
 
-```
-2.52 ms compute + 2.74 ms exchange = 5.26 ms  ->  ~190 t/s
-```
+Caveat: a remapped config is not the lab's config, because `--expert-parallel-device` and
+`--expert-cache-device*` do not have the same semantics. Read 21.71 as "the env sweep does not
+close the gap", not as a measurement of the lab setup.
 
-### 4e. Prediction
+### 4e. What this changes for planning
 
-| Confidence | 4-card decode | Condition |
-|---|---|---|
-| **Likely** | **180–220 t/s** | host exchange at ~57 µs, serialized |
-| Optimistic | 300–380 t/s | device-spin on system-scope flags gets exchange <10 µs |
-| Hard ceiling | ~396 t/s | exchange became free (it will not on Windows) |
-
-Midpoint ~190 t/s is **~2x the two-card number, not 4x** — the exchange fabric eats the difference.
-
-### 4f. What else visibly changes
-
-- **Prefill scales better than decode** (batched, exchange amortised): **~2,200–2,700 t/s** vs 1,415
-  on two cards. Four cards help most here.
-- **Context**: ~50 GB experts + ~2.5 GB dense leaves ~119 GiB free across four cards. 200k
-  comfortable, 400k+ plausible. The "2 x 112k does not fit" problem disappears.
-- **Load**: full 50 GB profile fill at the measured 1.02 GB/s -> **~55–70 s** to first token.
-- **VRAM per card**: ~15–18 GB experts + ~6–8 GB dense/KV + buffers, under 30 GB each. Real headroom —
-  unlike the 1017 pack's ~955 MiB overrun.
-
-### 4g. What breaks first
-
-1. **Exchange latency** — everything hinges on it.
-2. **RAM** — the PLE table needs ~27 GB via `--ple-io mmap`, against 95.87 GiB total. Tightest
-   resource in the setup; the lab already watched decode collapse 98 -> 70 t/s when the drive got
-   busy under the *unbuffered* path.
-3. **Router serialisation** — routing is one card per layer. Fine at 190 t/s; the wall near 400.
+- The 50 GB expert set does fit across two cards. **Cards 3-4 are not needed for residency.**
+- They are not needed for throughput either, at this point — +7%.
+- The 97.6 headline needs re-measuring on a configuration that actually runs before any further
+  work is scoped against it.
+- Multi-GPU is **not** a blocker for Qwen or for dsv41. It exists and it works.
 
 -
 
@@ -205,30 +209,49 @@ The 12.95 t/s number is one sample on a 7-token prompt. Before any comparison is
 **Acceptance:** a variance-bounded single-card pp/tg figure that a later 2-card and 4-card run can
 be compared against honestly.
 
-### QWEN-2 — identify what the SYCL port is missing for multi-GPU
+### QWEN-2 — ~~identify what the SYCL port is missing for multi-GPU~~ **DONE — nothing is missing**
 
-Read-only investigation, no code:
+Answered by session 11 measurement. The tier is ported (`remote_experts.cpp`, 482 lines) and runs.
+The original four bullets are kept struck for the record:
 
-- [ ] Diff `sycl/src/core/peer_experts.cpp` and `remote_experts.cpp` against the CUDA originals in
-      `src/core/`.
-- [ ] Determine whether the stub is (a) not written, (b) written but disabled, or (c) blocked on a
-      Level Zero capability.
-- [ ] **Re-measure the host-exchange round trip on this build.** The 57 µs figure is from the
-      lab's `ep_probe` on the win-port line. If it is materially different on v0.2.7 + this driver,
-      the whole 4-card prediction in §4 moves.
-- [ ] Check whether v0.2.7's `exchange_storage.hpp` / `dma_batch.hpp` supersede the lab's
-      `ep_mem.hpp` shared-context design — if so, port *upstream's* version, not the lab patch.
+- ~~Diff `peer_experts.cpp` and `remote_experts.cpp` against the CUDA originals.~~ **Done.**
+  `peer_experts.cpp` is a genuine 41-line stub; `remote_experts.cpp` is a full port and is the
+  path `--expert-cache-device*` uses.
+- ~~Determine whether the stub is not written / disabled / blocked on Level Zero.~~ **N/A** — the
+  stub is a *different feature* (`--peer-device`) from the working one.
+- ~~Re-measure the host-exchange round trip.~~ **Superseded.** Exchange latency is not the binding
+  constraint; the flat per-layer CPU pool and ring wait are, and those are measured directly.
+- ~~Check whether `exchange_storage.hpp` / `dma_batch.hpp` supersede `ep_mem.hpp`.~~ **Moot** — no
+  port work is needed to use cards 2-4.
 
-**Acceptance:** a written answer to "what exactly is missing, and what is the measured exchange
-cost", with no code changed.
+**Acceptance met:** the question "what is missing" has the answer **nothing**.
 
-### QWEN-3 — port the peer/expert tier to SYCL (only if QWEN-2 says go)
+### QWEN-3 — REFILED: attack the flat per-layer host terms
 
-Scope lives in `sycl/src/core/`, **not** `dsv41/`. Prior art is the lab's shared-context
-`ep_mem.hpp`, but that targets the win-port line and must be re-solved against v0.2.7.
+**This replaces the old QWEN-3 ("port the peer tier to SYCL"), whose premise was false —** the
+prior art it named is already ported and working.
 
-**Acceptance:** two cards beat one card on decode by a margin larger than the measured variance, with
-identical answers to the one-card run.
+The measured problem is not expert placement. It is that two costs are roughly constant as cards
+are added, and they set the ceiling:
+
+| ms/round | 1 card | 2 cards | 4 cards | divides? |
+|---|---:|---:|---:|---|
+| GPU expert work (`dispatch run`) | 9.62 | 5.77 | 3.83 | **yes** |
+| CPU pool call | 15.99 | 15.07 | 17.13 | no |
+| verify `wait for rings` | 20.00 | 19.97 | 19.81 | no |
+
+Open questions worth answering before touching code:
+
+- [ ] Why is the CPU pool call ~16 ms/round when `pool multi` reports only 0.55 + 0.01 + 0.29 ms of
+      actual phase work? The gap (~15 ms) is the target.
+- [ ] What is `wait for rings` waiting on? ~20 ms/round at every tier suggests a per-layer
+      serialisation that is not the expert tiers.
+- [ ] Is the 1.65 tok/round speculation acceptance (0.228 draft acceptance) suppressing the
+      apparent decode rate? Test with `--spec 0` to get a clean non-speculative baseline.
+- [ ] Re-test at a realistic prefill length; all of this is at 7 prompt / 32 new tokens.
+
+**Acceptance:** any change that lifts 2-card decode materially above the ~29 measured here, proven
+against n>=3 runs on both configs, with unchanged output on a real prompt.
 
 -
 
@@ -238,14 +261,16 @@ These are **two different tracks** and must not be conflated:
 
 | Track | Engine | Status |
 |---|---|---|
-| **Qwen** (this file) | `sycl/src/` — exists, builds, runs | 12.95 t/s single-card; multi-GPU stubbed out |
+| **Qwen** (this file) | `sycl/src/` — exists, builds, runs | ~11 t/s 1 card; 27.8 on 2; 29.8 on 4. Multi-GPU **works** |
 | **dsv41** ([PORT-SCOPE.md](PORT-SCOPE.md)) | `sycl/src/dsv41/` — **does not exist** | 0 lines ported; ~85% of kernels convert via dpct |
 
-**Dependency to note:** `PLAN.md` STEP-004 assumes a working four-card split. This session
-established that **the SYCL port has no multi-GPU expert tier**, so the dsv41 engine cannot inherit
-one. Either dsv41 brings up multi-GPU itself, or QWEN-3 lands first and dsv41 reuses it.
+**Dependency — [S11 CORRECTED, was wrong]:** `PLAN.md` STEP-004 assumed a four-card split because
+this document previously claimed the SYCL port had no multi-GPU expert tier. **It does have one,
+and dsv41 can inherit it.** STEP-004 is therefore *not* blocked on QWEN-3 and does not need to be
+estimated against a tier that has to be built first.
 
-That is a real planning input and should be settled before STEP-004 is estimated.
+What STEP-004 *should* be estimated against is the measured behaviour, not the retracted theory:
+2 cards give 2.5x, cards 3-4 give +7%, and the remaining ceiling is per-layer host work.
 
 -
 
@@ -271,5 +296,32 @@ strata.exe --pack "D:\AI\Strata-data\packs\iq3_s" \
 Scripts: `D:\strata-dsv41-port\bench2.cmd` (run), `rb8.ps1` + `build27.cmd` (build).
 Logs: `bench2.txt`, `build27.log`, `cfg27.log` in the same directory.
 
-**Do not pass `--expert-parallel-device`** (gone in v0.2.7) and **do not pass `--peer-device`**
-(a stub — exits 1).
+**Do not pass `--expert-parallel-device`** — it was removed upstream (0 hits in `generate.cpp`, 0 in
+`--help`). The lab configs under `strata-windows-port/configs/` still pass it and therefore cannot
+run on v0.2.7 as written.
+
+**`--peer-device` is a stub and exits 1.** It is *not* the multi-GPU path — see below.
+
+### To use more than one card, add `--expert-cache-device1 N|auto` (and `2`, `3`)
+
+This is the **live** multi-GPU path, backed by `sycl/src/core/remote_experts.cpp`:
+
+```
+  ... --expert-cache auto \
+      --expert-cache-device1 auto \
+      --expert-cache-device2 auto \
+      --expert-cache-device3 auto \
+      --vram-reserve-mib 1024 ...
+```
+
+Measured, same command otherwise:
+
+| Flags | Cards | Median decode |
+|---|---:|---:|
+| (none) | 1 | 11.02 |
+| `--expert-cache-device1 auto` | 2 | 28.74 |
+| `+ device2` | 3 | 28.64 |
+| `+ device2 + device3` | 4 | 29.70 |
+
+Logs: `D:\strata-dsv41-port\g{1..4}_r{1..3}.txt` (n=3 each). A run that engages a second card prints
+`CUDA1: N additional experts, X GiB; results return through pinned host rows`.

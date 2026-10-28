@@ -1,9 +1,19 @@
 # Handoff — session 10 checkpoint (2026-10-27 evening)
 
+> **SUPERSEDED IN PART — read this first.** Session 11 verified this handoff against GPU-BOX and
+> found two load-bearing claims false. Corrections are inline below, marked **[S11 CORRECTED]**.
+> Full detail: [`FINDINGS-SESSION-11.md`](FINDINGS-SESSION-11.md).
+>
+> - **The multi-GPU expert tier is NOT a stub.** It is ported (`sycl/src/core/remote_experts.cpp`,
+>   482 lines, wired at `sycl/CMakeLists.txt:200`) and it works: measured 10.9 / 27.8 / 28.3 / 29.8
+>   tok/s on 1 / 2 / 3 / 4 cards. Cards 3-4 add +7% total, not 4x.
+> - **The 4-card prediction of 180-220 tok/s in `QWEN-SPEED.md` §4 is refuted by measurement.**
+> - Do **not** scope QWEN-3 as "port the peer tier" — the prior art it names is already ported.
+
 Written for a **fresh session**. Read this, then act. Do not repeat completed work.
 
 Branch: `work/strata-v41-agent-runner`, remote `Captain-Tripps/b70-lab`.
-Last commit at handoff: `d956c22`.
+Last commit at handoff: `d956c22` (the file itself landed in `1aecb57`).
 
 -
 
@@ -20,7 +30,7 @@ Read, in this order:
   5. work/strata-v41-agent-runner/FINDINGS.md             (ledger; note W-038..W-044 on variance)
 
 Then verify artifacts on GPU-BOX before relying on them. There are TWO separate tracks — do not conflate:
-  - Qwen  : sycl/src/          -> builds and runs today (12.95 tok/s, 1 card)
+  - Qwen  : sycl/src/          -> builds and runs today (~11 tok/s 1 card; 27.8 on 2; 29.8 on 4)
   - dsv41 : sycl/src/dsv41/    -> DOES NOT EXIST, 0 lines ported
 
 Ask the owner which track before starting work. Do not start dsv41 STEP-003 without an explicit go.
@@ -137,8 +147,8 @@ Measured port surface: **16,428 lines of compute, 93 kernels, 130 launch sites, 
 | # | Item | Note |
 |---|---|---|
 | [#19](https://github.com/Captain-Tripps/b70-lab/issues/19) | v0.2.7 Windows build succeeds; 6 fixes | **done**, listed for upstreaming |
-| [#20](https://github.com/Captain-Tripps/b70-lab/issues/20) | Qwen single-card baseline | 12.95 t/s is one 7-token sample — not a baseline |
-| [#21](https://github.com/Captain-Tripps/b70-lab/issues/21) | Qwen multi-GPU tier is a SYCL stub | blocks 97.6 t/s; **affects dsv41 STEP-004** |
+| [#20](https://github.com/Captain-Tripps/b70-lab/issues/20) | Qwen single-card baseline | **[S11 CORRECTED]** 12.95 does not reproduce; measured 10.92/11.08. Target ~11 tok/s, n>=3 |
+| [#21](https://github.com/Captain-Tripps/b70-lab/issues/21) | ~~Qwen multi-GPU tier is a SYCL stub~~ | **[S11 CORRECTED — PREMISE FALSE]** tier is ported and works (27.8 on 2 cards, 29.8 on 4). Reframe as: *why do cards 3-4 add only +7%* — answer is flat per-layer CPU pool + ring wait, not expert placement |
 | [#17](https://github.com/Captain-Tripps/b70-lab/issues/17) | Throughput is bimodal (±31 on mean 39) | blocks all single-sample numbers |
 | [#16](https://github.com/Captain-Tripps/b70-lab/issues/16) | Strata port is the route; engine CUDA-only | primary |
 | [#18](https://github.com/Captain-Tripps/b70-lab/issues/18) | dpct pilot: ~85% auto-convert | **done** |
@@ -155,22 +165,38 @@ Measured port surface: **16,428 lines of compute, 93 kernels, 130 launch sites, 
 Two tracks, different work, different payoffs:
 
 ### Track A — Qwen speed (issues #20, #21)
-Qwen builds and runs **today**. Getting it from 12.95 to ~97.6 needs the multi-GPU expert tier, which
-is a **stub** in the SYCL port. Work lives in `sycl/src/core/` (`peer_experts.cpp`,
-`remote_experts.cpp`), not `dsv41/`.
+**[S11 CORRECTED — the premise of this section was wrong.]**
 
-4-card theory (`QWEN-SPEED.md` §4), from measured constants:
-- Whole expert set is only **~50 GB**; two cards already reach full residency. **Cards 3-4 buy compute, not cache.**
-- 97.6 t/s is the **one-card compute ceiling** (480 expert calls x 21 us = 10.1 ms -> 99 t/s; measured 97.6).
-- 4 cards => likely **180-220 tok/s**, not 400x — Windows has no peer access, and the lab measured
-  **56-64 us** host round trip, which costs 2.74 ms/token over 48 layers.
+What was claimed: Qwen needs the multi-GPU tier ported to go from 12.95 to 97.6, the tier is a stub,
+four cards should reach 180-220 tok/s.
+
+What is measured (session 11, one prompt, only tier flags varied):
+
+| Cards | Decode tok/s | n |
+|---|---:|---:|
+| 1 | 10.92, 11.08 | 2 |
+| 2 | 27.75, 27.39, 29.33, 29.39 | 4 |
+| 4 | 29.78 | 1 |
+
+- **The tier exists and works.** No porting is needed to use cards 2-4.
+- **Card 2 is the whole win** (2.5x). Cards 3-4 add **+7%** — they are not worth the complexity.
+- The real ceiling is the flat per-layer host path: CPU pool ~15-17 ms/round and verify
+  `wait for rings` ~20 ms/round, neither of which divides across cards. GPU expert work already
+  halves (9.62 -> 5.77 -> 3.83 ms/round) and is no longer the binding term.
+- **97.6 does not reproduce.** The lab's 83-env config runs *slower* (21.71) when remapped, and
+  **refuses at 200k** (`REFUSED: 14754 experts are neither in VRAM nor mirrored`, EXIT=2).
+
+So Track A's work is **not** "port the tier". It is: (a) re-establish a 200k configuration that
+runs at all, (b) attack the flat host terms.
 
 ### Track B — dsv41 port (issues #16, #18)
 The engine you actually want for 1017. 0 lines ported. dpct gets ~85% of kernels. Multi-week.
 
-**Dependency that must be settled first:** `PLAN.md` STEP-004 assumes a four-card split. #21
-establishes the SYCL port has **no multi-GPU expert tier at all**. Either dsv41 brings up multi-GPU
-itself, or Track A lands first and dsv41 reuses it. **Do not estimate STEP-004 until this is answered.**
+**[S11 CORRECTED]** The dependency claim below is void. `PLAN.md` STEP-004 assumed a four-card
+split on the premise that no multi-GPU tier existed to reuse. It does exist, in
+`sycl/src/core/remote_experts.cpp`, and dsv41 can inherit it. STEP-004 can be estimated without
+waiting for Track A — but it should be estimated against the **measured** 2-card behaviour (2.5x,
+expert tier fully resident), not against the retracted 180-220 prediction.
 
 -
 
