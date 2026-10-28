@@ -382,3 +382,65 @@ implied ~0.9, and tokens/round is 2.83 against their implied ~5.5, at the same p
 Raising spec depth does not help (prose peaks at 3, code at 4, depth 8 regresses). Every engine-side
 flag tried here is neutral or worse. **The remaining gap is the draft model's quality.** A better MTP
 head is the only lever left that the measurements point to — nothing in the flag surface moves it.
+
+-
+
+## 11. Draft-vocabulary sweep — no gain; `en` is already optimal
+
+The drafter is a full 5.2 GB MTP layer (512 experts, not a small head — see
+`D:\AI\Strata-data\mtp\mtp-inventory.md`). The one drafter-adjacent knob left was
+`--mtp-draft-vocab`, and the box has four vocab files. All runs: code prompt, spec 4, 2 cards,
+`--suffix-draft 0`, `--max-new 64`.
+
+| Draft vocab | Size | tok/s | Accept |
+|---|---:|---:|---|
+| **`draft_vocab_en.bin`** | 162 KB | **54.64** | 43 of 63 (0.683) |
+| `draft_vocab_fr.bin` | 185 KB | 52.60 | 42 of 66 (0.636) |
+| `draft_vocab.bin` (full) | 425 KB | 52.22 | 42 of 66 (0.636) |
+| `draft_vocab_cyrillic.bin` | 236 KB | 51.37 | 42 of 66 (0.636) |
+
+**The smallest, English-pruned vocab wins.** Enlarging the draft vocabulary reduces acceptance:
+0.683 -> 0.636 across all three larger variants, consistently. That is the opposite of the intuitive
+"more vocab = better coverage" assumption, and it makes sense — a bigger draft head has more ways to
+be wrong, and the acceptance rate tracks precision of the top-k draft distribution, not breadth.
+
+Combined with §10, the best configuration measured on this box is:
+
+```
+--spec 4 --suffix-draft 0 --mtp-draft-vocab draft_vocab_en.bin --vram-reserve-mib 1024
+```
+
+= **54.6-54.9 tok/s** on code, 2 cards. That is the practical ceiling without a better drafter.
+
+### 11a. The lever surface is now exhausted
+
+Every knob tried, and every one is neutral or negative:
+
+| Lever | Result |
+|---|---|
+| `--spec` depth 2/3/4/8 | peak at 3 (prose) / 4 (code); 8 regresses |
+| `--suffix-draft` 0/8 | neutral (±1.5%) |
+| `--lookup-chain` 2/4 | neutral, and lowers tokens/round |
+| `--kv-grow` | neutral |
+| `--mtp-hnorm stream` | neutral |
+| `--mtp-q4 all` | **broken** — 0/189 drafts |
+| `--vram-reserve-mib` 2048 | **-10.9%** |
+| draft vocab variants | `en` already best |
+
+**Conclusion: the remaining gap to 97.6 is drafter model quality, and no flag fixes it.** Options are
+a better MTP head for this model (does not appear to exist locally) or accepting ~55 tok/s.
+
+### 11b. What 97.6 would actually require
+
+Holding our measured 53.4 ms round constant, and knowing acceptance is the only variable that
+matters (from §10d: plain decode 18.09 at 1.00 tok/round, spec 4 at 2.83 tok/round, same round cost):
+
+| Acceptance (approx tok/round) | Decode |
+|---|---:|
+| 0.683 (current) | ~55 |
+| 0.80 | ~72 |
+| 0.90 | ~85 |
+| 0.95+ | ~93-97 |
+
+So 97.6 needs roughly **0.95 acceptance** — near-perfect drafting. That is a different class of draft
+model than what is installed, not a tuning difference.
