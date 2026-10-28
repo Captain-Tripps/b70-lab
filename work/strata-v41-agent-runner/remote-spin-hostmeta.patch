@@ -1,0 +1,90 @@
+--- strata-src/remote_experts.cpp.orig	2026-10-28 14:58:05.268148000 -0500
++++ strata-src/src/core/remote_experts.cpp	2026-10-28 15:01:34.303781400 -0500
+@@ -10,8 +10,11 @@
+ 
+ #include <algorithm>
+ #include <chrono>
++#include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
++#include <immintrin.h>
++#include <type_traits>
+ 
+ namespace strata::core {
+ namespace {
+@@ -19,6 +22,33 @@
+ constexpr int64_t FF = strata::kernels::cpu::FF;
+ constexpr int64_t CAP = strata::kernels::cpu::MAXT * 10;
+ 
++// The layer waits for a helper on the CPU pool's critical path, once per layer.  A blocking queue wait sleeps,
++// and on Windows its wake-up costs more than the helper's batch (the CUDA original spun for this reason).
++// STRATA_REMOTE_SPIN=1 polls the queue's last event instead.  STRATA_REMOTE_HOSTMETA=1 lets the kernels read
++// the group tables from the pinned host buffer, as zero-copy already does for the input and the results, so a
++// layer submits one copy fewer per helper.
++bool env_on(const char* name) {
++    const char* v = std::getenv(name);
++    return v != nullptr && v[0] == '1';
++}
++const bool g_remote_spin = env_on("STRATA_REMOTE_SPIN");
++const bool g_remote_host_meta = env_on("STRATA_REMOTE_HOSTMETA");
++
++// spin until everything submitted to the in-order queue `q` has finished
++void spin_wait(sycl::queue& q) {
++    // the return type is sycl::event in older runtimes and std::optional<sycl::event> in newer ones; a generic
++    // lambda discards the branch that does not apply (as dpct's get_in_order_queues_last_events does)
++    const auto spin = [](auto&& last) {
++        sycl::event ev;
++        if constexpr (std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(last)>>, sycl::event>) ev = last;
++        else if (last.has_value()) ev = last.value();
++        else return;   // nothing submitted
++        while (ev.get_info<sycl::info::event::command_execution_status>() != sycl::info::event_command_status::complete)
++            _mm_pause();
++    };
++    spin(q.ext_oneapi_get_last_event());
++}
++
+ // Small enough to copy as one pinned buffer per layer. The kernels read the
+ // individual arrays through pointers into the same device allocation.
+ struct RemoteMeta {
+@@ -325,6 +355,16 @@
+     d_dst_ = meta->dst;
+     d_tok_ = meta->tok;
+     d_count_ = &meta->count;
++    if (g_remote_host_meta) {   // the kernels read the tables where begin() writes them: no upload per layer
++        auto* hm = (RemoteMeta*) h_meta_;
++        d_ptr_ = hm->ptr;
++        d_start_ = hm->start;
++        d_dst_ = hm->dst;
++        d_tok_ = hm->tok;
++        d_count_ = &hm->count;
++    }
++    std::fprintf(stderr, "strata generate: CUDA%d helper: zero-copy %s, spin wait %s, host metadata %s\n", device,
++                 zero_copy_ ? "on" : "off", g_remote_spin ? "on" : "off", g_remote_host_meta ? "on" : "off");
+     owned_.resize(CAP);
+     layers_present_.assign((size_t) layers, 0);
+     group_of_.resize(CAP);
+@@ -425,8 +465,9 @@
+         operand memory, so you may need to call wait() on event return by memcpy
+         API to ensure synchronization behavior.
+         */
+-        check(DPCT_CHECK_ERROR(s->memcpy(d_meta_, h_meta_, sizeof(RemoteMeta))),
+-              "copy group metadata", err, device_);
++        (g_remote_host_meta ||
++         check(DPCT_CHECK_ERROR(s->memcpy(d_meta_, h_meta_, sizeof(RemoteMeta))),
++               "copy group metadata", err, device_));
+     if (!staged) return false;
+     const auto& lay = strata::kernels::cpu::expert_layout();
+     if (lay.native) {
+@@ -466,8 +507,10 @@
+     DeviceScope scope(device_);
+     if (!scope.ok) { err = scope.error(device_); return false; }
+     const auto w0 = std::chrono::steady_clock::now();
+-    if (!check(DPCT_CHECK_ERROR(stream_->wait()), "finish", err,
+-               device_)) return false;
++    if (g_remote_spin) {
++        if (!check(DPCT_CHECK_ERROR(spin_wait(*stream_)), "finish (spin)", err, device_)) return false;
++    } else if (!check(DPCT_CHECK_ERROR(stream_->wait()), "finish", err,
++                      device_)) return false;
+     ms_wait_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - w0).count();
+     for (size_t i = 0; i < original_row_.size(); ++i)
+         std::memcpy(out + (size_t) original_row_[i] * H, h_out_ + i * H, (size_t) H * sizeof(float));
