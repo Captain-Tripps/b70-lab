@@ -85,3 +85,26 @@ round trips per token). Next discriminating test: 1017 CPU-only (`-ngl 0 -t 46`)
   the **commit limit**, not physical RAM, before trying configs with more on the GPUs.
 - Expected effect on 1017 at `-ncmoe 24`: about 60 GB more page cache for 71 GiB of CPU experts, so
   most expert reads should come from RAM instead of NVMe.
+
+## CPU-only control (`box-s20.ps1`): `-dev none -ngl 0 -t 46`, same bench
+
+| | hybrid `-ncmoe 24` + trim (s19) | CPU only (s20) |
+|---|---:|---:|
+| cold decode | 2.16 | 1.50 |
+| warm prefill (189 tok) | 12.74 | 8.20 |
+| warm decode | **2.46** | **1.65** |
+| avg cores used | 36.5 | 43.8 |
+
+Output was coherent. The CPU-only run was not fully warm: the working set grew to 77 GB, available RAM fell
+to 7 GB, and disk reads of 50-300 MB/s continued through the warm decode. All 129 GB of weights do not fit
+in page cache, so its numbers are slightly pessimistic.
+
+**The hybrid's GPU side is cheap; CPU expert compute is the bottleneck.** If per-layer CPU cost were the
+same in both runs, CPU-only covers 40 expert layers at 1.65 tok/s, so 24 CPU layers alone would give about
+2.75 tok/s. The hybrid reaches 2.46, which means the 16 GPU layers, attention and all hand-offs together
+cost about 43 ms per token (~10% of the token time). The hand-offs are not the main gap.
+
+Implication: decode scales with how many expert layers leave the CPU. Now that the trim removes the
+host-RAM cap, the next lever is lower `-ncmoe` (more layers on the GPUs, up to VRAM). Before that, the
+watchdog's commit trip must compare against the commit limit, because the commit-only GPU reservation
+grows ~1:1 with GPU weights.
