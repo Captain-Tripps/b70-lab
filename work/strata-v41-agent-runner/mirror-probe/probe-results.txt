@@ -1,0 +1,53 @@
+=== Wed 10/28/2026 11:01:49.69 
+  
+===== sycl pageable  
+device 0: Intel(R) Arc(TM) Pro B70 Graphics  backend=2  mode=sycl src=pageable size=16 GiB
+0 baseline (context created)       priv=   0.62 GiB  ws=   0.08 GiB  sys_commit=  24.69 GiB  sys_avail=  84.21 GiB
+1 after device alloc               priv=  16.65 GiB  ws=   0.08 GiB  sys_commit=  40.76 GiB  sys_avail=  84.13 GiB
+2 after device-side memset         priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.77 GiB  sys_avail=  84.12 GiB
+3 host staging buffer (256 MiB)    priv=  16.92 GiB  ws=   0.33 GiB  sys_commit=  41.02 GiB  sys_avail=  83.89 GiB
+4 after host->device copy          priv=  16.92 GiB  ws=   0.34 GiB  sys_commit=  41.02 GiB  sys_avail=  83.88 GiB
+5 host buffer freed                priv=  16.67 GiB  ws=   0.09 GiB  sys_commit=  40.76 GiB  sys_avail=  84.12 GiB
+6 idle 15 s                        priv=  16.68 GiB  ws=   0.09 GiB  sys_commit=  40.78 GiB  sys_avail=  84.12 GiB
+7 after 256 MiB device->host read  priv=  16.93 GiB  ws=   0.34 GiB  sys_commit=  41.03 GiB  sys_avail=  83.89 GiB
+8 device memory freed              priv=   0.90 GiB  ws=   0.34 GiB  sys_commit=  24.96 GiB  sys_avail=  83.93 GiB
+exit 0 
+  
+===== sycl pinned  
+device 0: Intel(R) Arc(TM) Pro B70 Graphics  backend=2  mode=sycl src=pinned size=16 GiB
+0 baseline (context created)       priv=   0.62 GiB  ws=   0.08 GiB  sys_commit=  24.68 GiB  sys_avail=  84.20 GiB
+1 after device alloc               priv=  16.65 GiB  ws=   0.08 GiB  sys_commit=  40.75 GiB  sys_avail=  84.13 GiB
+2 after device-side memset         priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.76 GiB  sys_avail=  84.11 GiB
+3 host staging buffer (256 MiB)    priv=  16.91 GiB  ws=   0.33 GiB  sys_commit=  41.01 GiB  sys_avail=  83.89 GiB
+4 after host->device copy          priv=  16.91 GiB  ws=   0.33 GiB  sys_commit=  41.01 GiB  sys_avail=  83.88 GiB
+5 host buffer freed                priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.76 GiB  sys_avail=  84.12 GiB
+6 idle 15 s                        priv=  16.67 GiB  ws=   0.08 GiB  sys_commit=  40.78 GiB  sys_avail=  84.11 GiB
+7 after 256 MiB device->host read  priv=  16.92 GiB  ws=   0.34 GiB  sys_commit=  41.03 GiB  sys_avail=  83.87 GiB
+8 device memory freed              priv=   0.89 GiB  ws=   0.34 GiB  sys_commit=  24.96 GiB  sys_avail=  83.92 GiB
+exit 0 
+  
+===== ze pageable  
+device 0: Intel(R) Arc(TM) Pro B70 Graphics  backend=2  mode=ze src=pageable size=16 GiB
+0 baseline (context created)       priv=   0.62 GiB  ws=   0.08 GiB  sys_commit=  24.70 GiB  sys_avail=  84.18 GiB
+1 after device alloc               priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.76 GiB  sys_avail=  84.12 GiB
+2 after device-side memset         priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.77 GiB  sys_avail=  84.12 GiB
+3 host staging buffer (256 MiB)    priv=  16.92 GiB  ws=   0.33 GiB  sys_commit=  41.02 GiB  sys_avail=  83.87 GiB
+4 after host->device copy          priv=  16.92 GiB  ws=   0.34 GiB  sys_commit=  41.03 GiB  sys_avail=  83.87 GiB
+5 host buffer freed                priv=  16.67 GiB  ws=   0.09 GiB  sys_commit=  40.78 GiB  sys_avail=  84.11 GiB
+6 idle 15 s                        priv=  16.68 GiB  ws=   0.09 GiB  sys_commit=  40.79 GiB  sys_avail=  84.10 GiB
+7 after 256 MiB device->host read  priv=  16.93 GiB  ws=   0.34 GiB  sys_commit=  41.06 GiB  sys_avail=  83.84 GiB
+8 device memory freed              priv=   0.90 GiB  ws=   0.34 GiB  sys_commit=  24.99 GiB  sys_avail=  83.90 GiB
+exit 0 
+  
+===== ze pinned  
+device 0: Intel(R) Arc(TM) Pro B70 Graphics  backend=2  mode=ze src=pinned size=16 GiB
+0 baseline (context created)       priv=   0.62 GiB  ws=   0.08 GiB  sys_commit=  24.69 GiB  sys_avail=  84.18 GiB
+1 after device alloc               priv=  16.65 GiB  ws=   0.08 GiB  sys_commit=  40.76 GiB  sys_avail=  84.11 GiB
+2 after device-side memset         priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.76 GiB  sys_avail=  84.11 GiB
+3 host staging buffer (256 MiB)    priv=  16.91 GiB  ws=   0.33 GiB  sys_commit=  41.03 GiB  sys_avail=  83.85 GiB
+4 after host->device copy          priv=  16.91 GiB  ws=   0.33 GiB  sys_commit=  41.04 GiB  sys_avail=  83.84 GiB
+5 host buffer freed                priv=  16.66 GiB  ws=   0.08 GiB  sys_commit=  40.78 GiB  sys_avail=  84.08 GiB
+6 idle 15 s                        priv=  16.67 GiB  ws=   0.08 GiB  sys_commit=  40.79 GiB  sys_avail=  84.08 GiB
+7 after 256 MiB device->host read  priv=  16.92 GiB  ws=   0.34 GiB  sys_commit=  41.05 GiB  sys_avail=  83.84 GiB
+8 device memory freed              priv=   0.89 GiB  ws=   0.34 GiB  sys_commit=  24.99 GiB  sys_avail=  83.89 GiB
+exit 0 
