@@ -418,3 +418,70 @@ machinery over the lab's older patch**, which is less work and better supported.
 
 `BUILD_EXIT=1`. Not a regression — this is the expected first-build state for a tree that has never been
 compiled on Windows. Recorded so the next session does not mistake it for a toolchain defect.
+
+-
+
+## 13. Windows SYCL build of the v0.2.7 tree — SUCCEEDS (2026-10-27 19:08 CDT)
+
+`D:\strata-dsv41-port\build-jit\strata.exe`, **44,995,584 bytes**, built at 19:08:08.
+
+```
+BUILD_EXIT=0
+compile errors: 0
+link errors:    0
+```
+
+Verified beyond the exit code (a stale-exit-code false pass happened twice earlier in this session):
+`ninja_log` shows real sequential compile + link work ending at 167,437 ms, and the binary **executes** —
+`strata.exe --help` prints the engine's own CLI (`strata generate --pack DIR --tokens ...`, `--kv`,
+`--ple-io`, `--kv-resident`, …) with exit 0 when run inside the oneAPI environment.
+
+### It needs the oneAPI environment
+
+Bare invocation returns `EXIT=-1073740612` (`0xC00004BC`) — the same DLL-search-path failure the lab
+recorded for `llama-server`. Wrapping in `setvars.bat --force` fixes it. Any launcher, service, or
+benchmark harness must call setvars first; llama-swap's `env:` cannot supply a DLL search path.
+
+### The five fixes that were required
+
+The tree had never compiled on Windows. These are the changes, in the order they surfaced. Each is a
+real defect, not a workaround; all five are now in the tree and should be upstreamed.
+
+| # | File | Problem | Fix |
+|---|---|---|---|
+| 1 | `sycl/CMakeLists.txt` | `-fp-model=precise -Wno-*` applied at directory scope reached the fetched **ggml** sub-build, whose C sources are compiled by MSVC `cl`: `D8021 invalid numeric argument '/Wno-unused-parameter'`. Killed all 6 ggml targets. | Gated every one on `$<COMPILE_LANGUAGE:CXX>`. ggml's failing files are all C, so they never see them. |
+| 2 | `sycl/CMakeLists.txt` | `-qmkl=sequential` is the GNU spelling. Windows icx ignored it, so nothing linked oneMKL and `dpct::blas::gemm` left **10 unresolved externals**. | `if(WIN32)` → `/Qmkl:sequential`, plus `/fp:precise`. Also sets `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _USE_MATH_DEFINES` globally. |
+| 3 | `sycl/include/strata_win_undefs.h` | New file. `<windows.h>` macros collide with engine/dpct identifiers. | `#undef small OUT IN clamp min max`. |
+| 4 | `sycl/src/core/gguf_expert_source.cpp` | `unistd.h`, `ssize_t`, `pread`, `off_t`, `O_CLOEXEC` — none exist on Windows. | Win32 positioned-read shim (`_get_osfhandle` + `OVERLAPPED` + `ReadFile`), `off_t`/`ssize_t` as `long long`, `O_CLOEXEC 0`. |
+| 5 | `sycl/src/core/pinned.dp.cpp` | CUDA names `cudaDeviceProp`/`cudaGetDevice`/`cudaGetDeviceProperties`/`cudaSuccess` in `sliced_pin_limit`. | Dropped the DXGI LUID path (no CUDA LUID in a SYCL build); the RAM-based rule applies. |
+| 6 | `sycl/src/prefill/prefill.cpp` | `::_mkdir` needs `<direct.h>`. | Added the include under `_WIN32`. |
+
+### The one trap worth recording
+
+`strata_win_undefs.h` must **not** `#undef near` or `#undef far`. The Windows SDK depends on them:
+
+```c
+minwindef.h:  #define FAR  far
+guiddef.h:    #define DEFINE_GUID(...) EXTERN_C const GUID FAR name
+```
+
+Undefining `far` makes `DEFINE_GUID` expand to a stray token, and `dxgi.h` / `d3d11.h` then fail with
+`expected ';' after top level declarator` on ~12 consecutive lines. The engine uses `near`/`far` only in
+comments, so leaving the macros defined costs nothing.
+
+Also: including `<windows.h>` *before* `<dpct/dpct.hpp>` breaks dpct's own `math_detail.hpp`
+(`sycl::min`/`sycl::max` collide with the macros → `too few arguments provided to function-like macro`).
+Order matters; put the undefs header **after** the include block, not around `windows.h`.
+
+### What this does and does not prove
+
+**Proven:** the v0.2.7 source tree builds on Windows with oneAPI SYCL, produces a working `strata.exe`,
+and the binary starts and reports its CLI.
+
+**Not proven — and this is the important part:** `strata.exe` is the **Qwen** engine. There is no
+`sycl/src/dsv41/` yet. Nothing DeepSeek has been compiled, let alone run. This build is **STEP-002**
+(the Windows build/device qualification), and it is now PASSING for the existing engine.
+
+STEP-003 — porting `src/dsv41/` (16,428 lines, 93 kernels) into `sycl/src/dsv41/` — has not started.
+The dpct pilot (§10) shows ~85% of those kernels convert automatically; the build fixes above are the
+substrate that port will land on, and they are now known rather than guessed.
