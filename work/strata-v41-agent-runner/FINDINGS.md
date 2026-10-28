@@ -1980,3 +1980,33 @@ The runtime kept reporting `kind-valley running pid=248903` while `/proc/248903`
 verified four times. `process kill` / `clear` / `remove` all reported "no active session".
 Consequence: trust `/proc/<pid>` (or `ps`) over the session registry when reconciling whether work
 is still running, and do not let a phantom handle block the actual task.
+
+### W-055 — Row-split crash INDEPENDENTLY REPRODUCED (corroborates L-040)
+
+A concurrent session (not this one) ran row split with a different flag set and hit the identical
+fault, which removes the "one-off" doubt from L-040.
+
+Their config (`C:\b70-work\row1.bat`):
+```
+llama-server.exe -m <1017 shard1> -c 2048 -ngl 38 -ncmoe 12 -fit off -sm row
+                -t 12 -lzm off -lm auto -np 1 -lv 4 --no-warmup --host 127.0.0.1 --port 9081
+```
+
+Result:
+```
+I load_tensors: loading model tensors, this can take a while... (load_mode = mmap)
+W tensor overrides to CPU are used with mmap enabled - consider using --load-mode none
+W done_getting_tensors: skipping 10 Engram/PLE tensor(s) ...
+C:\llamacpp-v41\ggml\src\ggml-sycl\ggml-sycl.cpp:1419: fatal error
+==== row1 exit -1073740791 Wed 10/28/2026 8:05:10.47 ====
+```
+
+Same file:line, same exit code as this session's `-sm row` failure. Two independent runs, two
+different flag sets (`-lm none -b 32` vs `-lm auto -ncmoe 12`), one identical abort.
+
+This strengthens the L-040 diagnosis: the abort is in `get_row_rounding()`'s unhandled type, not in
+memory pressure or load mode — note their run used `-ncmoe 12` (12 MoE layers pushed to CPU) and
+`-lm auto`, and still died at the same line before any allocation pressure.
+
+Row split remains unusable for this pack until I32/I64 row rounding exists. The practical fix is
+either to define those cases or to exclude Engram lookup tables from row splitting.
