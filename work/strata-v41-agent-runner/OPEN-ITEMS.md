@@ -19,6 +19,10 @@ Opened 2026-10-27 during the speed-tuning session. Umbrella: **#11**.
 | [#15](https://github.com/Captain-Tripps/b70-lab/issues/15) | PCIe measured ~12 GB/s per card (x8-class), topology unconfirmed | OPEN |
 | [#16](https://github.com/Captain-Tripps/b70-lab/issues/16) | Strata engine port is the route; engine is CUDA/HIP-only (0 SYCL files) | OPEN — primary |
 | [#17](https://github.com/Captain-Tripps/b70-lab/issues/17) | Throughput is bimodal (±31 on a mean of 39); needs per-sample JSON | OPEN — blocks all numbers |
+| [#18](https://github.com/Captain-Tripps/b70-lab/issues/18) | dpct pilot: ~85% of dsv41 kernels auto-convert | **DONE** — method accepted, acceptance unchanged |
+| [#19](https://github.com/Captain-Tripps/b70-lab/issues/19) | v0.2.7 Windows SYCL build succeeds; 6 fixes to upstream | **DONE** — `strata.exe` 45 MB, `BUILD_EXIT=0` |
+| [#20](https://github.com/Captain-Tripps/b70-lab/issues/20) | Qwen: real single-card baseline (12.95 t/s is one 7-token sample) | OPEN — needs QWEN-1 |
+| [#21](https://github.com/Captain-Tripps/b70-lab/issues/21) | Qwen: multi-GPU expert tier is a SYCL stub | OPEN — **blocks 97.6 t/s and affects dsv41 STEP-004** |
 
 ## Rules for this work
 
