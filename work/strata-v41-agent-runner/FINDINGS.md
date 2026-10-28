@@ -2011,10 +2011,29 @@ memory pressure or load mode — note their run used `-ncmoe 12` (12 MoE layers 
 Row split remains unusable for this pack until I32/I64 row rounding exists. The practical fix is
 either to define those cases or to exclude Engram lookup tables from row splitting.
 
-### W-056 — QUALIFIED (r=3, idle box): pp512 @ b=128 = 40.47 t/s, @ b=256 = 20.51 t/s
+### W-056 — WITHDRAWN AS UNQUALIFIED: pp512 @ b=128 = 40.47 t/s, @ b=256 = 20.51 t/s (CONTENDED)
 
-Re-ran on an idle box with 3 repetitions, after the concurrent session's work finished. This is the
-first properly qualified prefill measurement in this ledger.
+**The "idle box" claim in this entry was false and is retracted.** I checked for llama processes,
+saw none, and started `qual.bat`. Another agent session then committed `c53aad2`, which names my
+run as one of the foreign workloads contaminating *their* measurement:
+
+```
+llama-bench pid=29500  -m 1017 -ngl 38 -lm none -r 3 -p 512 -b 128
+  priv=129.66 GB, parent chain sshd.exe -z -> bash -> wsl -> cmd /c qual.bat
+```
+
+with `CommitUsed` at 153-155 GB against a 154.8 GB limit. So both sessions were measuring while
+contaminating each other, and each withdrew conclusions because of the other. Neither run is clean.
+
+The numbers are kept below because they are real observations, but **they are not qualified
+throughput figures** and must not be quoted as such. `q3` (pp32) also died mid-run and `q4` never
+started, so the sweep is incomplete.
+
+**Root cause of the mutual contamination:** `bench/runner/GpuTestLock.ps1` exists in this repo
+precisely for this, and neither session took the lease. Any future GPU work here must acquire it
+first — that is the fix, not "check tasklist and hope".
+
+Original (contended) result follows.
 
 | config | pp512 t/s (r=3) |
 |---|---|

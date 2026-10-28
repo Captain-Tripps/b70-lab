@@ -342,8 +342,11 @@ sessions 7-8 and in [`machine-manifest.json`](../../work/strata-v41-agent-runner
 > the b=256 collapse to 0.70 t/s is real and reproduced twice. "Big batch for prefill" is WRONG;
 > the setting is b=128 specifically.
 >
-> **Independently confirmed** at b=128 in a separate session: `-p 512 -b 128` = **12.25 t/s**,
-> matching the ~11-12 t/s figure. So b=128 is the supported peak from two sessions.
+> **Not independently confirmed.** A later run at `-p 512 -b 128` gave 12.25 t/s once and
+> 40.47 +/- 24.69 at r=3 — but that r=3 run was **contended** (a concurrent agent session's
+> workload was resident; see `c53aad2` and FINDINGS W-056). The apparent agreement at
+> "11-12 t/s" is therefore not corroboration. What survives without contention: b=128 is where
+> prefill behaves best and very large batches are worse; the exact rate is unqualified.
 
 `llama-bench`, `-ngl 38 -t 12 -lm none --no-warmup -r 1`, layer split:
 
@@ -356,6 +359,11 @@ sessions 7-8 and in [`machine-manifest.json`](../../work/strata-v41-agent-runner
 
 **This corrects the earlier "batching is broken / pp is 9x slower than tg" conclusion**, which was
 read from `-p 32` alone. At longer prompts prefill is far faster than decode and behaves sanely.
+
+> **All numbers in this table are single-sample and several were taken while another agent
+> session was running on the same GPUs.** Treat them as directional only. Throughput on this pack
+> is bimodal (one r=3 run reported 61% relative stddev), so single runs cannot separate a
+> configuration change from noise. No row here should be quoted as a qualified rate.
 
 **Caveat on mechanism:** the pp32 -> pp512 rows change prompt length *and* batch size together, so
 they do not isolate batch width. `pp512 @ b=128` (12.25) also beat `pp256 @ b=256` (6.19), which
