@@ -150,22 +150,27 @@ The `-ot`/`-ngl` arithmetic in the handoff was never the binding constraint; hos
 `GGML_SYCL_USE_LEVEL_ZERO_API` to 1 — so that mitigation is compiled in and nominally on, yet
 host commit still tracks model size.
 
-**ANSWERED 2026-10-28 07:40 — see `HOST-COMMIT-CONTROL.md`.** A 17.28 GB known-good model on the
-same binary commits **19.66 GB** private (1.14×). It is a property of the SYCL/xe path, not of
-1017 and not of the patches. 1017 needs ~1.5× the machine's RAM to load; the gap is 33–43 GB and
-no flag closes it.
+**ANSWERED 2026-10-28 07:40, THEN WITHDRAWN 08:15 — see `CONTENTION-CORRECTION.md`.** The
+"cannot load, 33–43 GB shortfall" verdict came from runs that were contending with a foreign
+`llama-bench` holding 129.66 GB of commit. Structural findings that DO survive: `-ngl 40`
+overflows the cards (33,694 MiB vs 32,558 MiB capacity) so `-ngl 38` is mandatory; `-ncmoe` with
+`-sm layer` produces catastrophic splits; `-sm row` crashes the SYCL backend; and `CPU_Mapped`
+buffers (35.2 GB in one run) confirm the NVMe-resident path is real and engages.
 
 -
 
 ## 7. Next steps, in order
 
 1. **Do not bisect the patches.** Nothing points at them.
-2. **~~Settle the host-commit question~~ — DONE, see `HOST-COMMIT-CONTROL.md`.** Host commit is
-   ~1.0–1.14 × model size on this SYCL path, confirmed against a known-good 17.28 GB model that
-   loads and serves (`health 200`, priv 19.66 GB). 1017 cannot load on this 96 GB box.
-3. **Stop tuning 1017 here.** A 128.74 GB pack at ~1.15× needs ~148 GB of RAM; the machine has
-   95.9 GB. The shortfall is 33–43 GB and is not a flag problem.
-4. **Two viable paths:** a pack of ≤ ~70 GB with `deepseek41` support, or ~160 GB of RAM.
+2. **~~Settle the host-commit question~~ — measured, then WITHDRAWN on contention** (see
+   `CONTENTION-CORRECTION.md`). Re-measurement needs a closed window with no foreign
+   `llama-bench`/`qual.bat`/`final.bat` and `CommitUsed` below ~30 GB.
+3. **Before any 1017 run, fix `ram-watchdog.ps1:32`.** It reads `FreePhysicalMemory`, which
+excludes standby; a mmap-heavy load showed `free=0.00` while `available=58.19`. Use
+`AvailableBytes` or healthy loads get killed.
+4. **Prefer explicit `-ot` over `-ncmoe`.** `-ncmoe` shifts whole layers, and with `-sm layer`
+   (the only splitter this SYCL backend supports — `-sm row` hits `ggml-sycl.cpp:1419` fatal
+   error) the result is unbalanced cards, e.g. 59 GB on a 32.5 GB card.
 5. **Always check `ram-watchdog.log` first** on any 1017 death. It timestamps, pids, and sizes
    every kill.
 

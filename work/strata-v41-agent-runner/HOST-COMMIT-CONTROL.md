@@ -1,5 +1,20 @@
 # Host commit tracks model size — the small-model control (2026-10-28 07:40)
 
+> ## ⚠️ VERDICT WITHDRAWN 2026-10-28 08:15 — see `CONTENTION-CORRECTION.md`
+>
+> The conclusion below ("1017 cannot load here, shortfall 33–43 GB") was drawn from measurements
+> taken **while another agent was running `llama-bench` against the same 1017 pack on the same
+> machine**, holding 129.66 GB of commit against a 154.8 GB limit. A foreign `qual.bat` and
+> `final.bat` were also running 1017 servers on ports 9034/9040.
+>
+> **What survives:** the control's own arithmetic (§1) is sound and is the useful part —
+> `priv 19.66 GB` vs `ws 27.71 GB` on a 17.28 GB model proves `priv` is *anonymous commit*, not
+> resident RAM, and that file-backed mmap pages count in WS but not in private commit. That kills
+> the "WDDM charges VRAM to commit" hypothesis.
+>
+> **What is withdrawn:** §3's shortfall arithmetic and the "1.15× multiplier" claim. They were
+> derived from contended peaks.
+
 Answers the open question left in `WATCHDOG-KILL-FINDING.md` §6: **is the host-side commitment a
 property of this SYCL path, or specific to the 1017 pack?**
 
