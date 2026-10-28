@@ -1,4 +1,4 @@
-# Strata v0.2.7, 2 cards: `--adapt-every 0` gives +49% decode (2026-10-28)
+# Strata, 2 cards: `--adapt-every 0` gives +49% in `generate`, but -60% when serving (2026-10-28)
 
 Qwen3.8-Flash-Next GSQ-RCO IQ3_S, Strata v0.2.7 SYCL JIT build, 2x B70, `--expert-cache auto
 --expert-cache-device1 auto`, int8 KV, `--spec 4 --spec-min-p 0`, English draft vocab, 8k context.
@@ -63,9 +63,26 @@ memory, one copy fewer per layer). Code prompt, n=3 interleaved, base run 1 excl
 No gain: the blocking wait was not sleeping, and the helper wait is real GPU + PCIe time. The patch was
 reverted; the diff is kept as `remote-spin-hostmeta.patch` for the record.
 
+## The served build: the CLI says yes, the server says no (do not apply)
+
+The served llama-swap entry runs the older lab build (2-card `--expert-parallel-device 1`, 200k context),
+not v0.2.7. Tested two ways, same config except the flag:
+
+| Lab build, code prompt | default | `--adapt-every 0` |
+|---|---:|---:|
+| CLI `generate`, n=3 interleaved (`box-s23.ps1`) | 35.5 / 63.8 / 34.6 | 92.5 / 89.8 / 90.4 |
+| **`--serve` via llama-swap**, 2 chat requests x 2 (`swap-check.py`) | **99.0-103.9** | **37.6-40.5** |
+
+Output identical in both modes (CLI: same token hash; server: same answers). But the CLI `generate` path is
+not representative of serving: in serve mode the default config already decodes at ~100 tok/s, and
+`--adapt-every 0` cuts it to ~40. The served config was left unchanged.
+
+This also means the v0.2.7 result above is a **CLI-only** result. It must be re-checked under `--serve` before
+anyone relies on it.
+
 ## Still open
 
-- `wait for rings` (~21 ms/round) is now the largest single term: card 0's own per-layer time, flat in
-  tokens per window, so overhead-dominated. Needs a per-kernel GPU profile.
-- The served Strata entry is the older lab build (`--expert-parallel-device`), not v0.2.7. Whether the flag
-  helps there is untested.
+- Why `--adapt-every 0` helps `generate` but hurts `--serve` on the lab build (the serve path presumably uses
+  the tier differently: batched MTP, conversation cache).
+- `wait for rings` (~21 ms/round) is now the largest single term in v0.2.7 `generate`: card 0's own per-layer
+  time, flat in tokens per window, so overhead-dominated. Needs a per-kernel GPU profile.
