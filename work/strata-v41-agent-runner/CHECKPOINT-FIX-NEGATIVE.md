@@ -61,3 +61,31 @@ between them.
 | VRAM | all cards 0 GB |
 | Free RAM | 84.8 GB |
 | Scripts | `srv-v41.bat` (unmodified), `.bak-cp` backup, `srv-nockpt.bat` (test) |
+
+-
+
+## 6. Corroboration: the client-side signature
+
+The HTTP measurement request itself failed:
+
+```
+=== timed request: FAILED after 230.9s:
+    The underlying connection was closed: An unexpected error occurred on a receive.
+```
+
+That is the **client** view of the same event as the server's `exit -1`. Timings line up:
+
+| Event | Time |
+|---|---|
+| request submitted | T+0 |
+| `prompt processing, n_tokens = 27, t = 31.75 s` | T+~32 s |
+| `created context checkpoint 1 of 32` | T+~32.1 s |
+| server `exit -1` | T+~32.2 s |
+| client reports closed connection | T+230.9 s |
+
+The gap between server death (+32 s) and client timeout (+231 s) is the client's own socket/receive
+timeout expiring, not additional server work. So the server processed 27 tokens in 31.75 s and then
+died — it did not continue computing for 231 s.
+
+**This settles the "was it progressing?" question: no.** The process was gone ~32 s in. The 230.9 s
+figure should never be quoted as a duration of work.
