@@ -1654,7 +1654,7 @@ not record x1.
 
 ## Session 8 — speed work: the "batching is broken" conclusion was WRONG (2026-10-27)
 
-### W-035 — Batch size was the whole story: pp scales ~22x from b=32 to b=128
+### W-050 — Batch size was the whole story: pp scales ~22x from b=32 to b=128
 
 > **CORRECTED by W-038 (Session 9).** The "peaks at b=128+" reading below rests on a single
 > 41.87 t/s sample at b=512 that did **not** reproduce (repeat: 0.61 t/s). The valid part of this
@@ -1676,11 +1676,11 @@ is smaller than the 40-layer hyper-connection depth, so per-token serialisation 
 `-b 128` prefill reaches 12.25 t/s — a 22x improvement over the recorded 0.55, and 37x over the
 0.33 in L-025. Batching does engage; it needs a batch big enough to amortise the per-block work.
 
-### W-036 — Layer split beats tensor split for decode by 65%
+### W-051 — Layer split beats tensor split for decode by 65%
 3.65 vs 2.21 t/s at identical flags. Tensor split was never the fast path for this model; the
 recorded "tensor split" experiments were measuring a slower configuration. Use `-sm layer`.
 
-### L-026 — Row split CRASHES on this model, and the cause is now pinned
+### L-040 — Row split CRASHES on this model, and the cause is now pinned
 `-sm row` aborts immediately: `ggml-sycl.cpp:1419: fatal error`, exit `-1073740791`
 (0xC0000409, stack-buffer-overrun fail-fast) inside `get_row_rounding()`.
 
@@ -1694,7 +1694,7 @@ Note the row-rounding table also omits I8/I16/F16-adjacent cases, so this is a g
 one-off. Row split cannot be used for this model until I32/I64 row rounding is defined. These are
 lookup tables and arguably should not be row-split at all.
 
-### W-037 — PCIe is measured now: ~12 GB/s per card, so the "x1" reading was an artifact
+### W-052 — PCIe is measured now: ~12 GB/s per card, so the "x1" reading was an artifact
 Empirical host<->device probe (`icx-cl -fsycl`, all four B70s, 512 MB transfers):
 
 | device | H2D GB/s | D2H GB/s |
@@ -1875,3 +1875,108 @@ port is the route and llama.cpp is a dead end. These results are retained for tw
    choices rather than trusting defaults.
 
 None of this is Strata-engine evidence. No CHECK-102..108 gate moves.
+
+### W-053 — `llama-server` DOES start; it is blocked by an intermittent 9.09 GiB host allocation
+
+This corrects the "server is simply broken" reading. The server path is viable; one allocation is
+unreliable.
+
+Confirmed reachable state (env `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0`):
+
+```
+SYCL0 model buffer size = 31059.68 MiB
+SYCL1 model buffer size = 32121.37 MiB
+SYCL2 model buffer size = 30504.06 MiB
+SYCL3 model buffer size = 28627.27 MiB
+SYCL_Host model buffer size =  9310.57 MiB
+init: model loaded
+server_on_li: listening on http://127.0.0.1:9036
+update_slots: all slots are idle
+```
+
+`/health` returned **200** while that process was live. So: model loads, 38/41 layers on GPU,
+HTTP layer up, slot created, idle. That is further than any previously recorded attempt.
+
+| env | outcome |
+|---|---|
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=1` (default) | `failed to allocate 9310.57 MiB of pinned memory` — deterministic |
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0` | sometimes loads fully and listens; on retry, `ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer of size 9762838016` |
+
+So pinned-memory is a genuine separate defect, and disabling it is **necessary but not
+sufficient**. The plain host allocation also fails, intermittently.
+
+### L-041 — WITHDRAWN: my "not free-RAM exhaustion" claim was a measurement error
+
+**This entry was wrong and is retracted.** I wrote that the 9.09 GiB allocation failure was
+fragmentation or a driver ceiling because I measured `FreePhysicalGB=84.65` at the failure point.
+
+That number was sampled **after the process had already died and released its memory.** It
+describes the idle box, not the box at the moment of allocation. The load ramps to ~95-130 GB
+private commit, so by the time the 9.09 GiB host buffer is requested, usable RAM is near zero and
+the allocation legitimately fails.
+
+The correct story is in `WATCHDOG-KILL-FINDING.md` and `HOST-COMMIT-CONTROL.md` (other sessions,
+same day, better evidence than mine):
+
+- `C:\llama-swap\ram-watchdog.ps1` kills `llama-server` below **6 GB** available via
+  `Stop-Process -Force` -> `TerminateProcess(h,-1)` -> exit code **-1**.
+- Private commit tracks **~1.0-1.14x model size** on this SYCL path, proven with a 17.28 GB
+  control model that loads fine (priv 19.66 GB, ratio 1.138, `health 200`).
+- 1017 needs ~148 GB of host commitment; the box has 95.9 GB. Shortfall 33-43 GB.
+
+Confirmed directly in `ram-watchdog.log` on 2026-10-28 07:45:52:
+`KILLED 1 llama-server (avail=5.28 GB below 6 GB): pid=12604 priv=95.1GB ws=79.1GB` — that is my
+own run from this session, killed by the watchdog, not by an allocation bug.
+
+**Lesson (mine, and a repeat of the same family as L-035):** sample the failing quantity *during*
+the failure, not after cleanup. A post-mortem free-RAM reading is not evidence about the failure.
+
+Note the fallback is also not a smaller-footprint path: `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0` still
+requests a same-size `SYCL_Host` buffer via `ggml_backend_cpu_buffer_type_alloc_buffer`.
+
+### W-054 — TDR is genuinely zero, but the "clean GPU" framing needs nuance
+- `Display` provider Event 4101 (TDR) over 7 days: **0**. Confirms the handoff claim independently.
+- Application log simultaneously holds **3,790 LiveKernelEvent entries in 7d**: `P1:141` = 2,827,
+  `P1:193` = 455, `P1:124` = 262, `P1:19e` = 164, `P1:117` = 82.
+
+None of these correlated with today's llama-server exits (no `llama-server` crash event exists in
+the 3 h before the check). But "zero TDRs" is not "no GPU diagnostic events", and 0x141 at that
+volume deserves identification before any long soak.
+
+### L-042 — Detached `cmd.exe` / `start /b` does not survive SSH teardown here
+Reconfirmed repeatedly this session, and it produced several false "the server died" readings.
+A `start /b` server reached `listening` + health 200, then vanished the moment the ssh session
+ended. Same family as L-010. **Run server lifecycle (start → probe → request → kill) inside one
+script that stays alive for the whole test**, never across separate ssh calls.
+
+### L-043 — `llama-bench` multi-value sweeps silently fail in this build
+`-b 128,256`, `-sm layer,row`, `-ub 128,512` all abort with `A_EXIT=1` / `B_EXIT=1` and no error
+text, after printing the device table. Single-value invocations work. Any comma-separated sweep
+must be run as separate invocations. This wasted several runs before it was spotted.
+
+### L-044 — Another agent session was benchmarking on GPU-BOX concurrently
+
+While this session was running, `ps` showed a second OpenClaw exec session polling
+`C:\b70-work\row1.csv` and `row1.log` for a **row-split** benchmark, and the repo gained commits
+(1203b33, 857e6a9, f956f15, 6964acb, 4a9e3dd, 88b60ab, 09bd0c4, 75f34dd) that this session did
+not author.
+
+Two consequences:
+
+1. **Measurement integrity.** GPU benchmarks run concurrently on the same four cards contend for
+   VRAM, PCIe and the Level Zero queue. Any of this session's numbers taken while another
+   llama process was resident are suspect. The prefill table (`pp32`/`pp256`/`pp512`) and the
+   server attempts should be re-run on an idle box before being treated as qualified.
+2. **Bookkeeping.** Findings, IDs and conclusions were being written by more than one session
+   simultaneously. This is exactly how duplicate IDs W-035..W-039 / L-029..L-031 arose; they are
+   renumbered to W-050..W-054 / L-040..L-043 here.
+
+Before any further measurement: confirm no other agent is active on GPU-BOX
+(`ps -eo args | grep row1.csv`, `tasklist | grep llama`), and note the run window in the receipt.
+
+### L-045 — A stale exec session can outlive its pid
+
+The runtime kept reporting `kind-valley running pid=248903` while `/proc/248903` did not exist,
+verified four times. `process kill` / `clear` / `remove` all reported "no active session".
+Consequence: trust `/proc/<pid>` (or `ps`) over the session registry when reconciling whether work
+is still running, and do not let a phantom handle block the actual task.

@@ -335,13 +335,15 @@ detail, with configs and raw numbers, lives in
 [`work/strata-v41-agent-runner/FINDINGS.md`](../../work/strata-v41-agent-runner/FINDINGS.md)
 sessions 7-8 and in [`machine-manifest.json`](../../work/strata-v41-agent-runner/machine-manifest.json).
 
-### Batch size is the dominant throughput lever (~22x)
+### Prefill throughput depends on prompt length; the good setting is `-b 128`
 
-> **CORRECTED 2026-10-27 (Session 9, W-038/W-039).** The b=512 figure in this section (41.87 t/s)
-> did **not** reproduce — a repeat measured **0.61 t/s**, 69x lower. Prefill peaks at **b=128
-> (~11-12 t/s)** and degrades above it. The b=256 collapse to 0.70 t/s IS real and reproduced
-> twice. Treat "big batch for prefill" as WRONG; the setting is b=128 specifically. Full
-> correction in `work/strata-v41-agent-runner/FINDINGS.md` W-038..W-040.
+> **CORRECTED 2026-10-27 (Session 9).** A b=512 figure of 41.87 t/s did **not** reproduce — a
+> repeat measured **0.61 t/s**. Prefill peaks at **b=128 (~11-12 t/s)** and degrades above it;
+> the b=256 collapse to 0.70 t/s is real and reproduced twice. "Big batch for prefill" is WRONG;
+> the setting is b=128 specifically.
+>
+> **Independently confirmed** at b=128 in a separate session: `-p 512 -b 128` = **12.25 t/s**,
+> matching the ~11-12 t/s figure. So b=128 is the supported peak from two sessions.
 
 `llama-bench`, `-ngl 38 -t 12 -lm none --no-warmup -r 1`, layer split:
 
@@ -352,10 +354,16 @@ sessions 7-8 and in [`machine-manifest.json`](../../work/strata-v41-agent-runner
 | `-p 256 -b 256` | 6.19 | 0.35 |
 | `-p 512 -b 128` | **12.25** | — |
 
-**This corrects the earlier "batching is broken" conclusion.** Prefill was previously measured
-only at `-b 32` and read as proof that the batched path never engages. It does engage; `-b 32` is
-simply too small to amortise per-block work across 40 hyper-connection layers. `-b 128` gives
-12.25 t/s, a 22x improvement over the recorded 0.55 and 37x over the 0.33 baseline.
+**This corrects the earlier "batching is broken / pp is 9x slower than tg" conclusion**, which was
+read from `-p 32` alone. At longer prompts prefill is far faster than decode and behaves sanely.
+
+**Caveat on mechanism:** the pp32 -> pp512 rows change prompt length *and* batch size together, so
+they do not isolate batch width. `pp512 @ b=128` (12.25) also beat `pp256 @ b=256` (6.19), which
+argues the gain is per-token amortisation of fixed per-batch overhead rather than batch width per
+se. Do not read this table as "raise `-b` for a 22x win" — the supported setting is b=128, and
+beyond it throughput falls. A clean batch sweep at fixed prompt length is still unrun because
+`llama-bench` multi-value sweeps abort in this build (FINDINGS L-043); it needs separate
+invocations.
 
 ### Prefill and decode want opposite configurations
 
@@ -402,25 +410,54 @@ two x8 links, or a chipset x8 uplink, produces the same numbers.
 At ~12 GB/s per card, host-staged weight streaming is first-order for a 128.74 GiB pack, which
 supports the CPU-overflow/placement decisions already in the architecture table.
 
-### The serving path currently fails on host pinned memory, not on VRAM
+### The serving path is blocked by an intermittent ~9.1 GiB host buffer allocation
 
-`llama-server` with `-fit off -sm layer -lm none -b 128 -ub 128 -c 2048`:
+`llama-server` consistently places 38/41 layers and needs a **SYCL_Host buffer of 9,762,838,016 B
+(9.09 GiB)**. That allocation is unreliable:
 
-```
-W ggml_backend_sycl_host_malloc: failed to allocate 9310.57 MiB of pinned memory
-E ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer of size 9762838016
-E llama_model_load: error loading model: unable to allocate SYCL_Host buffer
-```
+| env | outcome |
+|---|---|
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=1` (default) | `ggml_backend_sycl_host_malloc: failed to allocate 9310.57 MiB of pinned memory` |
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0` | **sometimes succeeds** — model loads, `/health` returns 200, `listening on :9036`, all slots idle |
+| `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0`, retried | falls back to `ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer of size 9762838016` |
 
-Omitting `-fit off` fails differently and worse, attempting a 19.1 GiB allocation on SYCL0.
-The failure is a **~9.3 GiB pinned host allocation** against a box with 95.87 GiB usable and
-Windows already resident. This is a host-RAM budget problem, not a VRAM problem, and it is
-consistent with the recorded RAM reconciliation. Any serving configuration must budget the
-host-staged portion explicitly; C: also had only ~52 GiB free at last inventory.
+So the pinned-memory path is a real and separate defect, and disabling it is necessary but **not
+sufficient** — the plain host allocation also fails intermittently.
 
-Unresolved: whether the pinned allocation fails because of fragmentation, a hard ceiling in
-`GGML_SYCL_ENABLE_HOST_PINNED_MEM`, or genuine free-RAM exhaustion. That needs a direct
-free-memory measurement at the moment of failure, which has not yet been taken.
+**This is host-RAM exhaustion, and the cause is the RAM watchdog.** An earlier note in this
+section claimed otherwise from a `FreePhysicalGB=84.65` reading — that reading was taken *after*
+the process died and released memory, so it described the idle box, not the failure. Corrected.
+
+The authoritative account is `WATCHDOG-KILL-FINDING.md` and `HOST-COMMIT-CONTROL.md`:
+
+- `C:\llama-swap\ram-watchdog.ps1` kills `llama-server` when available RAM drops below **6 GB**,
+  using `Stop-Process -Force` -> `TerminateProcess(h,-1)` -> **exit code -1**. Every recorded
+  `exit -1` on this track is that kill, not an abort in the deepseek41 code.
+- Private commit tracks **~1.0-1.14x model size** on this SYCL path, established against a
+  17.28 GB control model that loads and serves normally (priv 19.66 GB, ratio 1.138, `health 200`).
+- 1017 therefore needs roughly **148 GB** of host commitment against **95.9 GB** installed. The
+  shortfall is 33-43 GB and no load-mode or offload flag closes it.
+
+Direct confirmation from `ram-watchdog.log` at 2026-10-28 07:45:52:
+`KILLED 1 llama-server (avail=5.28 GB below 6 GB): pid=12604 priv=95.1GB ws=79.1GB`.
+
+Also confirmed: omitting `-fit off` fails differently and worse, attempting a 19.1 GiB
+allocation on SYCL0. `-fit off` is mandatory for this model on this box.
+
+So the serving path is **not** blocked on a fixable allocation defect. It is blocked on arithmetic:
+this pack does not fit in this machine's RAM. Viable directions are a pack of ~<=70 GB with
+`deepseek41` support, or ~160 GB of RAM. `GGML_SYCL_ENABLE_HOST_PINNED_MEM=0` changing the failure
+signature is a symptom of *when* the watchdog fires, not a fix.
+
+### GPU health: TDR count is genuinely zero, but the "clean" framing needs nuance
+
+Confirmed independently: **`Display` provider TDR (Event 4101) = 0 over 7 days.** The handoff's
+claim holds.
+
+However, the Application log also carries **3,790 LiveKernelEvent entries in 7 days**, dominated
+by `P1: 141` (2,827) with `P1: 193` (455), `P1: 124` (262). These are not TDRs and did not
+correlate with any of today's llama-server exits, but "zero TDRs" should not be read as "no GPU
+diagnostic events at all". Worth identifying what 0x141 is on this driver before a long soak.
 
 ## Evidence and status
 
