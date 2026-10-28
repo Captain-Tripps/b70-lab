@@ -225,3 +225,76 @@ All five of the originally-recommended items were completed:
   or foreground. (b) I generated configs with an off-by-one in the tier-to-flags mapping and
   briefly mislabelled 1/2/4-card scripts. The measurements above come from the corrected `g*`
   scripts, verified by their own `CUDA1/2/3: N additional experts` log lines.
+
+-
+
+## 9. Speculation depth sweep (added same evening, prompt told me to test 2 and 3)
+
+All earlier numbers in this file used `--spec 4`. This section varies depth on **realistic prompts**
+instead of the token-ID soup used above.
+
+### 9a. `--spec 0` is impossible on this pack
+
+```
+strata generate: D:\AI\Strata-data\packs\iq3_s is a native (IQ) pack:
+it needs --native SHARD1, --spec T (T >= 2) and --prefill CHUNK
+EXIT=2
+```
+
+So there is **no non-speculative baseline** available on IQ3_S. Any decode figure from this pack is
+speculation-assisted. The lab's 97.6 was too.
+
+### 9b. Measured, 2 cards, `--max-new 64`
+
+Prompts: prose (33 tokens), code (26 tokens). Both `--spec-min-p 0`, MTP drafter, int8 KV, 8k context.
+
+| Prompt | Spec | tok/s | Accept | tok/round | Round ms |
+|---|---:|---:|---:|---:|---:|
+| prose | 2 | 34.27 | 0.561 | 1.55 | 45.2 |
+| prose | 3 | **37.92** | 0.426 | 1.83 | 48.3 |
+| prose | 4 | 32.58 | 0.276 | 1.81 | 55.6 |
+| prose | 8 | 22.70 | 0.127 | 1.86 | 81.9 |
+| code | 2 | 43.30 | 0.811 | 1.86 | 43.0 |
+| code | 3 | 47.98 | 0.750 | 2.44 | 50.9 |
+| code | 4 | **53.16** | 0.656 | 2.83 | 53.2 |
+| code | 8 | 47.40 | 0.429 | 3.82 | 80.6 |
+
+**Prose prefers depth 3, code prefers depth 4.** Depth 8 is a regression on both: round time nearly
+doubles (45 -> 82 ms) while tokens/round barely moves (1.55 -> 1.86).
+
+Best measured: **53.16 tok/s** (code, spec 4) vs 28.74 on the soup prompt at spec 4.
+
+### 9c. The important comparison: round time is NOT the gap
+
+| | ms/round |
+|---|---:|
+| Our best (code, spec 4) | **53.2** |
+| Lab 97.6 implies, at 5.0 tok/round | 51.2 |
+| Lab 97.6 implies, at 5.5 tok/round | 56.4 |
+
+**We are already at the lab's per-round cost.** Their 97.6 came from extracting ~5.5 accepted tokens
+per round against our 2.83. Holding our 53.2 ms round fixed:
+
+```
+2.83 tok/round -> 53.2 tok/s   (measured)
+4.00 tok/round -> 75.1
+5.00 tok/round -> 93.9   <- the "90ish"
+6.00 tok/round -> 112.7
+```
+
+**Conclusion: the remaining gap is drafter quality, not the port.** Same round, fewer tokens out of it.
+
+### 9d. Caveats
+
+- **Not comparable to §1a's grid.** Different prompts (33/26 tokens vs 8), `--max-new 64` vs 32.
+  Read the spec-depth trend and §9c; do not put 53.16 beside 28.74 as a clean delta.
+- The earlier 0.228 acceptance was **substantially my prompt's fault** — a non-linguistic token-ID
+  soup is worst case for a draft model. Real prose 0.56, real code 0.81.
+- Single sample per cell. The trend is monotone and large enough to trust; individual digits are not.
+- `--suffix-draft` and `--lookup-chain` reported **zero windows** in every run. Untested as levers.
+
+### 9e. Next lever
+
+Not spec depth — that is tuned. The drafter (`D:\AI\Strata-data\mtp\rt`) is the constraint. Options:
+a larger draft head for this model, or `--lookup-chain` / `--suffix-draft` which have never actually
+engaged here.
