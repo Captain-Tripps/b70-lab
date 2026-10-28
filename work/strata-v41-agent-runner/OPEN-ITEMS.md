@@ -1,47 +1,46 @@
-# Open items — DeepSeek V4.1 1017 tuning on GPU-BOX
+# Open items — updated 2026-10-28 09:30 (checkpoint)
 
-Tracked as GitHub issues on `Captain-Tripps/b70-lab`, labelled `open-item`.
-This file is the in-repo mirror so the list survives independently of GitHub.
+Ordered by value. `SESSION-13-CHECKPOINT.md` and `HANDOFF-SESSION-13.md` carry the detail.
 
-Opened 2026-10-27 during the speed-tuning session. Umbrella: **#11**.
+-
 
-| # | Item | Status |
+## P0 — blocking, do first
+
+| # | Item | Effort | Why it blocks |
+|---|---|---|---|
+| 1 | **Fix `ram-watchdog.ps1:32`** to read `AvailableBytes` instead of `FreePhysicalMemory` | 10 min | It reports `free=0.00` while `available=58.19`. Healthy mmap loads are killed. Keep the floor; fix the metric. |
+| 2 | **Obtain one prefill/decode tok/s number** for 1017 | 15 min | Every downstream decision needs it. `bench-9100.py` is written and working; bench *inside* the health-poller (`box-run18.ps1` pattern). |
+| 3 | **Run the small-model control** (Qwen3-Coder 17.28 GB, `-ngl 99 -lm auto`) comparing `priv` to device buffers | 10 min | Decides whether the host-RAM mirroring is the backend or the pack. This is the project fork. |
+
+## P1 — after the fork is resolved
+
+| # | Item | Notes |
 |---|---|---|
-| [#5](https://github.com/Captain-Tripps/b70-lab/issues/5) | OOM: SYCL alloc failure at large ubatch (b=32, ub>=128), cause unidentified | OPEN |
-| [#6](https://github.com/Captain-Tripps/b70-lab/issues/6) | pp512 non-monotonic in batch: **41.87 did NOT reproduce** (repeat 0.61); b=128 ~11-12 and b=256 0.70 both reproduced | OPEN — corrected |
-| [#7](https://github.com/Captain-Tripps/b70-lab/issues/7) | Model load takes 10-17 min: break down the cost and cut it | OPEN |
-| [#8](https://github.com/Captain-Tripps/b70-lab/issues/8) | Flash attention "10x regression" **did NOT reproduce** — at r3, fa1 39.63 vs fa0 41.15, indistinguishable | CLOSED as a regression; variance is the real issue (#17) |
-| [#9](https://github.com/Captain-Tripps/b70-lab/issues/9) | KV quant q8_0 "halves prefill" — single sample from the same unreliable regime | SUPERSEDED by #17 |
-| [#10](https://github.com/Captain-Tripps/b70-lab/issues/10) | llama-server cannot use the tuned batching path; llama-swap integration broken | OPEN |
-| [#12](https://github.com/Captain-Tripps/b70-lab/issues/12) | `-sm row` aborts: `get_row_rounding` has no I32/I64 case | OPEN |
-| [#13](https://github.com/Captain-Tripps/b70-lab/issues/13) | `-ngl 38` forced by ~955 MiB VRAM overrun; split lopsided 22/37 | OPEN |
-| [#14](https://github.com/Captain-Tripps/b70-lab/issues/14) | Engram/PLE unusable: 10 tensors skipped, metadata absent | OPEN |
-| [#15](https://github.com/Captain-Tripps/b70-lab/issues/15) | PCIe measured ~12 GB/s per card (x8-class), topology unconfirmed | OPEN |
-| [#16](https://github.com/Captain-Tripps/b70-lab/issues/16) | Strata engine port is the route; engine is CUDA/HIP-only (0 SYCL files) | OPEN — primary |
-| [#17](https://github.com/Captain-Tripps/b70-lab/issues/17) | Throughput is bimodal (±31 on a mean of 39); needs per-sample JSON | OPEN — blocks all numbers |
-| [#18](https://github.com/Captain-Tripps/b70-lab/issues/18) | dpct pilot: ~85% of dsv41 kernels auto-convert | **DONE** — method accepted, acceptance unchanged |
-| [#19](https://github.com/Captain-Tripps/b70-lab/issues/19) | v0.2.7 Windows SYCL build succeeds; 6 fixes to upstream | **DONE** — `strata.exe` 45 MB, `BUILD_EXIT=0` |
-| [#20](https://github.com/Captain-Tripps/b70-lab/issues/20) | Qwen single-card baseline | **PARTIAL** — n=3 gives **11.02** tok/s (12.95 does not reproduce). Prefill/`--spec 0` still open |
-| [#21](https://github.com/Captain-Tripps/b70-lab/issues/21) | ~~multi-GPU tier is a stub~~ | **PREMISE RETRACTED** — tier works: 11.0 / 28.7 / 28.6 / 29.7 on 1-4 cards. Cards 3-4 add +3%. Refiled to the flat host terms |
-| [#22](https://github.com/Captain-Tripps/b70-lab/issues/22) | `STRATA_VERIFY_NO_HOST=1` + `STRATA_MIRROR_MIB=0` makes the 200k lab config refuse | OPEN — new |
+| 4 | If backend mirrors VRAM: size the real requirement | ~160 GB RAM, or a `deepseek41` pack ≤ ~70 GB. State it as a hardware fact, not a tuning problem. |
+| 5 | If pack-specific: try per-tensor `-ot` expert placement instead of `-ncmoe` | `-ncmoe` shifts whole layers and breaks `-sm layer` balance; `-ot` can be balanced per layer. |
+| 6 | Re-derive `-ts` whenever `-c` or headroom changes | Use `box-solve2.py`. A `-ts` from another config overflowed a card and lost a run. |
+| 7 | Decide `-lm auto` vs `-lm none` deliberately | `auto` = CPU experts file-backed/evictable (NVMe idea), +8 GB. `none` = anonymous, −8 GB, pinned. |
 
-## Rules for this work
+## P2 — hygiene
 
-1. **Single-sample numbers are not findings.** Everything above came from `-r 1` unless stated. Confirm at `-r 3` before it enters `PLAN.md` as a headline.
-2. **`-fa 0` is the benchmarking default** until #8 resolves — FA-on measured 10x slower.
-3. **Do not publish 41.87 t/s** as a capability claim until #6 reproduces it.
-4. **No gate moves on llama.cpp evidence.** CHECK-102..108 remain NOT_RUN.
-5. Numbers taken before the 2026-10-27 sweep, at default batch, were measuring a near-unbatched path. Read them as such.
+| # | Item | Notes |
+|---|---|---|
+| 8 | **Delete or fix `C:\b70-work\box-auto.ps1`** | It rewrites `auto-srv.bat` on every launch and silently reverted a corrected config twice. |
+| 9 | Export the 4 llama.cpp patches as a commit/patch series into this repo | Currently only on the Windows build tree. The fused-ops probe fix looks like a general upstream multi-GPU bug (pp splits 166→13). |
+| 10 | Pre-flight check for foreign workloads | `CommitUsed` must be ~23 GB, not ~150 GB. A foreign `llama-bench` held 129.66 GB for most of one session. |
+| 11 | Investigate `LiveKernelEvent P1:141` (2,827 in 7 days) | Not TDRs, no correlation with the exits, but unexplained. See `PLAN.md`. |
 
-## Settled — do not redo
+-
 
-- The `deepseek41` architecture exists in the llama.cpp fork; the pack loads and generates (exit 0).
-- `-sm layer` beats `-sm tensor` for decode by 65% (3.65 vs 2.21 t/s).
-- Batching does engage. The earlier "batched path never engages" conclusion was wrong.
-- Production llama-swap config is rolled back and SHA256-verified: 0 `v41` references, 9 models served.
+## Settled — do not reopen
 
-## Note on benchmark cost
-
-`llama-bench` reloads the model **per configuration**. A three-value `-b` sweep is three full
-10-17 minute loads, which is why a small sweep takes the better part of an hour. This is the
-same cost that makes #7 (load time) a blocker for iteration and not just an inconvenience.
+- **Patches are not the cause of the `exit -1`.** It is the RAM watchdog. Verified by control test
+  and by the watchdog's own log (`Stop-Process -Force` → `TerminateProcess(h,-1)` → exit `-1`;
+  MSVC `abort()` would be exit 3; no WER event was raised; no `exit(-1)` exists in the source).
+- **Context checkpoints are not the cause.** Both docs that claimed this are corrected in place.
+- **`0.85 tok/s` was never a prefill measurement** — 27 tokens of a starving process.
+- **`-sm row` is unsupported** on this SYCL backend (`ggml-sycl.cpp:1419`, exit `0xC0000409`).
+- **Engram is 0.20 GiB in this pack**, not 110 GB. It cannot be a capacity lever.
+- **`-ngl 40` is correct** for VRAM capacity (119.4 GiB of buffers vs 130 GiB); the layer *split*
+  must be byte-balanced with `-ts`.
+- **`-ts` arithmetic from the old handoff is void.** It assumed a 2-GPU 48/52 boundary.

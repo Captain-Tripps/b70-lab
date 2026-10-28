@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "milestone": "STEP-000 + read-only STEP-001",
+  "milestone": "STEP-000 + read-only STEP-001 + llama.cpp-side 1017 bring-up (input, no gate moved)",
   "branch": "work/strata-v41-agent-runner",
   "base_revision": "881c608f3de21fc2765a852e80f88a2c9ee15f3f",
   "base_note": "main after PR #4 merge (docs/strata-deepseek-v41-b70-plan merged)",
-  "updated_at": "2026-10-27T19:12:00Z",
+  "updated_at": "2026-10-28T14:30:00Z",
   "gate_status": {
     "CHECK-100": {
       "status": "PASS",
@@ -111,7 +111,7 @@
     "ze_loader": "C:\\Windows\\System32\\ze_loader.dll 1.32.0",
     "strata_tree": "%USERPROFILE%\\strata-win @ win-port 1c360526bce659f45cec60b2e36c46b7770c5bf1 (v0.1.44.1-26), 29 dirty files"
   },
-  "next_action": "STEP-001 is now closed except PCIe telemetry, which Windows cannot supply. The route decision is the owner's and is now evidence-backed: the deployed win-port tree has no DeepSeek V4.1 engine at all, while the pinned v0.2.6 carries 132 dsv41 files and a docs/DEEPSEEK41.md describing strata-dsv41 as PLAN.md routes. Nothing in the 18 local Windows fixes exists in v0.2.6, so any v0.2.6-based attempt needs them re-applied or upstreamed. Do NOT start STEP-002 (builds, four-device probes) or a v0.2.6 checkout/merge without explicit owner go-ahead; a workspace copy for inspection is read-only and allowed.",
+  "next_action": "P0: (1) fix ram-watchdog.ps1:32 to use AvailableBytes, (2) obtain one prefill/decode tok/s, (3) run the small-model control that distinguishes backend VRAM-mirroring from pack-specific staging. Do not bisect patches; do not blame Engram. See HANDOFF-SESSION-13.md.",
   "resume_check": {
     "status": "PASS",
     "satisfied_at": "2026-10-27T19:12:00Z",
@@ -213,5 +213,45 @@
       "name": "upstream the 18 fixes",
       "detail": "The Windows fixes are independent of either route and useful to both. Lowest-risk, unblocks A."
     }
-  ]
+  ],
+  "session_13_checkpoint": {
+    "summary": "1017 loads and serves on 4x B70 (model loaded, listening, health 200) for the first time. No tok/s obtained yet. Earlier exit -1 was the host RAM watchdog, not an abort.",
+    "gate_impact": "NONE. No CHECK-102..108 gate passes. This is llama.cpp-fork evidence about one pack on one host, retained as route-assessment input.",
+    "corrected_claims": [
+      "exit -1 was NOT an unhandled abort: ram-watchdog.ps1 -> Stop-Process -Force -> TerminateProcess(h,-1) -> exit -1. Verified by control test; no WER event; no exit(-1) in source; MSVC abort() = exit 3.",
+      "Engram is 0.20 GiB in this pack, not 110 GB. The 103 GB Engram file is never loaded.",
+      "0.85 tok/s was never a prefill measurement (27 tokens of a starving process).",
+      "CHECKPOINT-FIX-NEGATIVE.md is invalid in claim and in direction of inference."
+    ],
+    "measured": {
+      "pack_gib": 128.74,
+      "tensors": 1008,
+      "params_b": 551.88,
+      "by_category_gib": {
+        "moe_experts": 123.0,
+        "attention": 3.56,
+        "ffn_dense": 1.05,
+        "embd": 0.85,
+        "engram": 0.2,
+        "other": 0.08
+      },
+      "device_buffers_gib": 119.4,
+      "vram_available_gib": 127.2,
+      "peak_host_ws_gb": {
+        "ncmoe5": 86.2,
+        "ncmoe12": 85.8,
+        "ncmoe18": 85.7
+      }
+    },
+    "working_config": "C:\\b70-work\\opt5.bat  -ngl 40 -ncmoe 5 -ts 35,22.5,22.5,20 -sm layer -lm none -c 2048 -t 12 --no-warmup -> health 200",
+    "open_question": "Host RAM tracks the GPU allocation ~1:1 regardless of CPU expert count. Small-model control (Qwen3-Coder 17.28 GB) decides whether this is the SYCL backend or the pack.",
+    "artifacts": [
+      "work/strata-v41-agent-runner/SESSION-13-CHECKPOINT.md",
+      "work/strata-v41-agent-runner/HANDOFF-SESSION-13.md",
+      "work/strata-v41-agent-runner/WATCHDOG-KILL-FINDING.md",
+      "work/strata-v41-agent-runner/CONTENTION-CORRECTION.md",
+      "work/strata-v41-agent-runner/HOST-COMMIT-CONTROL.md"
+    ],
+    "contention_warning": "A foreign llama-bench (sshd-spawned, qual.bat) held 129.66 GB of commit for most of the session. Measurements before ~09:00 are contaminated. Check CommitUsed (~23 GB) before any run."
+  }
 }

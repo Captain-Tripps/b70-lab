@@ -4,6 +4,30 @@ Status: **planned; no DeepSeek V4.1 Intel implementation or performance measurem
 Prepared 2026-10-26. Updated for hosted DeepSeek/OpenClaw execution. Start with STEP-000, then STEP-001; later gates retain their IDs.
 This is a research-only handoff, not a claim that the model can currently launch.
 
+> ### Checkpoint 2026-10-28 09:30 CDT — llama.cpp-side measurement update
+>
+> This plan routes through the **Strata `strata-dsv41` engine**. Parallel work in a llama.cpp
+> SYCL fork (`C:\llamacpp-v41`) has meanwhile produced measurements that are **input to route
+> assessment, not passed gates**. No CHECK-102..108 gate moved. Recorded here so the numbers are
+> not re-derived.
+>
+> | Fact | Value |
+> |---|---|
+> | Pack | DeepSeek-V4.1-Flash-1017 GSQ-RCO IQ2_XXS, 128.74 GiB, 1008 tensors, 551.88 B params |
+> | Tensor composition | **95.5% MoE experts (123.00 GiB)**; attention 3.56, dense 1.05, embd 0.85, **Engram 0.20** |
+> | Engram correction | The 110 GB Engram figure is the separate `-Engram-IQ4_NL.gguf` (103 GB), **never loaded**. In-pack Engram is 0.20 GiB, so NVMe-Engram is not a capacity lever. |
+> | Device buffers | 119.4 GiB across 4 cards — **fits** 130 GiB of VRAM |
+> | Server status | **loads and serves** (`model loaded`, `listening`, `health 200`) on 4x B70 |
+> | Outstanding | **no prefill or decode token rate has been obtained**; inference request dies at ~85.7 GB host WS |
+> | Root cause of earlier `exit -1` | **not a crash** — `ram-watchdog.ps1` calls `TerminateProcess(h,-1)`; verified by control test |
+>
+> Full detail: `work/strata-v41-agent-runner/SESSION-13-CHECKPOINT.md` and `HANDOFF-SESSION-13.md`.
+>
+> **Open question that decides viability:** host RAM tracks the GPU allocation ~1:1 regardless of how
+> many experts sit on CPU (`-ncmoe 5` and `-ncmoe 18` both peak at 85.7 GB WS). If a small-model
+> control shows the same, the backend mirrors device memory into system RAM and 1017 needs ~160 GB
+> RAM or a ~70 GB pack — independent of which engine is used.
+
 ## Outcome and scope
 
 Build a native Windows SYCL version of Strata's separate `strata-dsv41` engine for DeepSeek-V4.1-Flash-1017,
