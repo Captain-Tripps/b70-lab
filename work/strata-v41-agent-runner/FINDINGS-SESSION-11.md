@@ -557,3 +557,73 @@ This is a direct constraint on the dsv41 track:
 
 Nothing found that improves Qwen today. DSpark is the correct answer *if* dsv41 runs on non-Intel
 hardware, which for this box it does not.
+
+-
+
+## 14. DSpark checkpoint verification — the local pack has NO drafter (confirmed)
+
+Checked `D:\AI\Models\dsv41` properly rather than trusting the handoff's "needs 8 GB download".
+
+### 14a. What is actually in the pack
+
+| File | Size |
+|---|---:|
+| `DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-0000{1..4}-of-00004.gguf` | 39.1 + 39.4 + 39.2 + 20.5 GB |
+| `DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf` | 110.6 GB |
+| `mmproj-DeepSeek-V4.1-Flash-1017-BF16.gguf` | 0.97 GB |
+
+Total 233 GB. Format: **GGUF**, `general.architecture = deepseek41`, GGUF v3, 81 metadata keys.
+
+### 14b. The decisive evidence
+
+The pack ships `tensor-allocation/...rco-allocation.txt` — a per-tensor dump covering **all four
+shards**, written by the packer:
+
+```
+# Tensor count: 1008
+```
+
+Parsed all 1008 tensor names:
+
+- **Drafter-named tensors (`mtp.*`, `dspark.*`, `draft.*`): 0**
+- **Layer indices present: 0 through 39** (40 layers, the backbone only)
+
+`deepseek41.dspark_target_layer_ids` **is** present in the metadata — so the checkpoint records that
+the model *uses* DSpark and which layers it targets, but **the drafter weights themselves are not in
+these files.** Metadata-only. My earlier binary scan hits (`mtp`, `mtp.`) were coincidental byte
+matches inside 39 GB of quantized weights, not tensor names — the 20 MB header scans found nothing
+structural, and the authoritative tensor dump confirms it.
+
+**So the handoff was right: the drafter genuinely is a separate download.**
+
+### 14c. The HF overlay I found does not fit this pack
+
+`ursuciprian/DeepSeek-V4.1-Flash-1017-DSpark-D1` is real, fetchable, MIT, and carries
+`ov0-overlay-000.safetensors` + an index. But:
+
+- It is a **safetensors overlay for the EXL3 2.9bpw checkpoint**
+  (`LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw`, rev `afc7aa0a`).
+- Ours is **GGUF IQ2_XXS** from `ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF`.
+
+Different container, different quantization scheme, different tensor layout. That overlay cannot be
+loaded by a GGUF-based engine without a conversion nobody has written. It also targets a *refit* of
+the D1 drafter (self-distilled, +6.6-11.6% prose acceptance), so it presupposes you already have the
+base drafter it deltas against.
+
+### 14d. What a working drafter would require
+
+1. The **base DSpark drafter** (8.04 GiB, `gguf-tools/deepseek41_dspark.py` conversion) — not present,
+   not located in GGUF form for this exact pack.
+2. A **SYCL implementation of DSpark** in the port. DSpark ships for Metal/CUDA/ROCm only, and
+   `INTEL.md` states "DeepSeek V4.1-Flash does not run on Intel."
+
+So for dsv41 on B70, DSpark is **two missing pieces**, not one download. That is a materially bigger
+estimate than the handoff's "needs 8 GB download" implies, and it should be settled before STEP-004.
+
+### 14e. Honest caveat
+
+I did not attempt to parse the GGUF tensor index directly — the split-file headers defeated my
+parser (`bad len` on every shard, most likely RCO layout or an offset-table variant I did not account
+for). The 1008-tensor figure comes from **the packer's own allocation dump**, which is authoritative
+for what the pack contains and is what I am relying on. If that dump were stale or incomplete the
+conclusion would weaken, but it matches the file count and total size.
