@@ -148,24 +148,26 @@ The `-ot`/`-ngl` arithmetic in the handoff was never the binding constraint; hos
 
 `GGML_SYCL_SUPPORT_LEVEL_ZERO_API:BOOL=ON` in this build and `ggml-sycl.cpp:458` defaults
 `GGML_SYCL_USE_LEVEL_ZERO_API` to 1 — so that mitigation is compiled in and nominally on, yet
-host commit still tracks model size. Whether the remaining host cost is the loader's staging of
-each tensor before the device copy, or xe/TTM staging underneath Level Zero, is **not yet
-settled**. That is the one open question, and it decides whether 1017 can run here at all.
+host commit still tracks model size.
+
+**ANSWERED 2026-10-28 07:40 — see `HOST-COMMIT-CONTROL.md`.** A 17.28 GB known-good model on the
+same binary commits **19.66 GB** private (1.14×). It is a property of the SYCL/xe path, not of
+1017 and not of the patches. 1017 needs ~1.5× the machine's RAM to load; the gap is 33–43 GB and
+no flag closes it.
 
 -
 
 ## 7. Next steps, in order
 
 1. **Do not bisect the patches.** Nothing points at them.
-2. **Settle the host-commit question** before any further tuning: run a small model with the same
-   build and watch `PrivateMemorySize64`. If priv ≈ model size there too, the host staging is a
-   property of this SYCL path and no flag fixes it.
-3. **If it is staging:** the only paths are a pack small enough that 2× its size fits in 96 GB
-   (i.e. ≤ ~45 GB, well under the current 128.74 GB), or a box with more RAM.
-4. **If it is xe/TTM staging:** `GGML_SYCL_USE_LEVEL_ZERO_API=1` is already the default; the
-   remaining lever would be the driver, not llama.cpp.
-5. **Always check `ram-watchdog.log` first** on any future 1017 death. It timestamps, pids, and
-   sizes every kill.
+2. **~~Settle the host-commit question~~ — DONE, see `HOST-COMMIT-CONTROL.md`.** Host commit is
+   ~1.0–1.14 × model size on this SYCL path, confirmed against a known-good 17.28 GB model that
+   loads and serves (`health 200`, priv 19.66 GB). 1017 cannot load on this 96 GB box.
+3. **Stop tuning 1017 here.** A 128.74 GB pack at ~1.15× needs ~148 GB of RAM; the machine has
+   95.9 GB. The shortfall is 33–43 GB and is not a flag problem.
+4. **Two viable paths:** a pack of ≤ ~70 GB with `deepseek41` support, or ~160 GB of RAM.
+5. **Always check `ram-watchdog.log` first** on any 1017 death. It timestamps, pids, and sizes
+   every kill.
 
 -
 
