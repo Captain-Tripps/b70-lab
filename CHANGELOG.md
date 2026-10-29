@@ -3,6 +3,13 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-10-29
+- Corrected the 2026-10-28 served `--adapt-every 0` result: served Strata speed is set per start and varies 58-100 tok/s
+  with or without the flag, so the "99-104 -> 38-40" was one slow start. No clear served effect; config unchanged.
+- Same-day head-to-head through llama-swap, cold requests, thinking off: Strata (2 cards) 84.2 vs llama.cpp Flash-Next
+  MTP (4 cards) 50.4 tok/s median. A slow state (~39 tok/s on every start) after RAM exhaustion was cleared by a reboot.
+  [STRATA-ADAPT-TIER](work/strata-v41-agent-runner/STRATA-ADAPT-TIER.md).
+
 ## 2026-10-28
 - DeepSeek V4.1 Flash 1017 on the llama.cpp SYCL fork: first real numbers. Best 2.46 tok/s decode / 12.7 prompt read
   (`-ncmoe 24 -t 46` plus one `EmptyWorkingSet` after load); CPU-only 1.65, so the CPU expert layers are the
