@@ -1,0 +1,87 @@
+--- a/sycl/serve/server_intel.py
++++ b/sycl/serve/server_intel.py
+@@ -306,9 +306,84 @@
+     return None
+ 
+ 
++def install_speed_guard():
++    """Restart-if-slow (2026-11-01): the expert-parallel lab build lands in a slow mode on some starts (decode
++    ~2.4x slower on every request until the engine is restarted; the EP exchange stage, cause not found).  With
++    STRATA_SPEED_GUARD_MIN=<tok/s> in the config's env, each start (and each restart) times a short greedy probe
++    right after READY and starts the engine again when decode is below that, at most STRATA_SPEED_GUARD_TRIES
++    starts (default 3; the last one is kept whatever its speed).  The probe is the token ids in
++    STRATA_SPEED_GUARD_TOKENS (default speed_probe.tok here), STRATA_SPEED_GUARD_NEW tokens (default 160).
++    With STRATA_SPEED_GUARD_PURGE=1 a retry first empties Windows' standby list (purge_standby.ps1 here; needs an
++    admin or LocalSystem token): the slow mode comes from the engine's pinned host memory landing on scattered
++    pages once the file cache fills RAM, and every start after a purge was fast (8 of 8, vs 0 of 8 without, same
++    hour).  The start after a purge reads the model from disk again (~77 s instead of ~32 s).
++    Without the key nothing changes."""
++    import subprocess
++    import threading
++    orig = S.StrataEngine.__init__
++
++    def purge(self):
++        try:
++            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
++                                str(HERE / "purge_standby.ps1")], capture_output=True, text=True, timeout=120)
++            note = "[speed-guard] standby purge: " + ((r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1])
++        except (OSError, subprocess.SubprocessError) as e:
++            note = f"[speed-guard] standby purge failed ({e})"
++        print(note, flush=True)
++        if self.log_path:                                # close() has closed self.log by now
++            try:
++                with open(self.log_path, "a", encoding="utf-8") as f:
++                    f.write(note + "\n")
++            except OSError:
++                pass
++
++    def probe(self, ids, n):
++        for _ in self.generate(ids, n, {"temperature": 0}, threading.Event()):
++            pass
++        last = dict(self.last)
++        return last.get("generated", 0) / max(last.get("decode_ms", 0.0), 1e-3) * 1000.0
++
++    def init(self, exe, args, cwd=None, log=None, env=None, lazy=False, cpus=None, _attempt=0):
++        orig(self, exe, args, cwd, log, env, lazy, cpus, _attempt)
++        floor = float((env or {}).get("STRATA_SPEED_GUARD_MIN") or 0)
++        if lazy or _attempt or floor <= 0:               # _attempt: the inner start of upstream's own retry
++            return
++        tries = int((env or {}).get("STRATA_SPEED_GUARD_TRIES") or 3)
++        n = int((env or {}).get("STRATA_SPEED_GUARD_NEW") or 160)
++        try:
++            src = (env or {}).get("STRATA_SPEED_GUARD_TOKENS") or str(HERE / "speed_probe.tok")
++            ids = [int(t) for t in Path(src).read_text().replace(",", " ").split()]
++        except (OSError, ValueError) as e:
++            print(f"[speed-guard] no probe tokens ({e}); not checking", flush=True)
++            return
++        for i in range(tries):
++            try:
++                rate = probe(self, ids, n)
++            except Exception as e:                       # a probe that fails leaves the engine as it is
++                print(f"[speed-guard] probe failed ({e}); not checking", flush=True)
++                return
++            note = f"[speed-guard] start {i + 1} of {tries}: decode {rate:.1f} tok/s (floor {floor:g})"
++            print(note, flush=True)
++            if self.log and hasattr(self.log, "write"):
++                try:
++                    self.log.write(note + "\n"); self.log.flush()
++                except (OSError, ValueError):
++                    pass
++            if rate >= floor or i == tries - 1:
++                return
++            self.close()
++            self.ended = True
++            if (env or {}).get("STRATA_SPEED_GUARD_PURGE") == "1":
++                purge(self)
++            orig(self, exe, args, cwd, log, env, lazy, cpus, 0)
++
++    S.StrataEngine.__init__ = init
++
++
+ if __name__ == "__main__":
+     install_xe_reader()
+     install_narrator()
+     install_switcher(sys.argv[1:])
+     install_logprobs()
++    install_speed_guard()
+     sys.exit(S.main())
