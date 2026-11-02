@@ -11,6 +11,8 @@ Intel's `icx` compiler, including two-card expert parallel and int8 KV.
   `--ple-io mmap`**: decode ~99 tok/s, prompt read ~1,420 tok/s at 33.6k, answers correct, vision working, 2-hour
   soak through llama-swap clean. The AOT build with oneAPI 2026.0 miscompiles the int8 attention (see below).
   Not done: AOT with oneAPI 2026.1.
+- Start-to-start speed lottery on the served build (78-89 vs 32-45 tok/s per start): cause = the Windows file cache;
+  fix and guard in [slow-starts/](slow-starts/) (2026-11-01).
 
 Patches (prepared with AI assistance; Strata is MIT, notice in
 [../LICENSES/Strata-LICENSE](../LICENSES/Strata-LICENSE)). Apply in order with `git apply`:

@@ -3,9 +3,10 @@
 GLM-5.3-Flash (llama.cpp arch `glm5-next`): 321B MoE, ~18B active, MLA attention, MTP (nextn) block.
 
 - Model file: Project Maya's GGUF quants, **Maya-M** (3 shards, 108 GiB): IQ2_S / IQ3_XXS / IQ3_S routed experts,
-  Q6_K / Q8_0 dense weights. Maya's own engine is CUDA-only; upstream llama.cpp already had the architecture, so I
+  Q6_K / Q8_0 dense weights. Maya's own engine was CUDA-only at the time (later ported: [sycl-port/](sycl-port/)); upstream llama.cpp already had the architecture, so I
   brought GLM into my tuned SYCL fork instead (branch `glm5-fork`, runtime `g10`).
-- Status: **live** since 2026-10-14, 128k context.
+- Status: **superseded 2026-11-01** by [sycl-port/](sycl-port/): Project Maya's own engine ported to SYCL, 45.5-45.8 tok/s
+  decode and ~1,000 tok/s prompt read on the same model file. This llama.cpp-fork entry ran from 2026-10-14 to 2026-11-01.
 
 ## Steps
 

@@ -1,0 +1,1677 @@
+--- a/src/program/generate.cpp
++++ b/src/program/generate.cpp
+@@ -1097,9 +1097,9 @@
+ // a variable of this process's environment (the GLM model reads its switches from there)
+ static void set_env(const char* k, const char* v) {
+ #if defined(_WIN32)
+-    _putenv_s(k, v);
++    _putenv_s(k, v); maya_env_changed();
+ #else
+-    setenv(k, v, 1);
++    setenv(k, v, 1); maya_env_changed();
+ #endif
+ }
+ 
+@@ -4519,9 +4519,9 @@
+     // left for its code and the engine ended ("out of memory: cudaFuncSetAttribute").  Costs ~30 MB of VRAM.
+     if (std::getenv("CUDA_MODULE_LOADING") == nullptr) {
+ #if defined(_WIN32)
+-        _putenv_s("CUDA_MODULE_LOADING", "EAGER");
++        _putenv_s("CUDA_MODULE_LOADING", "EAGER"); maya_env_changed();
+ #else
+-        setenv("CUDA_MODULE_LOADING", "EAGER", 0);
++        setenv("CUDA_MODULE_LOADING", "EAGER", 0); maya_env_changed();
+ #endif
+     }
+ #if defined(_WIN32)
+@@ -4554,9 +4554,9 @@
+         else if (a == "--glm-pack") o.glm_pack = next("--glm-pack");
+         else if (a == "--glm-ram-resident") {
+ #if defined(_WIN32)
+-            _putenv_s("STRATA_GLM_RAM_RESIDENT", "1");
++            _putenv_s("STRATA_GLM_RAM_RESIDENT", "1"); maya_env_changed();
+ #else
+-            setenv("STRATA_GLM_RAM_RESIDENT", "1", 1);
++            setenv("STRATA_GLM_RAM_RESIDENT", "1", 1); maya_env_changed();
+ #endif
+         }
+         else if (a == "--parallel") {   // the sequence states (STRATA_GLM_SEQS): n conversations at once
+@@ -4567,9 +4567,9 @@
+         else if (a == "--glm-ram-slack") {
+             const char* v = next("--glm-ram-slack");
+ #if defined(_WIN32)
+-            _putenv_s("STRATA_GLM_RAM_SLACK", v);
++            _putenv_s("STRATA_GLM_RAM_SLACK", v); maya_env_changed();
+ #else
+-            setenv("STRATA_GLM_RAM_SLACK", v, 1);
++            setenv("STRATA_GLM_RAM_SLACK", v, 1); maya_env_changed();
+ #endif
+         }
+         else if (a == "--tokens") {
+--- a/src/kernels/cuda/glm_fast.dp.cpp
++++ b/src/kernels/cuda/glm_fast.dp.cpp
+@@ -2433,7 +2433,7 @@
+     if (cache[dev] == 0) {
+         int major = 0;
+         major = dpct::get_device(dev).get_major_version();
+-        static const bool off = getenv("STRATA_GLM_MV_APPROX") != nullptr && std::atoi(getenv("STRATA_GLM_MV_APPROX")) == 0;
++        static const bool off = maya_env("STRATA_GLM_MV_APPROX") != nullptr && std::atoi(maya_env("STRATA_GLM_MV_APPROX")) == 0;
+         cache[dev] = major >= 8 && !off ? 1 : 2;
+         cache[dev] = 2; // SYCL: tensor-core kernel is a stub in this port - decline
+     }
+@@ -2454,7 +2454,7 @@
+         int major = 0;
+         major = dpct::get_device(dev).get_major_version();
+         cache[dev] = 2;
+-        if (const char* v = getenv("STRATA_GLM_MV_MMA")) cache[dev] = std::atoi(v) != 0 && major >= 8 ? 1 : 2;
++        if (const char* v = maya_env("STRATA_GLM_MV_MMA")) cache[dev] = std::atoi(v) != 0 && major >= 8 ? 1 : 2;
+         cache[dev] = 2; // SYCL: tensor-core kernel is a stub in this port - decline
+     }
+     return cache[dev] == 1;
+@@ -2656,7 +2656,7 @@
+         int major = 0, minor = 0;
+         major = dpct::get_device(dev).get_major_version();
+         minor = dpct::get_device(dev).get_minor_version();
+-        const char* v = getenv("STRATA_GLM_GU_STAGE");
++        const char* v = maya_env("STRATA_GLM_GU_STAGE");
+         cache[dev] = major == 6 && minor == 0 && (v == nullptr || std::atoi(v) != 0) ? 1 : 2;
+     }
+     return cache[dev] == 1;
+@@ -2674,8 +2674,8 @@
+         int major = 0, minor = 0;
+         major = dpct::get_device(dev).get_major_version();
+         minor = dpct::get_device(dev).get_minor_version();
+-        const char* v = getenv("STRATA_GLM_MV_P100");
+-        const char* rv = getenv("STRATA_GLM_MV_P100_R");
++        const char* v = maya_env("STRATA_GLM_MV_P100");
++        const char* rv = maya_env("STRATA_GLM_MV_P100_R");
+         const int r = rv != nullptr ? std::atoi(rv) : 0;
+         const bool on = major == 6 && minor == 0 && (v == nullptr || std::atoi(v) != 0);
+         cache[dev] = on ? (r == 2 || r == 4 ? r : 1) : -1;   // 1: by the rows
+@@ -8123,7 +8123,7 @@
+ }
+ bool mv_rdna_device() {
+     static const int mode = [] {   // -1: default (gfx115x + gfx120x), 0: off, 1: every gfx11/gfx12
+-        const char* v = std::getenv("STRATA_GLM_MV_RDNA");
++        const char* v = maya_env("STRATA_GLM_MV_RDNA");
+         return v == nullptr ? -1 : v[0] == '0' ? 0 : 1;
+     }();
+     if (mode == 0 || g_mv_r.load(std::memory_order_relaxed) == 0) return false;
+@@ -8289,7 +8289,7 @@
+     if (!mv_inputs_ok(jobs, n, "mv")) return false;
+     // the jobs of the common dense types go to a kernel compiled for their type (one launch per type present), the
+     // rest to the generic one; the jobs are independent, so their order does not matter
+-    static const bool typed = getenv("STRATA_GLM_MV_GENERIC") == nullptr;
++    static const bool typed = maya_env("STRATA_GLM_MV_GENERIC") == nullptr;
+     constexpr int kTyped[] = {14, 8, 12, 13};
+     bool done[kMaxMvJobs] = {};
+     // EXL3 weights (w: an exl3::Mat): their own kernels, F32 input when the job has it, else the q8_1 - a job of
+@@ -8334,7 +8334,7 @@
+ #endif
+     // several columns: the tiled kernels (STRATA_GLM_MV_TILED=0: the column loops)
+     static const bool tiled = [] {
+-        const char* v = getenv("STRATA_GLM_MV_TILED");
++        const char* v = maya_env("STRATA_GLM_MV_TILED");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     // five or more columns of Q4_K / Q8_0 that may differ in float rounding (a drafter's): the tensor cores.  Below five
+@@ -8862,7 +8862,7 @@
+             return false;
+         }
+     if (!mv_inputs_ok(jobs, n, "mv_nt")) return false;
+-    static const bool typed = getenv("STRATA_GLM_MV_GENERIC") == nullptr;
++    static const bool typed = maya_env("STRATA_GLM_MV_GENERIC") == nullptr;
+     bool done[kMaxMvJobs] = {};
+     if (!exl3_jobs(jobs, n, nt, done, s)) return false;   // (EXL3: one EXL3 job an activation)
+     if (nt > 8) {
+@@ -8971,8 +8971,8 @@
+         dpct::experimental::calculate_max_active_wg_per_xecore(
+             &per3, HC_THREADS,
+             0);
+-        mode = (getenv("STRATA_GLM_HC1") == nullptr && per * sms >= a.n_embd / HC2_EB) ? 2 : 1;
+-        if (mode == 2 && getenv("STRATA_GLM_HC2") == nullptr && a.n_embd == 4096 && per3 * sms >= a.n_embd / HC2_EB)
++        mode = (maya_env("STRATA_GLM_HC1") == nullptr && per * sms >= a.n_embd / HC2_EB) ? 2 : 1;
++        if (mode == 2 && maya_env("STRATA_GLM_HC2") == nullptr && a.n_embd == 4096 && per3 * sms >= a.n_embd / HC2_EB)
+             mode = 3;
+     }
+     if (cap_rows != nullptr) {
+@@ -9370,7 +9370,7 @@
+ template<class T, bool (*Parse)(const char*, T&)>
+ T env_shape(const char* name) {
+     T t;
+-    const char* v = std::getenv(name);
++    const char* v = maya_env(name);
+     if (!Parse(v, t)) {
+         std::fprintf(stderr, "glm_fast: %s=%s is not a take-two label - stopping (unset or 0: the original kernels)\n", name, v);
+         std::exit(2);
+@@ -9587,7 +9587,7 @@
+ 
+ bool dsa_select_all_on() {
+     static const bool on = [] {
+-        const char* v = getenv("STRATA_GLM_DSA_ALL");
++        const char* v = maya_env("STRATA_GLM_DSA_ALL");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     return on;
+@@ -9721,7 +9721,7 @@
+ bool mla_attend(const float *q_abs, const uint16_t *lat, const int *cells,
+                 int n_sel, int n_head, int qk_nope, int kv_lora, float *ctx,
+                 dpct::queue_ptr s, bool lat_q8) {
+-    if (kv_lora % 32 != 0 || getenv("STRATA_GLM_MLA1") != nullptr) return false;
++    if (kv_lora % 32 != 0 || maya_env("STRATA_GLM_MLA1") != nullptr) return false;
+     return mla_split_attend(q_abs, lat, cells, n_sel, n_head, qk_nope, kv_lora, ctx, s, lat_q8);
+ }
+ 
+@@ -9791,8 +9791,8 @@
+     if (on_[dev] == 0) {
+         int major = 0;
+         major = dpct::get_device(dev).get_major_version();
+-        const char* v = getenv("STRATA_GLM_MLA_MMA");
+-        bool on = major >= 8 && (v == nullptr || std::atoi(v) != 0) && getenv("STRATA_GLM_MLA_ATTN1") == nullptr;
++        const char* v = maya_env("STRATA_GLM_MLA_MMA");
++        bool on = major >= 8 && (v == nullptr || std::atoi(v) != 0) && maya_env("STRATA_GLM_MLA_ATTN1") == nullptr;
+         on = false; // SYCL: tensor-core kernel is a stub in this port - decline
+ #if defined(STRATA_USE_HIP)
+         on = false;
+@@ -9825,7 +9825,7 @@
+                       int64_t ctx_stride, dpct::queue_ptr s, bool lat_q8) {
+     int dev = 0;
+     dev = dpct::get_current_device_id();
+-    if (dev >= 16 || kv_lora != MLA_KV || T < 1 || getenv("STRATA_GLM_MLA1") != nullptr ||
++    if (dev >= 16 || kv_lora != MLA_KV || T < 1 || maya_env("STRATA_GLM_MLA1") != nullptr ||
+         !mla_mma_on(dev))
+         return false;
+     int cap = 0;
+@@ -9898,7 +9898,7 @@
+ bool mla_rows_ok(int kv_lora) {
+     int dev = 0;
+     dev = dpct::get_current_device_id();
+-    return dev < 16 && kv_lora == MLA_KV && getenv("STRATA_GLM_MLA1") == nullptr && mla_mma_on(dev);
++    return dev < 16 && kv_lora == MLA_KV && maya_env("STRATA_GLM_MLA1") == nullptr && mla_mma_on(dev);
+ }
+ 
+ bool mla_attend_rows(const float *q_abs, int64_t q_stride,
+@@ -9981,7 +9981,7 @@
+     if (dev >= 16) return false;
+     if (mla_attend_batch(q_abs, 0, lat, cells, 0, &n_sel, 1, n_head, qk_nope, kv_lora, ctx, 0, s, lat_q8)) return true;
+     // Volta: the prompt's one-pass tensor-core kernel in cell splits (STRATA_GLM_MLA_V70=0: the F32 chunks below)
+-    if (kv_lora == 512 && getenv("STRATA_GLM_MLA_ATTN1") == nullptr) {
++    if (kv_lora == 512 && maya_env("STRATA_GLM_MLA_ATTN1") == nullptr) {
+         int vcap = 0;
+         float* vpart = mla_part(dev, n_head, kv_lora, 64, &vcap);
+         if (vpart != nullptr && strata::kernels::glmb::mla_decode_v70(q_abs, lat, cells, n_sel, n_head, kv_lora,
+@@ -10018,7 +10018,7 @@
+         }
+     }
+     int cap = 0;
+-    float* part = split_ok[dev] && kv_lora <= 512 && n_head <= 128 && getenv("STRATA_GLM_MLA_ATTN1") == nullptr
++    float* part = split_ok[dev] && kv_lora <= 512 && n_head <= 128 && maya_env("STRATA_GLM_MLA_ATTN1") == nullptr
+                       ? mla_part(dev, n_head, kv_lora, n_chunks, &cap)
+                       : nullptr;
+     // the take-two kernels on the decode's token path only (and under the bench's override), as dsa_score
+@@ -10193,7 +10193,7 @@
+     static float* scratch[16] = {};
+     int dev = 0;
+     dev = dpct::get_current_device_id();
+-    if (getenv("STRATA_GLM_MLA1") != nullptr || dev >= 16 || kv_lora % 32 || v_head % 32) {
++    if (maya_env("STRATA_GLM_MLA1") != nullptr || dev >= 16 || kv_lora % 32 || v_head % 32) {
+         /*
+         DPCT1083:139: The size of local memory in the migrated code
+          * may be different from the original code. Check that the allocated
+@@ -10347,27 +10347,27 @@
+                 pf_rank > 0 ? pf_rank : k, std::max(0, std::min(near_n, std::min(16, n_expert - k))), win, scr_used,
+                 g_skip, win_n, disk_skip_from, disk_skip_w, miss_skip_w, win_rows};
+     static const float affinity = [] {
+-        const char* v = getenv("STRATA_GLM_ROUTE_AFFINITY");
++        const char* v = maya_env("STRATA_GLM_ROUTE_AFFINITY");
+         return v ? std::max(0.0f, (float) std::atof(v)) : 0.0f;
+     }();
+     a.affinity = affinity;
+     // STRATA_GLM_ROUTE_RANK=0: the selections by topk_warp's serial rounds again (A/B); topk_rank needs whole warps of
+     // experts that one block's threads cover and at most 8 picks
+     static const bool rank_on = [] {
+-        const char* v = getenv("STRATA_GLM_ROUTE_RANK");
++        const char* v = maya_env("STRATA_GLM_ROUTE_RANK");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     a.rank_sel = rank_on && n_expert % 32 == 0 && n_expert <= ROUTE_THREADS && k <= 8 ? 1 : 0;
+     // STRATA_GLM_ROUTE_FAST=0: the route kernel's old order of reads and writes (A/B; the same plan and request)
+     static const int route_fast = [] {
+-        const char* v = getenv("STRATA_GLM_ROUTE_FAST");
++        const char* v = maya_env("STRATA_GLM_ROUTE_FAST");
+         return v == nullptr || std::atoi(v) != 0 ? 1 : 0;
+     }();
+     a.fast = route_fast && k <= 8 ? 1 : 0;
+     // STRATA_GLM_ROUTE_PROF=1 (measurement): the route kernel's phases in cycles, averaged and printed at exit
+     static unsigned long long* prof_h = [] {
+         unsigned long long* p = nullptr;
+-        if (getenv("STRATA_GLM_ROUTE_PROF") == nullptr) return p;
++        if (maya_env("STRATA_GLM_ROUTE_PROF") == nullptr) return p;
+         /*
+         DPCT1048:0: The original value cudaHostAllocMapped is not
+          * meaningful in the migrated code and was removed or replaced with 0.
+@@ -10508,7 +10508,7 @@
+     // half the SMs: it runs beside the main stream's kernels.  STRATA_GLM_PREFETCH_BLOCKS=<n>: n blocks instead - a
+     // PCIe pull needs few SMs to keep the link busy, and every SM it holds is one the main stream's kernels wait for
+     static const int blocks_env = [] {
+-        const char* v = getenv("STRATA_GLM_PREFETCH_BLOCKS");
++        const char* v = maya_env("STRATA_GLM_PREFETCH_BLOCKS");
+         return v != nullptr ? std::max(1, std::atoi(v)) : 0;
+     }();
+     {
+@@ -10611,7 +10611,7 @@
+ // targets. RDNA4 and all other shapes retain the original expert kernels.
+ bool rdna3_expert_device(bool allow_gfx1151 = true) {
+     static const bool legacy = [] {
+-        const char* v = std::getenv("STRATA_HIP_EXPERTS_LEGACY");
++        const char* v = maya_env("STRATA_HIP_EXPERTS_LEGACY");
+         return v && v[0] == '1';
+     }();
+     if (legacy) return false;
+@@ -10636,7 +10636,7 @@
+ // gfx1151 and 1.34-1.43x (gfx1100, device memory) / 1.12x (gfx1151, pinned host memory) faster at 4-8 experts a call
+ bool gu22_tuned() {
+     static const bool on = [] {
+-        const char* v = std::getenv("STRATA_GLM_GU22_TUNED");
++        const char* v = maya_env("STRATA_GLM_GU22_TUNED");
+         return v && v[0] == '1';
+     }();
+     return on;
+--- a/src/core/glm_fast_path.dp.cpp
++++ b/src/core/glm_fast_path.dp.cpp
+@@ -48,7 +48,7 @@
+ static std::atomic<int> g_maya_stage{0};  // MAYA_TRACE: last service stage, printed by a watchdog
+ static inline void maya_stage(int st) {
+     g_maya_stage.store(st, std::memory_order_relaxed);
+-    static const bool on = [] { if (getenv("MAYA_TRACE") == nullptr) return false;
++    static const bool on = [] { if (maya_env("MAYA_TRACE") == nullptr) return false;
+         std::thread([] { for (int n = 0; n < 60; ++n) { std::this_thread::sleep_for(std::chrono::seconds(3));
+             std::fprintf(stderr, "TRACE stage %d\n", g_maya_stage.load()); std::fflush(stderr); } }).detach(); return true; }();
+     (void) on;
+@@ -66,7 +66,7 @@
+ }
+ 
+ static inline void sycl_host_kick(dpct::queue_ptr cs) {
+-    static const bool on = [] { const char* v = getenv("MAYA_SYCL_KICK"); return v == nullptr || std::atoi(v) != 0; }();
++    static const bool on = [] { const char* v = maya_env("MAYA_SYCL_KICK"); return v == nullptr || std::atoi(v) != 0; }();
+     if (!on || cs == nullptr) return;
+     thread_local sycl::queue* k = nullptr;
+     thread_local dpct::queue_ptr k_for = nullptr;
+@@ -78,7 +78,7 @@
+ }
+ 
+ // MAYA_TRACE_SYNC=1: after every profiling mark, wait for the compute queue and say which step finished (port debug)
+-#define MAYA_SYNC_MARK(F_, name_) do { static const bool tr_ = getenv("MAYA_TRACE_SYNC") != nullptr; static const bool at_ = [] { const char* v = getenv("MAYA_SYNC_AT"); return v != nullptr && std::strstr(v, name_) != nullptr; }(); if (tr_ || at_) { (F_)->cs->wait(); static int n_ = 0; if (tr_ && n_++ < 2000) { std::fprintf(stderr, "TRACE mark %s\n", name_); std::fflush(stderr); } } } while (0)
++#define MAYA_SYNC_MARK(F_, name_) do { static const bool tr_ = maya_env("MAYA_TRACE_SYNC") != nullptr; static const bool at_ = [] { const char* v = maya_env("MAYA_SYNC_AT"); return v != nullptr && std::strstr(v, name_) != nullptr; }(); if (tr_ || at_) { (F_)->cs->wait(); static int n_ = 0; if (tr_ && n_++ < 2000) { std::fprintf(stderr, "TRACE mark %s\n", name_); std::fflush(stderr); } } } while (0)
+ 
+ #if !defined(STRATA_USE_HIP)
+ #endif
+@@ -205,19 +205,19 @@
+ // SYCL port (fixups24): the Level Zero v1 adapter unless the caller chose (set before main, so before SYCL reads it):
+ // the v2 adapter deadlocks in the driver under the overlapped cross-card hop (see maya_queue_wait)
+ static const int maya_l0_v1_init = [] {
+-    if (std::getenv("SYCL_UR_USE_LEVEL_ZERO_V2") == nullptr) {
++    if (maya_env("SYCL_UR_USE_LEVEL_ZERO_V2") == nullptr) {
+ #ifdef _WIN32
+-        _putenv_s("SYCL_UR_USE_LEVEL_ZERO_V2", "0");
++        _putenv_s("SYCL_UR_USE_LEVEL_ZERO_V2", "0"); maya_env_changed();
+ #else
+-        setenv("SYCL_UR_USE_LEVEL_ZERO_V2", "0", 0);
++        setenv("SYCL_UR_USE_LEVEL_ZERO_V2", "0", 0); maya_env_changed();
+ #endif
+     }
+     // SYCL port (fixups27): v1's batched regular command lists cost the batched prefill ~14%; immediate lists do not
+-    if (std::getenv("UR_L0_USE_IMMEDIATE_COMMANDLISTS") == nullptr) {
++    if (maya_env("UR_L0_USE_IMMEDIATE_COMMANDLISTS") == nullptr) {
+ #ifdef _WIN32
+-        _putenv_s("UR_L0_USE_IMMEDIATE_COMMANDLISTS", "1");
++        _putenv_s("UR_L0_USE_IMMEDIATE_COMMANDLISTS", "1"); maya_env_changed();
+ #else
+-        setenv("UR_L0_USE_IMMEDIATE_COMMANDLISTS", "1", 0);
++        setenv("UR_L0_USE_IMMEDIATE_COMMANDLISTS", "1", 0); maya_env_changed();
+ #endif
+     }
+     return 0;
+@@ -231,7 +231,7 @@
+ // every part has loaded), so it counts them instead of walking the chain.
+ static int spec_head_parts(int n) {
+     int h = n / 2;
+-    if (const char* e = getenv("STRATA_GLM_SPEC_HEAD")) h = std::atoi(e);
++    if (const char* e = maya_env("STRATA_GLM_SPEC_HEAD")) h = std::atoi(e);
+     return std::max(1, std::min(n - 1, h));
+ }
+ 
+@@ -432,7 +432,7 @@
+ // nullptr: one node, STRATA_GLM_NUMA=0, no host-pointer access for registered memory, or a failure.
+ static void* numa_pinned(size_t bytes) {
+ #ifdef __linux__
+-    const char* v = getenv("STRATA_GLM_NUMA");
++    const char* v = maya_env("STRATA_GLM_NUMA");
+     const auto nodes = numa_nodes();
+     if ((v != nullptr && std::atoi(v) == 0) || nodes.size() < 2) return nullptr;
+     int dev = 0, ok = 0;
+@@ -589,7 +589,7 @@
+ // hold past it - a Windows pinning cap where there is none.  (The parts of a split pin one after another.)
+ static int64_t g_pin_held = 0;
+ static dpct::err0 pin_alloc(void **p, size_t bytes, unsigned flags) try {
+-    static const int64_t cap = getenv("STRATA_GLM_PIN_CAP_MB") ? std::atoll(getenv("STRATA_GLM_PIN_CAP_MB")) << 20 : -1;
++    static const int64_t cap = maya_env("STRATA_GLM_PIN_CAP_MB") ? std::atoll(maya_env("STRATA_GLM_PIN_CAP_MB")) << 20 : -1;
+     if (cap >= 0 && g_pin_held + (int64_t)bytes > cap) return 2;
+     const dpct::err0 e =
+         DPCT_CHECK_ERROR(*p = (void *)sycl::malloc_host(
+@@ -804,16 +804,16 @@
+         cudaGetLastError();
+ #endif
+     const Glm5Geometry& g = g_;
+-    F->timing = getenv("STRATA_GLM_TIMING") != nullptr;
+-    F->prof_on = getenv("STRATA_GLM_PROF") != nullptr;
+-    if (F->prof_on) F->pskip = (uint64_t) std::max(0, std::atoi(getenv("STRATA_GLM_PROF")));
+-    if (const char* pn = getenv("STRATA_GLM_PREFETCH_N")) {
++    F->timing = maya_env("STRATA_GLM_TIMING") != nullptr;
++    F->prof_on = maya_env("STRATA_GLM_PROF") != nullptr;
++    if (F->prof_on) F->pskip = (uint64_t) std::max(0, std::atoi(maya_env("STRATA_GLM_PROF")));
++    if (const char* pn = maya_env("STRATA_GLM_PREFETCH_N")) {
+         F->max_pf = std::max(0, std::min(gf::kSpares - 1, std::atoi(pn)));
+         // said at start: the prefetch's settings are read once and nothing else shows them (#6)
+         if (F->max_pf > 0) {
+-            const char* at = getenv("STRATA_GLM_PREFETCH_AT");
+-            const char* bl = getenv("STRATA_GLM_PREFETCH_BLOCKS");
+-            const char* rk = getenv("STRATA_GLM_PREFETCH_RANK");
++            const char* at = maya_env("STRATA_GLM_PREFETCH_AT");
++            const char* bl = maya_env("STRATA_GLM_PREFETCH_BLOCKS");
++            const char* rk = maya_env("STRATA_GLM_PREFETCH_RANK");
+             std::fprintf(stderr, "glm fast: CUDA%d prefetch on: up to %d of the next layer's predicted experts a layer%s, "
+                                  "the copy at %s, %s blocks, %s\n", dev_, F->max_pf,
+                          std::atoi(pn) > F->max_pf ? " (MAYA_GLM_PREFETCH_N is at most 2)" : "",
+@@ -825,8 +825,8 @@
+     // RAM-resident mode (--glm-ram-resident / STRATA_GLM_RAM_RESIDENT=1): the RAM tier's per-class cap grows by
+     // ram_slack slots per MoE layer so it holds EVERY expert VRAM does not; nothing is ever dropped to disk and the
+     // start fails when the tier cannot hold them all - the disk is the pack's home, never a read source at runtime
+-    F->ram_resident = getenv("STRATA_GLM_RAM_RESIDENT") != nullptr && std::atoi(getenv("STRATA_GLM_RAM_RESIDENT")) != 0;
+-    if (const char* rs = getenv("STRATA_GLM_RAM_SLACK")) F->ram_slack = std::max(0, std::atoi(rs));
++    F->ram_resident = maya_env("STRATA_GLM_RAM_RESIDENT") != nullptr && std::atoi(maya_env("STRATA_GLM_RAM_RESIDENT")) != 0;
++    if (const char* rs = maya_env("STRATA_GLM_RAM_SLACK")) F->ram_slack = std::max(0, std::atoi(rs));
+     else if (F->ram_resident) F->ram_slack = 16;
+     /*
+     DPCT1025:38: The SYCL queue is created ignoring the flag and priority
+@@ -1213,6 +1213,11 @@
+             std::fprintf(stderr, "glm mtp: CUDA%d %s - decoding token by token\n", dev_, werr.c_str());
+         }
+     }
++    // SYCL port (fixups35): the split's speculative decode - the draft head's gathered rows (load_pack scanned the
++    // draft vocabulary on this part), before the pool too
++    if (mtp_il_ >= 0 && !mtp_dec_ && l0_ > 0 && multi_mtp_setting() <= 0 && !dflash_on_ && mtp_vlead_ > 0 &&
++        ws_map_.at("output.weight").type < (int) GGML_TYPE_COUNT)
++        mtp_draft_setup(false);
+     // several conversations drafting with the NextN block (STRATA_GLM_MULTI_MTP, glm_mtp_rows.cu): the commit's replay
+     // scratch on every part; on the part with the block, its cache rows' buffers and the draft head's rows - the
+     // drafts are fed from the host (no token_embd on the device) - before the pool too
+@@ -1239,7 +1244,7 @@
+     // allocatable.  The head group is the parts [0, h) that kda_all walks; h comes from part_/n_parts_ because
+     // split_next_ is linked only after every part has loaded.
+     if (!dflash_on_ && g_.nextn > 0 && n_parts_ > 1 && part_ < spec_head_parts(n_parts_) &&
+-        getenv("STRATA_GLM_NO_MTP") == nullptr && getenv("STRATA_GLM_NO_SPEC") == nullptr && !spec_kda_reserve(err))
++        maya_env("STRATA_GLM_NO_MTP") == nullptr && maya_env("STRATA_GLM_NO_SPEC") == nullptr && !spec_kda_reserve(err))
+         return false;
+     // ---- the expert pool: per-layer partitions (equal quota per layer within its size class)
+     size_t blob_max = 0;
+@@ -1408,7 +1413,7 @@
+             }
+             if (avail_kb > 0) avail_kb += (long long) (glmfast::zfs_arc_reclaimable() >> 10);
+             double head_gb = 16.0;
+-            if (const char* h = getenv("STRATA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
++            if (const char* h = maya_env("STRATA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
+             size_t expert_bytes = 0;
+             for (int il = l0_; il < lt_; ++il) {
+                 const auto& Ly = F->L[(size_t) il];
+@@ -1424,11 +1429,11 @@
+             }
+         }
+ #endif
+-        if (const char* cap = getenv("STRATA_GLM_POOL_GB"))
++        if (const char* cap = maya_env("STRATA_GLM_POOL_GB"))
+             avail = std::min(avail, (size_t) (std::atof(cap) * 1073741824.0));
+         // STRATA_GLM_VRAM_GB=<n>: behave like a card with n GB - the cap counts everything this process already
+         // holds on the device (context, dense weights, state, arenas), so the pool gets what such a card would have
+-        if (const char* vc = getenv("STRATA_GLM_VRAM_GB")) {
++        if (const char* vc = maya_env("STRATA_GLM_VRAM_GB")) {
+             const size_t cap = (size_t) (std::atof(vc) * 1073741824.0);
+             const size_t used = total_b - free_b;
+             const size_t room = cap > used + reserve ? cap - used - reserve : 0;
+@@ -1460,7 +1465,7 @@
+                   (pool_b_.fixed > 0 ? "a larger --expert-cache (" + std::to_string(pool_b_.fixed) + " now) or auto, "
+                                      : std::string()) +
+                   (pool_b_.reserve_given
+-                       ? std::string(part_ > 0 && getenv("STRATA_GLM_RESERVE_LATER_MB") ? "a smaller --vram-reserve-later-mib ("
++                       ? std::string(part_ > 0 && maya_env("STRATA_GLM_RESERVE_LATER_MB") ? "a smaller --vram-reserve-later-mib ("
+                                                                                        : "a smaller --vram-reserve-mib (") +
+                              std::to_string(reserve >> 20) + " now), "
+                        : std::string()) +
+@@ -1487,7 +1492,7 @@
+         // STRATA_GLM_COMPLETE_POOL=0: the capped pool (A/B); on by default on every GPU (complete_pool_on, #474).
+         {
+             int k_full = pf_ != nullptr ? tail_slots(prefill_borrow_bytes()) : 0;
+-            if (const char* v = getenv("STRATA_GLM_VISION_LEND_MB"); v != nullptr && dev_ == 0)
++            if (const char* v = maya_env("STRATA_GLM_VISION_LEND_MB"); v != nullptr && dev_ == 0)
+                 k_full = std::max(k_full, tail_slots((size_t) std::max(0LL, std::atoll(v)) << 20));
+             const int full = glmfast::complete_pool_on() && !F->unified_memory
+                                  ? glmfast::complete_pool_slots(avail, stride_sum, g.n_expert, gf::kSpares, k_full)
+@@ -1515,7 +1520,7 @@
+         // an on-demand vision encoder on the first GPU (the server sets STRATA_GLM_VISION_LEND_MB) borrows the same
+         // tail while it encodes, so the tail there is the larger of the two needs
+         vis_lend_ok_ = false;
+-        if (const char* v = getenv("STRATA_GLM_VISION_LEND_MB"); v != nullptr && dev_ == 0) {
++        if (const char* v = maya_env("STRATA_GLM_VISION_LEND_MB"); v != nullptr && dev_ == 0) {
+             const size_t vb = (size_t) std::max(0LL, std::atoll(v)) << 20;
+             if (vb > 0 && per - tail_slots(vb) >= g.n_exp_used + gf::kSpares + 8) {
+                 k_extra = std::max(k_extra, tail_slots(vb));
+@@ -1547,7 +1552,7 @@
+         // When the APU can hold every expert, keep exactly that many slots in each
+         // layer rather than spending the capped budget on uneven partitions/spares
+         // (a complete pool likewise: every layer already holds all of its experts).
+-        if (getenv("STRATA_GLM_UNIFORM_SLOTS") == nullptr && !(F->unified_memory && per == g.n_expert) &&
++        if (maya_env("STRATA_GLM_UNIFORM_SLOTS") == nullptr && !(F->unified_memory && per == g.n_expert) &&
+             !F->complete) {
+             std::vector<std::vector<double>> share((size_t) NL);
+             // a profile's ranking as shares: each layer's experts in profile order, valued 1 / (1 + their rank in
+@@ -1752,7 +1757,7 @@
+                      F->complete ? (" - complete: every expert, " + std::to_string(gf::kSpares) + " spares and " +
+                                     std::to_string(k_extra) + " lendable slots a layer").c_str()
+                                  : "");
+-        if (getenv("STRATA_GLM_TIMING") != nullptr) {
++        if (maya_env("STRATA_GLM_TIMING") != nullptr) {
+             std::string sl;
+             for (int il = l0_; il < lt_; ++il)
+                 if (F->L[(size_t) il].moe) sl += std::to_string(il) + ":" + std::to_string(nsl[(size_t) il]) + " ";
+@@ -1766,7 +1771,7 @@
+ #ifdef __linux__   // (numa_nodes() is empty elsewhere; posix_fadvise is POSIX)
+         {
+             static std::atomic<bool> dropped{false};
+-            const char* dc = getenv("STRATA_GLM_DROP_CACHE");
++            const char* dc = maya_env("STRATA_GLM_DROP_CACHE");
+             if ((dc == nullptr || std::atoi(dc) != 0) && numa_nodes().size() >= 2 && !dropped.exchange(true)) {
+                 for (const Shard& sh : pack_shards_)
+                     if (sh.fd >= 0) posix_fadvise(sh.fd, 0, 0, POSIX_FADV_DONTNEED);
+@@ -1809,8 +1814,8 @@
+         int64_t budget = ram_budget_;
+         // (a complete pool too: nothing is outside VRAM to hold - the 8065S's 32 GB of OS RAM keep ~0.6 GB more)
+         const bool staging_only = glmfast::minimal_ram_tier(F->unified_memory || F->complete, nmin >= g.n_expert,
+-                                                           ram_budget_ >= 0 || getenv("STRATA_GLM_RAM_GB") != nullptr);
+-        const char* balanced_env = getenv("STRATA_GLM_RAM_BALANCED");
++                                                           ram_budget_ >= 0 || maya_env("STRATA_GLM_RAM_GB") != nullptr);
++        const char* balanced_env = maya_env("STRATA_GLM_RAM_BALANCED");
+         const bool balanced_ram = glmfast::balanced_resident_ram(balanced_env && std::atoi(balanced_env) != 0,
+                                                                   F->ram_resident, staging_only);
+         if (balanced_ram && n_parts_ != 1) {
+@@ -1840,12 +1845,12 @@
+         const int64_t unseen_pf = (int64_t) std::max(0, later - 1) * (int64_t) pinned_pf.staging +
+                                   (int64_t) std::max(0, later - 1) * (int64_t) pinned_pf.hop;
+         double head_gb = F->unified_memory ? 16.0 : 6.0;
+-        if (const char* h = getenv("STRATA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
++        if (const char* h = maya_env("STRATA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
+         const int64_t head_b = (int64_t) (head_gb * 1073741824.0);
+-        const bool fixed_ram = getenv("STRATA_GLM_RAM_GB") != nullptr;
++        const bool fixed_ram = maya_env("STRATA_GLM_RAM_GB") != nullptr;
+         if (budget < 0) {
+             if (total < 0) {
+-                if (const char* rg = getenv("STRATA_GLM_RAM_GB")) {
++                if (const char* rg = maya_env("STRATA_GLM_RAM_GB")) {
+                     total = (int64_t) (std::atof(rg) * 1073741824.0);
+                 } else {
+                     int64_t avail_kb = 0;
+@@ -1883,7 +1888,7 @@
+                     total = std::max<int64_t>(0, avail_kb * 1024 - head_b - unseen_pf);
+                 }
+                 remaining = total;
+-                remaining_layers = g.n_layers - g.dense_lead + (getenv("STRATA_GLM_NO_MTP") ? 0 : g.nextn);
++                remaining_layers = g.n_layers - g.dense_lead + (maya_env("STRATA_GLM_NO_MTP") ? 0 : g.nextn);
+             }
+             // the last half takes everything left (one device: the NextN block, counted above, is not loaded)
+             budget = l1_ >= g.n_layers ? remaining
+@@ -2012,7 +2017,7 @@
+         // Linux): a block of many GB takes far more of Windows' per-process pinning budget than its size - 61 GB pin in
+         // 1 GB pieces where the largest single block is ~21 GB - so a 2-GPU split's first part left its second 0 GB and
+         // the start failed (#417)
+-        static const int64_t piece_mb = getenv("STRATA_GLM_PIN_PIECE_MB") ? std::atoll(getenv("STRATA_GLM_PIN_PIECE_MB"))
++        static const int64_t piece_mb = maya_env("STRATA_GLM_PIN_PIECE_MB") ? std::atoll(maya_env("STRATA_GLM_PIN_PIECE_MB"))
+ #ifdef _WIN32
+                                                                           : 1024;
+ #else
+@@ -2196,24 +2201,24 @@
+         // left out of the token instead of read from the disk (an approximation: off by default).  Where the experts do
+         // not fit in VRAM + RAM the disk reads are most of a token (a 3090 + 60 GB RAM beside one SATA SSD: ~13 reads,
+         // 155 of 190 ms) and they fall on the low ranks (ranks 4-7 held 63% of them in a chat).
+-        if (const char* v = getenv("STRATA_GLM_DISK_SKIP_FROM")) F->disk_skip_from = std::max(0, std::min(8, std::atoi(v)));
++        if (const char* v = maya_env("STRATA_GLM_DISK_SKIP_FROM")) F->disk_skip_from = std::max(0, std::min(8, std::atoi(v)));
+         // STRATA_GLM_DISK_SKIP_W=<share>: also, at any rank, a disk-only expert whose share of the route's weights is
+         // below this (the route's rank follows score + bias, the weight the score alone)
+-        if (const char* v = getenv("STRATA_GLM_DISK_SKIP_W")) F->disk_skip_w = (float) std::max(0.0, std::atof(v));
++        if (const char* v = maya_env("STRATA_GLM_DISK_SKIP_W")) F->disk_skip_w = (float) std::max(0.0, std::atof(v));
+         // STRATA_GLM_MISS_SKIP_W=<share> (changes the answers): a routed expert NOT IN VRAM whose share of the route's
+         // weights is below this is left out (no PCIe fetch, no CPU work), on layers from STRATA_GLM_MISS_SKIP_FROM
+         // (default 0) on; a request's strata_tune miss_skip_w / miss_skip_from override both for it - TRUNK_KEEP's
+         // idea by weight instead of rank.  GLM-5.3's late layers take it far better than its early ones (Maya-S24 on an
+         // RTX 3090, layers 23+: 0.12 / 0.14 / 0.16 -> KL 0.037 / 0.052 / 0.075 against the full model, decode +7-13%)
+-        if (const char* v = getenv("STRATA_GLM_MISS_SKIP_W")) F->miss_w = (float) std::max(0.0, std::min(1.0, std::atof(v)));
+-        if (const char* v = getenv("STRATA_GLM_MISS_SKIP_FROM")) F->miss_from = std::max(0, std::atoi(v));
++        if (const char* v = maya_env("STRATA_GLM_MISS_SKIP_W")) F->miss_w = (float) std::max(0.0, std::min(1.0, std::atof(v)));
++        if (const char* v = maya_env("STRATA_GLM_MISS_SKIP_FROM")) F->miss_from = std::max(0, std::atoi(v));
+         if (F->miss_w > 0.0f)
+             std::fprintf(stderr, "glm fast: CUDA%d light misses left out: weight share < %.3f on layers %d+ (changes the "
+                                  "answers)\n", dev_, F->miss_w, F->miss_from);
+         // LOOKAHEAD: the predictions per layer, a load state per RAM slot, and the reader threads
+-        if (const char* ah = getenv("STRATA_GLM_AHEAD")) F->n_ahead = std::max(0, std::min(gf::kAhead, std::atoi(ah)));
++        if (const char* ah = maya_env("STRATA_GLM_AHEAD")) F->n_ahead = std::max(0, std::min(gf::kAhead, std::atoi(ah)));
+         if (g.n_expert > 512) F->n_ahead = 0;
+-        const char* ahr = getenv("STRATA_GLM_AHEAD_READ");
++        const char* ahr = maya_env("STRATA_GLM_AHEAD_READ");
+         F->ahead_read = F->n_ahead > 0 && (ahr == nullptr || std::atoi(ahr) != 0);
+         std::array<std::array<short, 8>, gf::kAhead> none;
+         for (auto& r : none) r.fill(-1);
+@@ -2224,7 +2229,7 @@
+         }
+         if (F->ahead_read)
+             for (int i = 0; i < 2; ++i) F->ah_th.emplace_back([this] { fast_ahead_reader(); });
+-        const char* wv = getenv("STRATA_GLM_WARM");
++        const char* wv = maya_env("STRATA_GLM_WARM");
+         if ((wv == nullptr || std::atoi(wv) != 0) && !fast_warm(err)) return false;
+ #ifdef _WIN32
+         // #56: which node the tier drew this start - visibility only, the engine cannot place it.  Only on a PC with two
+@@ -2326,7 +2331,7 @@
+     */
+     dpct::select_device(dev_);
+     if (!fast_cpu_lane_setup(err)) return false;   // keep the existing CPU pool/calibration for batched prefill
+-    if (const char* h = getenv("STRATA_GLM_EXPERT_HELPER"); h != nullptr && h[0] != '\0')
++    if (const char* h = maya_env("STRATA_GLM_EXPERT_HELPER"); h != nullptr && h[0] != '\0')
+         if (!fast_helper_setup(err)) return false;
+     F->svc = std::thread([this] { fast_service(); });
+     glmfast::pin_thread(F->svc.native_handle(), F->cpu_pin);   // (the CPU lane's last worker: on its pool's node)
+@@ -2338,7 +2343,7 @@
+     FastState* F = fast_;
+     // the helper's device is its own: not this part's, nor any part's of a layer split (each part opens its own
+     // helper there - an integrated one aliases this part's RAM tier - over its own layers [l0_, lt_))
+-    const int device = std::atoi(getenv("STRATA_GLM_EXPERT_HELPER"));
++    const int device = std::atoi(maya_env("STRATA_GLM_EXPERT_HELPER"));
+     const bool a_part = device == dev_ || std::find(split_devs_.begin(), split_devs_.end(), device) != split_devs_.end();
+     if (a_part || exl3_ || g_.n_embd > 4096 || g_.n_exp_used > 8) {
+         err = "GLM expert helper: a device of its own (not a trunk GPU or a part of the split) and native GGUF experts "
+@@ -2465,7 +2470,7 @@
+ // holding helper experts and those checked (always equal).  The decode reads nothing the check touches.
+ bool Glm5Model::fast_helper_check(std::string &err) try {
+     FastState* F = fast_;
+-    const char* hc = getenv("STRATA_GLM_HELPER_CHECK");
++    const char* hc = maya_env("STRATA_GLM_HELPER_CHECK");
+     if (F == nullptr || hc == nullptr) return true;
+     const int per_layer = std::max(0, std::min(8, std::atoi(hc)));
+     if (per_layer == 0) return true;
+@@ -2979,7 +2984,7 @@
+     // 14.3 tok/s (the lane 34 ms a token), 2: 15.7, 4: 16.8, 8: 17.1 (21 ms; v1.0.11's 64-row jobs 16.8); the 2-socket
+     // Xeon above, 40 threads: one piece each
+     static const int kSplit = [] {
+-        const char* v = getenv("STRATA_GLM_CPU_SPLIT");
++        const char* v = maya_env("STRATA_GLM_CPU_SPLIT");
+         return v ? std::max(1, std::min(64, std::atoi(v))) : 0;
+     }();
+     if (Ly.exl3) {
+@@ -3165,7 +3170,7 @@
+     std::sort(order, order + nu, [&](int a, int b) { return cost(a) > cost(b); });
+     // (STRATA_GLM_WIN_X3_POOLS=1: an EXL3 layer on the first lane's pool alone - A/B)
+     static const int x3_pools = [] {
+-        const char* v = getenv("STRATA_GLM_WIN_X3_POOLS");
++        const char* v = maya_env("STRATA_GLM_WIN_X3_POOLS");
+         return v != nullptr && std::atoi(v) == 1 ? 1 : 2;
+     }();
+     // a batched rows group (win_rows): every expert on this part's own pool - the other part's pool computes its group
+@@ -3440,7 +3445,7 @@
+                  F->cpu_x3.data(), il, ne, blob, w, x, out);
+     // STRATA_GLM_CPU_LANE_VERIFY=1 (debug, slow): the same experts in double precision from ggml's dequantised rows;
+     // the relative L2 distance of the lane's sum, accumulated and printed every 16 calls
+-    static const bool verify = getenv("STRATA_GLM_CPU_LANE_VERIFY") != nullptr;
++    static const bool verify = maya_env("STRATA_GLM_CPU_LANE_VERIFY") != nullptr;
+     if (verify && !Ly.exl3) {
+         static double e2 = 0, n2 = 0, worst = 0;
+         static int calls = 0;
+@@ -3488,7 +3493,7 @@
+     static std::mutex mu;
+     static std::weak_ptr<glmfast::Workers> held;
+     static const bool concurrent = [] {
+-        const char* v = getenv("STRATA_GLM_CPU_CONCURRENT");
++        const char* v = maya_env("STRATA_GLM_CPU_CONCURRENT");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     std::lock_guard<std::mutex> lk(mu);
+@@ -3596,9 +3601,9 @@
+ bool Glm5Model::fast_cpu_lane_setup(std::string& err) {
+     FastState* F = fast_;
+     const Glm5Geometry& g = g_;
+-    const char* lv = getenv(("STRATA_GLM_CPU_LANE" + std::to_string(dev_)).c_str());
++    const char* lv = maya_env(("STRATA_GLM_CPU_LANE" + std::to_string(dev_)).c_str());
+     const bool own_count = lv != nullptr;   // this card's own count: a pool of its own
+-    if (lv == nullptr) lv = getenv("STRATA_GLM_CPU_LANE");
++    if (lv == nullptr) lv = maya_env("STRATA_GLM_CPU_LANE");
+     // a split of 3+ GPUs runs its parts one after another - a decode token visits the cards in turn, and the pipelined
+     // speculative decode, which runs two at once, is a two-part one - so ONE pool serves every part, sized as one
+     // GPU's (Strata: one expert pool for the process).  A pool per part, cores / parts each, left most of the CPU idle -
+@@ -3606,7 +3611,7 @@
+     // Maya-L on 9 GPUs, 88 vCPUs, fresh prompts (95.8% VRAM hits): 9 threads a card 0.74 ms a RAM-tier expert, 25.7
+     // tok/s; one pool of 40 0.32 ms, 30.7 tok/s; an 8K prompt, whose chunks take the pool in turn, 1265 -> 1466 tok/s.
+     // STRATA_GLM_CPU_SHARED=0: a pool per part (A/B); 1: one pool for a two-GPU split too.
+-    const char* shv = getenv("STRATA_GLM_CPU_SHARED");
++    const char* shv = maya_env("STRATA_GLM_CPU_SHARED");
+     const bool shared = n_parts_ >= 2 && !own_count &&
+                         (shv != nullptr && shv[0] != '\0' ? std::atoi(shv) != 0 : n_parts_ >= 3);
+     int threads = 0;
+@@ -3645,7 +3650,7 @@
+     // 24.7 pinned).  STRATA_GLM_CPU_PIN=1 / 0 pins / unpins on any host.
+     std::vector<int> pin_cpus;
+     int pin_node = -1;
+-    const char* pin_env = getenv("STRATA_GLM_CPU_PIN");
++    const char* pin_env = maya_env("STRATA_GLM_CPU_PIN");
+     const bool pin = pin_env != nullptr && pin_env[0] ? std::atoi(pin_env) != 0 : numa_nodes().size() >= 2;
+     if (n_parts_ >= 2 && !shared && threads > 0 && pin) {
+         std::vector<int> gpu_node;
+@@ -3688,7 +3693,7 @@
+         if (il_cal < 0 && F->cpu_fmt[(size_t) il].n_ff > 0) il_cal = il;
+     }
+     if (il_cal < 0) return true;
+-    if (const char* ck = getenv("STRATA_GLM_CPU_LANE_CHECK"))   // the check's layer (below)
++    if (const char* ck = maya_env("STRATA_GLM_CPU_LANE_CHECK"))   // the check's layer (below)
+         if (std::atoi(ck) > 0 && std::atoi(ck) < (int) F->cpu_fmt.size() && F->cpu_fmt[(size_t) std::atoi(ck)].n_ff > 0)
+             il_cal = std::atoi(ck);
+     // a calibration blob: a RAM-tier expert of that layer (the warm-up filled the tier; a class holds every layer of
+@@ -3703,7 +3708,7 @@
+             if (Rl.st[(size_t) s] == FastState::kRHold && Rl.key[(size_t) s] / g.n_expert == il) return true;
+         return false;
+     };
+-    if (getenv("STRATA_GLM_CPU_LANE_CHECK") == nullptr && !held_of(il_cal))
++    if (maya_env("STRATA_GLM_CPU_LANE_CHECK") == nullptr && !held_of(il_cal))
+         for (int il = il_cal + 1; il < lt_; ++il)
+             if (F->cpu_fmt[(size_t) il].n_ff > 0 && held_of(il)) {
+                 il_cal = il;
+@@ -3763,7 +3768,7 @@
+         // count active (the rest sleep), so a request's cpu_threads can try up to N without a restart - the setup's
+         // calibration (tools/calibrate_glm.py) measures counts above the engine's own with it.  A KVM guest's 16
+         // vCPUs, no SMT siblings: two thirds of them (10) 14.9 tok/s, 14 18.4 (Maya-L, one 3090 Ti, #177)
+-        const char* mx = getenv("STRATA_GLM_CPU_LANE_MAX");
++        const char* mx = maya_env("STRATA_GLM_CPU_LANE_MAX");
+         const int pool_n = mx != nullptr ? std::max(threads, std::min(64, std::atoi(mx))) : threads;
+         F->cpu_pool.reset(new glmfast::Workers(pool_n - 1, 20000, pin_cpus));
+         if (pool_n > threads) {
+@@ -3782,14 +3787,14 @@
+     // (by default both pools unpinned, the one GPU's pool as without the lanes - a decode's lone token ran ~7% slower
+     // on the pool pinned to one node: 14.7 against 15.8 tok/s; STRATA_GLM_WIN_LANES=1: pinned)
+     static const int win_lanes = [] {
+-        const char* v = getenv("STRATA_GLM_WIN_LANES");
++        const char* v = maya_env("STRATA_GLM_WIN_LANES");
+         return v == nullptr ? 2 : std::atoi(v);
+     }();
+     // one NUMA node of several L3 domains (a Ryzen's two CCDs): the lanes a domain each (STRATA_GLM_WIN_L3=0: one lane,
+     // the calibrated plan).  V100 + 7950X, Maya-S24, --spec 3: one lane 21.5 / 20.1 / 25.0 tok/s, two 24.4 / 23.9 / 28.0
+     // (plain 24.5 / 27.7 / 26.3) - the window's RAM-tier experts on the CPU instead of over PCIe
+     static const bool win_l3 = [] {
+-        const char* v = getenv("STRATA_GLM_WIN_L3");
++        const char* v = maya_env("STRATA_GLM_WIN_L3");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     if (!shared && n_parts_ == 1 && dflash_on_ && win_lanes != 0) {
+@@ -3824,7 +3829,7 @@
+         }
+     }
+     // STRATA_GLM_CPU_CAL=<file>: reuse the timed values across starts, keyed by build, model, layer, card and pool
+-    const char* calf = getenv("STRATA_GLM_CPU_CAL");
++    const char* calf = maya_env("STRATA_GLM_CPU_CAL");
+     std::string cal_key;
+     double c_ms = 0.0, p_ms = 0.0, ps_ms = 0.0;
+     bool cached = false;
+@@ -3997,9 +4002,9 @@
+     // the split: k of f to the host minimises max(PCIe (f - k) p, lane overhead + k c) (lane_plan)
+     unsigned long long plan = 0;
+     std::string tab;
+-    const char* pv = getenv("STRATA_GLM_CPU_PLAN");
++    const char* pv = maya_env("STRATA_GLM_CPU_PLAN");
+     // STRATA_GLM_PCIE_SHARE=<0..1> (setup's calibration): the share of a route's RAM-tier experts that go over PCIe
+-    const char* sv = getenv("STRATA_GLM_PCIE_SHARE");
++    const char* sv = maya_env("STRATA_GLM_PCIE_SHARE");
+     const double share = sv != nullptr ? std::max(0.0, std::min(1.0, std::atof(sv))) : -1.0;
+     if (pv == nullptr && share < 0.0) {
+         plan = lane_plan(c_ms, p_ms, &tab);
+@@ -4027,7 +4032,7 @@
+     F->md.cpu_ans = dp;
+     // the route counts that pick the coldest RAM-tier experts for the host, seeded with the tiers' LFU counts
+     // (STRATA_GLM_CPU_COLD=0: the last ones in route order instead)
+-    const char* cv = getenv("STRATA_GLM_CPU_COLD");
++    const char* cv = maya_env("STRATA_GLM_CPU_COLD");
+     if ((cv == nullptr || std::atoi(cv) != 0) && F->cnt.size() == (size_t) F->n_keys) {
+         if (DPCT_CHECK_ERROR(
+                 F->dcnt_d = sycl::malloc_device<unsigned int>(
+@@ -4049,7 +4054,7 @@
+     if (cached) std::fprintf(stderr, "glm fast: CUDA%d CPU lane: those times from %s (not timed)\n", dev_, calf);
+     // STRATA_GLM_CPU_LANE_CHECK=1: the calibration expert on one normalised input three ways - the device's decode
+     // kernels, the CPU lane, and a double-precision reference from ggml's dequantised rows - and their distances
+-    if (getenv("STRATA_GLM_CPU_LANE_CHECK") != nullptr && F->L[(size_t) il_cal].exl3) {
++    if (maya_env("STRATA_GLM_CPU_LANE_CHECK") != nullptr && F->L[(size_t) il_cal].exl3) {
+         // EXL3: the device's kernels, the CPU lane, and the scalar reference (exl3_ref, double sums)
+         namespace x3 = strata::kernels::exl3;
+         const int E = g.n_embd, FFE = g.n_ff_exp;
+@@ -4141,7 +4146,7 @@
+                      Ly.xl.k2[1] / 2.0, Ly.xl.k2[2] / 2.0, std::sqrt(eg / nr), std::sqrt(ec / nr), std::sqrt(egc / nr));
+         sycl::free(dx, dpct::get_in_order_queue());
+         sycl::free(dout, dpct::get_in_order_queue());
+-    } else if (getenv("STRATA_GLM_CPU_LANE_CHECK") != nullptr) {
++    } else if (maya_env("STRATA_GLM_CPU_LANE_CHECK") != nullptr) {
+         const int E = g.n_embd, FFE = g.n_ff_exp;
+         const auto& Ly = F->L[(size_t) il_cal];
+         const auto& nf = F->cpu_fmt[(size_t) il_cal];
+@@ -4255,7 +4260,7 @@
+ // As in Strata, a start goes by the expert profile and nothing else is learned across starts unless asked for
+ // (--expert-profile-save).
+ std::string glmfast::usage_file() {
+-    const char* u = getenv("STRATA_GLM_USAGE");
++    const char* u = maya_env("STRATA_GLM_USAGE");
+     return u == nullptr || std::string(u) == "0" ? std::string() : std::string(u);
+ }
+ 
+@@ -4405,7 +4410,7 @@
+         }
+     }
+     static const double profile_w = [] {
+-        const char* v = getenv("STRATA_GLM_PROFILE_WEIGHT");
++        const char* v = maya_env("STRATA_GLM_PROFILE_WEIGHT");
+         return v != nullptr ? std::max(0.0, std::atof(v)) : 1.0;
+     }();
+     int n_blend = 0;
+@@ -4840,7 +4845,7 @@
+ // request's own pcie_frac is setup's calibration at work).  STRATA_GLM_CPU_RETIME=0 turns it off.
+ void Glm5Model::lane_retime() {
+     static const bool on = [] {
+-        const char* v = getenv("STRATA_GLM_CPU_RETIME");
++        const char* v = maya_env("STRATA_GLM_CPU_RETIME");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     if (!on) return;
+@@ -5065,7 +5070,7 @@
+     // interrupts a GPU on a quiet machine, issue #685); the thread that reads the engine's input pokes the gate at
+     // each line, so the next request's first route finds the thread awake (strata/platform/idle_gate.hpp)
+     static const int kIdleMs = [] {
+-        const char* v = getenv("STRATA_GLM_SERVICE_IDLE_MS");
++        const char* v = maya_env("STRATA_GLM_SERVICE_IDLE_MS");
+         return v ? std::max(0, std::atoi(v)) : 200;
+     }();
+     static const int kDeepS = strata::platform::idle_env("STRATA_GLM_SERVICE_DEEP_S", 60);
+@@ -5077,7 +5082,7 @@
+     // a batched verify window's layer with two window lanes: its routes held until the layer's last token routed,
+     // then answered together (win_cpu_merged; STRATA_GLM_WIN_CPU=0: each token to a lane as its route comes)
+     static const bool win_merge = [] {
+-        const char* v = getenv("STRATA_GLM_WIN_CPU");
++        const char* v = maya_env("STRATA_GLM_WIN_CPU");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     const gf::MoeRequest* w_rq[kWinMax];
+@@ -5099,7 +5104,7 @@
+         gf::MoeRequest* rq = F->ring_h + (next % gf::kRingSize);
+         const unsigned int sq = rq->seq;
+         { static thread_local auto hb_t = std::chrono::steady_clock::now(); static thread_local int hb_n = 0;  // MAYA_TRACE
+-          if (getenv("MAYA_TRACE") && std::chrono::steady_clock::now() - hb_t > std::chrono::seconds(2) && hb_n < 30) {
++          if (maya_env("MAYA_TRACE") && std::chrono::steady_clock::now() - hb_t > std::chrono::seconds(2) && hb_n < 30) {
+             hb_t = std::chrono::steady_clock::now(); ++hb_n;
+             std::fprintf(stderr, "TRACE svc dev%d next=%u ring_seq=%u processed=%llu route_err=0x%x\n", dev_, next, (unsigned) rq->seq,
+                          (unsigned long long) F->processed.load(), (unsigned) *F->route_error_h); std::fflush(stderr); } }
+@@ -5195,7 +5200,7 @@
+             // STRATA_GLM_ROUTE_LOG=<prefix>: "layer e0 .. e7 tier-mask" per route into <prefix>.<device> (cache studies)
+             // - the tier masks are fetch, miss and cpu (bits over e0..e7), then " | n0 .. n15": the near misses, the
+             //   route's next ranks after the top k, best first
+-            static const char* rlog = getenv("STRATA_GLM_ROUTE_LOG");
++            static const char* rlog = maya_env("STRATA_GLM_ROUTE_LOG");
+             if (rlog != nullptr) {
+                 static thread_local FILE* rf = std::fopen((std::string(rlog) + "." + std::to_string(dev_)).c_str(), "w");
+                 if (rf != nullptr) {
+@@ -5367,7 +5372,7 @@
+                 // wait (Mercury: 3.6 -> 3.1 ms a disk wait at 8 chunks; STRATA_GLM_READ_CHUNKS overrides - a Windows
+                 // laptop on an Intel RST RAID read 15% faster with 4, #67 - and setup's calibration tries 4 and 2)
+                 static const int rch_env = [] {
+-                    const char* v = getenv("STRATA_GLM_READ_CHUNKS");
++                    const char* v = maya_env("STRATA_GLM_READ_CHUNKS");
+                     return std::max(1, std::min(16, v ? std::atoi(v) : 8));
+                 }();
+                 const int rch = F->read_chunks > 0 ? F->read_chunks : rch_env;
+@@ -5388,7 +5393,7 @@
+                 // after it.  The same bytes reach the same slots (the output is unchanged).  GGUF packs only (EXL3's
+                 // chunks are laid out differently), and at most 10 chunks a part (32 bits a ready word).
+                 static const bool stream_env = [] {
+-                    const char* v = getenv("STRATA_GLM_STREAM_FETCH");
++                    const char* v = maya_env("STRATA_GLM_STREAM_FETCH");
+                     return v == nullptr || std::atoi(v) != 0;
+                 }();
+                 const bool stream = stream_env && nr > 0 && 3 * rch <= 32 && pack_layers_[(size_t) il].x_cb < 0;
+@@ -5456,7 +5461,7 @@
+                 F->disk_us.fetch_add(us, std::memory_order_relaxed);
+                 F->miss_us.fetch_add(us, std::memory_order_relaxed);
+                 F->miss_layers.fetch_add(1, std::memory_order_relaxed);
+-                static const bool trace = getenv("STRATA_GLM_SVC_TRACE") != nullptr;
++                static const bool trace = maya_env("STRATA_GLM_SVC_TRACE") != nullptr;
+                 if (trace)
+                     std::fprintf(stderr, "svc CUDA%d seq %u layer %d disk %d %.2f ms\n", dev_, next, il, nm,
+                                  (double) us / 1000.0);
+@@ -5749,7 +5754,7 @@
+         !F->route_ok(err))
+         return false;
+     const Glm5Geometry& g = g_;
+-    if (getenv("MAYA_TRACE")) { std::fprintf(stderr, "TRACE boundary expected=%llu processed=%llu\n", (unsigned long long) F->expected, (unsigned long long) F->processed.load()); std::fflush(stderr); }  // MAYA_TRACE
++    if (maya_env("MAYA_TRACE")) { std::fprintf(stderr, "TRACE boundary expected=%llu processed=%llu\n", (unsigned long long) F->expected, (unsigned long long) F->processed.load()); std::fflush(stderr); }  // MAYA_TRACE
+     while (F->processed.load(std::memory_order_acquire) < F->expected) cpu_relax();
+     std::lock_guard<std::mutex> lk(F->mu);
+     int nu = 0;
+@@ -5815,11 +5820,11 @@
+     // a token that way); all of them recent: the least recently used.  STRATA_GLM_RAM_EVICT=lfu: the plain least-used
+     // (the old rule), =lru: the least recently used.  -1: none held.
+     static const int ram_policy = [] {
+-        const char* v = getenv("STRATA_GLM_RAM_EVICT");
++        const char* v = maya_env("STRATA_GLM_RAM_EVICT");
+         return v == nullptr ? 0 : std::strcmp(v, "lfu") == 0 ? 1 : std::strcmp(v, "lru") == 0 ? 2 : 0;
+     }();
+     static const uint64_t protect = [] {
+-        const char* v = getenv("STRATA_GLM_RAM_PROTECT");
++        const char* v = maya_env("STRATA_GLM_RAM_PROTECT");
+         return (uint64_t) (v ? std::max(0, std::atoi(v)) : 64) * 42u;
+     }();
+     const auto ram_victim = [&](const FastState::RamClass& R) -> int {
+@@ -5844,7 +5849,7 @@
+         return best >= 0 ? best : oldest;
+     };
+     static const bool tier_gc = [] {
+-        const char* v = getenv("STRATA_GLM_TIER_GC");
++        const char* v = maya_env("STRATA_GLM_TIER_GC");
+         return v == nullptr || std::atoi(v) != 0;
+     }();
+     // (1)
+@@ -5958,7 +5963,7 @@
+             // there (+2.6%) and on Maya-S over 3x V100-16GB with an NVMe tier (24.8 -> 26.1 tok/s, interleaved runs).
+             // With several conversations at once (--parallel) the default stays the aged counts: they take turns, and
+             // the most recent one's experts pushed out what all of them use, and decode slowed there
+-            static const char* const ve = getenv("STRATA_GLM_VRAM_EVICT");
++            static const char* const ve = maya_env("STRATA_GLM_VRAM_EVICT");
+             const bool vram_lru = ve == nullptr ? seq_count() <= 1 : std::strcmp(ve, "lru") == 0;
+             int v = -1;
+             uint32_t bc = UINT32_MAX;
+@@ -6040,7 +6045,7 @@
+     }
+     // (4) a few free RAM slots per class for the next token's disk reads (and its reads ahead); RAM-resident
+     // mode plans no disk reads, so no residents are evicted to keep landing room either
+-    static const char* kf = getenv("STRATA_GLM_RAM_FREE");
++    static const char* kf = maya_env("STRATA_GLM_RAM_FREE");
+     const int keep_free = F->ram_resident ? 0 : kf ? std::max(1, std::atoi(kf)) : F->ahead_read ? 12 : 4;
+     for (auto& R : F->rc) {
+         int nfree = 0;
+@@ -6116,7 +6121,7 @@
+         }
+         F->bg.swap(keep);
+         static const int bg_n = [] {
+-            const char* v = getenv("STRATA_GLM_PROMOTE");
++            const char* v = maya_env("STRATA_GLM_PROMOTE");
+             return v != nullptr ? std::max(0, std::atoi(v)) : 8;
+         }();
+         // (c) the REFILL: while layers have free VRAM slots - a prompt's lending ends with ~15 a layer free on a 24 GB
+@@ -6125,7 +6130,7 @@
+         //     a 3090 beside 2x Xeon 6152: 65.5 vs 68.1 GB/s with 6.25 GB/s of H2D beside it) instead of one a layer and
+         //     bg_n in all (~80 tokens to refill)
+         static const int bg_fill = [] {
+-            const char* v = getenv("STRATA_GLM_PROMOTE_FILL");
++            const char* v = maya_env("STRATA_GLM_PROMOTE_FILL");
+             return v != nullptr ? std::max(0, std::atoi(v)) : 24;
+         }();
+         // a pipelined window's boundary comes once for its tokens (not one a token): the budgets for them all
+@@ -6139,7 +6144,7 @@
+         // STRATA_GLM_WIN_ALLCPU): no route promotes then, so the swaps below keep the VRAM tier following the
+         // conversation (without them the hit rate falls while DFlash drafts)
+         static const bool win_all_cpu = [] {
+-            const char* v = getenv("STRATA_GLM_WIN_ALLCPU");
++            const char* v = maya_env("STRATA_GLM_WIN_ALLCPU");
+             return v == nullptr || std::atoi(v) != 0;
+         }();
+         if (!lane_all && win_all_cpu && dflash_on_ && F->cpu_plan != 0ull && F->win_lane[0] != nullptr &&
+@@ -6251,8 +6256,8 @@
+     flush();
+     if (ok && !fast_helper_adapt(err)) return false;
+     F->check_resident(l0_, lt_, g.n_expert);   // (the tables as the next token's routes find them)
+-    static const bool diag = getenv("STRATA_GLM_TIER_DIAG") != nullptr;
+-    static const int diag_every = getenv("STRATA_GLM_TIER_DIAG_EVERY") ? std::max(1, std::atoi(getenv("STRATA_GLM_TIER_DIAG_EVERY"))) : 64;
++    static const bool diag = maya_env("STRATA_GLM_TIER_DIAG") != nullptr;
++    static const int diag_every = maya_env("STRATA_GLM_TIER_DIAG_EVERY") ? std::max(1, std::atoi(maya_env("STRATA_GLM_TIER_DIAG_EVERY"))) : 64;
+     if (diag && ++F->diag_b % diag_every == 0)
+         std::fprintf(stderr, "glm tier diag CUDA%d (%llu boundaries): VRAM drops %llu, RAM evictions %llu, lend drops %llu (to RAM %llu, evicting %llu), background promotions %llu / demotions %llu, resident skips %llu | "
+                              "disk reads of: never held %llu, dropped from VRAM %llu, evicted from RAM %llu, lend-dropped %llu, lend-evicted %llu\n",
+@@ -6297,7 +6302,7 @@
+ // debug only - every token overwrites, so a run of n tokens leaves position n-1's seams
+ static void fast_dump(dpct::queue_ptr s, const std::string &name,
+                       const float *dev, int64_t n) {
+-    static const char* dir = getenv("GLM_CB_DIR");
++    static const char* dir = maya_env("GLM_CB_DIR");
+     if (!dir || !dir[0]) return;
+     s->wait();
+     std::vector<float> buf((size_t) n);
+@@ -6316,7 +6321,7 @@
+     FastState* F = fast_;
+     const Glm5Geometry& g = g_;
+     dpct::queue_ptr s = F->cs;
+-    static const bool dumps = getenv("GLM_CB_DIR") != nullptr;
++    static const bool dumps = maya_env("GLM_CB_DIR") != nullptr;
+     const auto& Ly = F->L[(size_t) il];
+     const float prescale = 1.0f / std::sqrt((float) (g.idx_key * g.idx_heads));
+     gf::MvJob j[5];
+@@ -6405,8 +6410,8 @@
+ // against 27.0-28.1 tok/s; RTX 3090 + 3060: 19.5 -> 20.6); KEEP=0 skips every missing one.
+ static int mtp_skip_from() {
+     static const int v = [] {
+-        if (const char* k = getenv("STRATA_GLM_MTP_KEEP")) return std::max(0, std::min(8, std::atoi(k)));
+-        return getenv("STRATA_GLM_MTP_MISS") != nullptr ? 8 : 2;
++        if (const char* k = maya_env("STRATA_GLM_MTP_KEEP")) return std::max(0, std::min(8, std::atoi(k)));
++        return maya_env("STRATA_GLM_MTP_MISS") != nullptr ? 8 : 2;
+     }();
+     return v;
+ }
+@@ -6420,11 +6425,11 @@
+ // batched window) leave out the same ones, so a window's tokens are the token path's.
+ int glmfast::trunk_skip_from(int il) {
+     static const int v = [] {
+-        const char* k = getenv("STRATA_GLM_TRUNK_KEEP");
++        const char* k = maya_env("STRATA_GLM_TRUNK_KEEP");
+         return k != nullptr ? std::max(1, std::min(8, std::atoi(k))) : 8;
+     }();
+     static const std::string map = [] {
+-        const char* m = getenv("STRATA_GLM_TRUNK_KEEP_MAP");
++        const char* m = maya_env("STRATA_GLM_TRUNK_KEEP_MAP");
+         return std::string(m != nullptr ? m : "");
+     }();
+     if (il >= 0 && il < (int) map.size() && map[(size_t) il] >= '1' && map[(size_t) il] <= '8')
+@@ -6477,15 +6482,15 @@
+     // STRATA_GLM_PROMOTE_MIN=<n>: a fetched expert is kept in VRAM only when its aged route count clears n.
+     // Unset or <= 1: the old rule (keep it whenever a spare is free).
+     static const int promote_min = [] {
+-        const char* v = getenv("STRATA_GLM_PROMOTE_MIN");
++        const char* v = maya_env("STRATA_GLM_PROMOTE_MIN");
+         return v ? std::max(0, std::atoi(v)) : 0;
+     }();
+     // STRATA_GLM_PREFETCH_RANK=<n>: prefetch only the prediction's first n ranks (unset: any of its top k)
+     static const int pf_rank = [] {
+-        const char* v = getenv("STRATA_GLM_PREFETCH_RANK");
++        const char* v = maya_env("STRATA_GLM_PREFETCH_RANK");
+         return v != nullptr ? std::max(1, std::atoi(v)) : 0;
+     }();
+-    static const int near_n = getenv("STRATA_GLM_ROUTE_LOG") != nullptr ? 16 : 0;   // the route log's near misses
++    static const int near_n = maya_env("STRATA_GLM_ROUTE_LOG") != nullptr ? 16 : 0;   // the route log's near misses
+     gf::moe_route(io.rlog, Ly.router_bias, g.n_expert, g.n_exp_used, g.w_scale, g.norm_w != 0, il, io.x,
+                   g.n_embd, md, io.sh_g, io.sh_u, g.swiglu_shexp, FFs, sh_hq, F->cs,
+                   pred ? F->plog : nullptr, pred ? F->L[(size_t) il + 1].router_bias : nullptr,
+@@ -6524,7 +6529,7 @@
+     // free too; the copy then runs beside the next layer's attention).  The prefetch lists are double-buffered by
+     // layer parity and the next layer waits for this copy before its experts run, so any of the three is safe.
+     static const int pf_at = [] {
+-        const char* v = getenv("STRATA_GLM_PREFETCH_AT");
++        const char* v = maya_env("STRATA_GLM_PREFETCH_AT");
+         return v == nullptr ? 0 : std::strcmp(v, "fetch") == 0 ? 1 : std::strcmp(v, "cpu") == 0 ? 2 : 0;
+     }();
+     const bool pf = pred && F->max_pf > 0;
+@@ -6580,7 +6585,16 @@
+         if (F->prof_on) F->mark("moe_down"); MAYA_SYNC_MARK(F, "moe_down");
+     } else {
+     // (the shared expert's down rides the gate/up launch: sh_out)
+-    gf::moe_gate_up(Ly.gu_type, md, g.n_exp_used, g.n_embd, g.n_ff_exp, g.swiglu_exp, io.xq, F->hq, Ly.sh_down.q,
++    // SYCL port (fixups34): the shared expert's down as its own mat-vec first (as the EXL3 path does).  Fused, its row
++    // of blocks came last in the grid and straggled: gate/up 182 -> 122 us a layer, + 26 us for the mat-vec; 768-token
++    // MTP 42.7 -> 44.4 tok/s, tokens identical.  MAYA_SH_SEP=0: fused again
++    static const bool sh_sep = maya_env("MAYA_SH_SEP") == nullptr || maya_env("MAYA_SH_SEP")[0] != '0';
++    if (sh_sep && Ly.sh_down.q != nullptr) {
++        const gf::MvJob sd = {Ly.sh_down.q, F->sh_hq, nullptr, F->sh_out, nullptr, 1.0f, Ly.sh_down.type, FFs, g.n_embd};
++        if (!gf::mv(&sd, 1, s)) { err = "glm fast: shared expert down"; return false; }
++        if (F->prof_on) F->mark("sh_down_mv");
++    }
++    gf::moe_gate_up(Ly.gu_type, md, g.n_exp_used, g.n_embd, g.n_ff_exp, g.swiglu_exp, io.xq, F->hq, sh_sep ? nullptr : Ly.sh_down.q,
+                     Ly.sh_down.type, F->sh_hq, FFs, F->sh_out, s);
+     if (F->prof_on) F->mark("moe_gate_up"); MAYA_SYNC_MARK(F, "moe_gate_up");
+     gf::moe_down(Ly.d_type, md, g.n_exp_used, g.n_embd, g.n_ff_exp, Ly.down_off, F->hq,
+@@ -6610,19 +6624,19 @@
+     FastState* F = fast_;
+     const Glm5Geometry& g = g_;
+     dpct::queue_ptr s = F->cs;
+-    static const bool dumps = getenv("GLM_CB_DIR") != nullptr;
++    static const bool dumps = maya_env("GLM_CB_DIR") != nullptr;
+     bool pf_pending = false;
+     float* Rc = state_;
+     float* Ro = state_ + (int64_t) g.hc * g.n_embd;
+-    const char* graph_opt = getenv("STRATA_GLM_KDA_GRAPH");
++    const char* graph_opt = maya_env("STRATA_GLM_KDA_GRAPH");
+     const bool graphs = graph_opt && std::atoi(graph_opt) != 0 && n_parts_ == 1 && !hop_in &&
+                         mtp_il_ < 0 && !F->prof_on && !dumps && F->max_pf == 0 && F->n_ahead == 0 &&
+-                        getenv("GLM_DUMP_H") == nullptr && cap_d_ == nullptr;
++                        maya_env("GLM_DUMP_H") == nullptr && cap_d_ == nullptr;
+     F->kda_graph_on = graphs;
+     // STRATA_GLM_DEFER_CPU=1 (LOSSY, after lighttransport/Strata glm53f's expert deferral): a MoE layer's CPU-lane
+     // experts are added after the NEXT layer's mixer instead of before its read - the CPU's work overlaps that layer's
+     // attention; that attention misses them (the streams get them before its FFN-side read; the last layer waits)
+-    static const bool defer_env = getenv("STRATA_GLM_DEFER_CPU") != nullptr && std::atoi(getenv("STRATA_GLM_DEFER_CPU")) != 0;
++    static const bool defer_env = maya_env("STRATA_GLM_DEFER_CPU") != nullptr && std::atoi(maya_env("STRATA_GLM_DEFER_CPU")) != 0;
+     const bool defer = defer_env && !graphs && !hop_in && F->cpu_plan != 0ull && !F->all_resident;
+     if (defer && F->defer_post == nullptr &&
+         DPCT_CHECK_ERROR(F->defer_post = sycl::malloc_device<float>(
+@@ -6635,10 +6649,10 @@
+     for (int il = l0_; il < l1_; ++il) {
+         const auto& Ly = F->L[(size_t) il];
+         {   // SYCL port (fixups10): one layer in flight - see maya_fixups10.py
+-            static const bool layer_sync = [] { const char* v = getenv("MAYA_SYCL_LAYER_SYNC"); return v == nullptr || std::atoi(v) != 0; }();
++            static const bool layer_sync = [] { const char* v = maya_env("MAYA_SYCL_LAYER_SYNC"); return v == nullptr || std::atoi(v) != 0; }();
+             if (layer_sync && Ly.moe) s->wait();
+         }
+-        if (getenv("MAYA_TRACE_SYNC")) { s->wait(); static int tl = 0; if (tl++ < 200) { std::fprintf(stderr, "TRACE layer %d start (previous done)\n", il); std::fflush(stderr); } }  // MAYA_TRACE
++        if (maya_env("MAYA_TRACE_SYNC")) { s->wait(); static int tl = 0; if (tl++ < 200) { std::fprintf(stderr, "TRACE layer %d start (previous done)\n", il); std::fflush(stderr); } }  // MAYA_TRACE
+         // a pipelined window's token: is it past a wrong draft by now (its heavy kernels then do nothing).  The
+         // window's first token never is (the first wrong draft is token 1 or later): its first layer here clears the
+         // flag a cancelled token may have left, and its other layers go without the gate (a host-memory read each)
+@@ -6847,7 +6861,7 @@
+ }
+ 
+ bool Glm5Model::fast_token(int32_t token, std::string &err) try {
+-    if (getenv("MAYA_TRACE")) { static int tn = 0; if (tn++ < 40) { std::fprintf(stderr, "TRACE fast_token %d\n", (int) token); std::fflush(stderr); } }  // MAYA_TRACE
++    if (maya_env("MAYA_TRACE")) { static int tn = 0; if (tn++ < 40) { std::fprintf(stderr, "TRACE fast_token %d\n", (int) token); std::fflush(stderr); } }  // MAYA_TRACE
+     FastState* F = fast_;
+     const Glm5Geometry& g = g_;
+     const int64_t p = pos_++;
+@@ -6943,7 +6957,7 @@
+                   FT->cs);
+     // GLM_DUMP_H=<file> (debug): append every position's final hidden state (output_norm of the stream mean - what the
+     // NextN/MTP block reads) as n_embd floats
+-    static const char* dh = getenv("GLM_DUMP_H");
++    static const char* dh = maya_env("GLM_DUMP_H");
+     if (dh != nullptr && dh[0]) {
+         FT->cs->wait();
+         std::vector<float> hb((size_t) g.n_embd);
+@@ -6971,7 +6985,7 @@
+     ensure synchronization behavior.
+     */
+     { int* h_ = FT->tok_h; const int* d_ = FT->tok; FT->cs->single_task([=] { *h_ = *d_; }); } // SYCL port: kernel, not a host copy (fixups11)
+-    if (getenv("MAYA_TRACE")) { std::fprintf(stderr, "TRACE token submitted\n"); std::fflush(stderr); }  // MAYA_TRACE
++    if (maya_env("MAYA_TRACE")) { std::fprintf(stderr, "TRACE token submitted\n"); std::fflush(stderr); }  // MAYA_TRACE
+     dpct::sync_barrier(FT->ev_done, FT->cs);
+     // wait for the token (the service threads answer misses meanwhile)
+     const auto tw = std::chrono::steady_clock::now();
+@@ -6979,8 +6993,8 @@
+     dpct::err0 done;
+     // SYCL port: an OpenCL queue need not submit work until a flush or a blocking wait - an event query alone left
+     // the token unsubmitted (GPU idle, no route posted). clWaitForEvents flushes; the service threads answer meanwhile.
+-    if (getenv("MAYA_SYCL_POLL") == nullptr) FT->ev_done->wait();
+-    if (getenv("MAYA_TRACE")) { std::fprintf(stderr, "TRACE token wait returned\n"); std::fflush(stderr); }  // MAYA_TRACE
++    if (maya_env("MAYA_SYCL_POLL") == nullptr) FT->ev_done->wait();
++    if (maya_env("MAYA_TRACE")) { std::fprintf(stderr, "TRACE token wait returned\n"); std::fflush(stderr); }  // MAYA_TRACE
+     while ((done = dpct::sycl_event_query(FT->ev_done)) == 1) {
+         std::this_thread::yield();
+         if (!warned && std::chrono::steady_clock::now() - tw > std::chrono::seconds(10)) {
+@@ -7266,11 +7280,11 @@
+ Glm5Model::PoolBudget Glm5Model::pool_budget(size_t free_b, size_t total_b, int part, size_t floor_b, size_t slot_b,
+                                              bool unified) {
+     PoolBudget b;
+-    const char* later = part > 0 ? getenv("STRATA_GLM_RESERVE_LATER_MB") : nullptr;
+-    const char* r = later != nullptr && later[0] ? later : getenv("STRATA_GLM_RESERVE_MB");
++    const char* later = part > 0 ? maya_env("STRATA_GLM_RESERVE_LATER_MB") : nullptr;
++    const char* r = later != nullptr && later[0] ? later : maya_env("STRATA_GLM_RESERVE_MB");
+     b.reserve_given = r != nullptr && r[0];
+     b.reserve = (size_t) (b.reserve_given ? std::max(0LL, std::atoll(r)) : unified ? 1024 : 700) << 20;
+-    if (const char* ec = getenv("STRATA_GLM_EXPERT_CACHE"); ec != nullptr && part == 0)
++    if (const char* ec = maya_env("STRATA_GLM_EXPERT_CACHE"); ec != nullptr && part == 0)
+         b.fixed = std::max(0LL, std::atoll(ec));   // ("auto": 0)
+     if (!unified)
+         std::tie(b.reserve, b.adapted) =
+@@ -7280,7 +7294,7 @@
+         // (the same number fast_setup logs, before its expert_bytes cap - the prompt path sizes against this too).
+         const int64_t ram = avail_ram_now();
+         double head_gb = 16.0;
+-        if (const char* h = getenv("STRATA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
++        if (const char* h = maya_env("STRATA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
+         const size_t head = (size_t) (head_gb * 1073741824.0);
+         if (ram > 0) {
+             const size_t room = (size_t) ram > head ? (size_t) ram - head : 0;
+@@ -7293,9 +7307,9 @@
+     }
+     if (b.fixed > 0 && slot_b > 0) b.avail = std::min(b.avail, (size_t) b.fixed * slot_b);
+ 
+-    if (const char* cap = getenv("STRATA_GLM_POOL_GB"))
++    if (const char* cap = maya_env("STRATA_GLM_POOL_GB"))
+         b.avail = std::min(b.avail, (size_t) (std::atof(cap) * 1073741824.0));
+-    if (const char* vc = getenv("STRATA_GLM_VRAM_GB")) {
++    if (const char* vc = maya_env("STRATA_GLM_VRAM_GB")) {
+         const size_t cap = (size_t) (std::atof(vc) * 1073741824.0);
+         const size_t used = total_b - free_b;
+         b.avail = std::min(b.avail, cap > used + b.reserve ? cap - used - b.reserve : (size_t) 0);
+@@ -7312,7 +7326,7 @@
+ // and prefill_setup (the lendable the chunk is chosen against) subtract it, so the pool it sizes is the pool it gets.
+ size_t Glm5Model::mmq_scratch_reserve() {
+     static const size_t r = [] {
+-        const char* v = getenv("STRATA_GLM_MMQ_RESERVE_MB");
++        const char* v = maya_env("STRATA_GLM_MMQ_RESERVE_MB");
+         return v != nullptr ? (size_t) std::max(0LL, std::atoll(v)) << 20 : (size_t) 0;
+     }();
+     return r;
+@@ -7341,7 +7355,7 @@
+ // The dedicated video memory DXGI reports for the adapter with this HIP device's LUID (an APU: its carve-out), 0 when
+ // unknown.  STRATA_GLM_APU_DEDICATED_GB=<n> sets it (a test: a smaller carve-out), =0 turns the cap below off.
+ static size_t win_dedicated_bytes(int dev) {
+-    if (const char* v = getenv("STRATA_GLM_APU_DEDICATED_GB")) return (size_t) (std::atof(v) * 1073741824.0);
++    if (const char* v = maya_env("STRATA_GLM_APU_DEDICATED_GB")) return (size_t) (std::atof(v) * 1073741824.0);
+     cudaDeviceProp prop{};
+     if (cudaGetDeviceProperties(&prop, dev) != cudaSuccess) {
+         cudaGetLastError();
+@@ -7353,7 +7367,7 @@
+ 
+ void Glm5Model::pool_check(size_t floor_b, size_t slot_b, size_t all_b) try {
+     if (fast_ == nullptr || fast_->unified_memory) return;
+-    if (const char* v = getenv("STRATA_GLM_POOL_CHECK"); v != nullptr && std::atoi(v) == 0) return;
++    if (const char* v = maya_env("STRATA_GLM_POOL_CHECK"); v != nullptr && std::atoi(v) == 0) return;
+     constexpr size_t kPiece = (size_t) 1 << 30;
+     /*
+     DPCT1093:129: The "dev_" device may be not the one intended for use. Adjust
+@@ -7403,7 +7417,7 @@
+         if (GlobalMemoryStatusEx(&ms)) {
+             // (+ what a page file Windows manages may still grow by: commit_growth)
+             size_t can = (size_t) ms.ullAvailPageFile + (size_t) strata::platform::commit_growth(ms.ullTotalPhys);
+-            if (const char* v = getenv("STRATA_GLM_COMMIT_CAP_GB")) can = std::min(can, (size_t) (std::atof(v) * 1e9));
++            if (const char* v = maya_env("STRATA_GLM_COMMIT_CAP_GB")) can = std::min(can, (size_t) (std::atof(v) * 1e9));
+             const PoolBudget b2 = part_budget(free_b, total_b, floor_b, slot_b);   // (the dedicated cap's included)
+             const auto cap = glmfast::commit_pool_cap(b2.avail, floor_b, all_b, can, (size_t) ms.ullTotalPhys);
+             if (cap.first < b2.avail) {
+@@ -7482,7 +7496,7 @@
+         for (void *p : got)
+             DPCT_CHECK_ERROR(sycl::free(p, dpct::get_in_order_queue()));
+         // STRATA_GLM_POOL_CHECK_TEST_MB=N (a test): the free figure read before the budget ran N MiB high, as Windows'
+-        if (const char* t = getenv("STRATA_GLM_POOL_CHECK_TEST_MB")) {
++        if (const char* t = maya_env("STRATA_GLM_POOL_CHECK_TEST_MB")) {
+             const size_t hi = (size_t) std::max(0LL, std::atoll(t)) << 20;
+             fr = fr > hi ? fr - hi : 0;
+         }
+@@ -7532,7 +7546,7 @@
+ int Glm5Model::pool_keep(int n_exp_used) {
+     const int floor_slots = n_exp_used + gf::kSpares;
+     int keep = floor_slots + 2;
+-    if (const char* v = getenv("STRATA_GLM_PREFILL_KEEP")) {
++    if (const char* v = maya_env("STRATA_GLM_PREFILL_KEEP")) {
+         const int want = std::atoi(v);
+         if (want > 0) keep = std::max(floor_slots, want);
+     }
+@@ -7598,7 +7612,7 @@
+ // position with the real token.  Only the head speculates - the tail, the NextN block and the sampler see confirmed
+ // tokens only - so the output is exactly what the token-at-a-time decode would produce for the same samples.
+ bool Glm5Model::spec_ready() const {
+-    if (fast_ == nullptr || split_next_ == nullptr || getenv("STRATA_GLM_NO_SPEC") != nullptr) return false;
++    if (fast_ == nullptr || split_next_ == nullptr || maya_env("STRATA_GLM_NO_SPEC") != nullptr) return false;
+     const Glm5Model* last = this;
+     for (const Glm5Model* m = this; m != nullptr; m = m->split_next_.get()) {
+         if (m->fast_ == nullptr) return false;
+@@ -7750,7 +7764,7 @@
+     the selected device if needed.
+     */
+     dpct::select_device(dev_);
+-    static const bool sprof = getenv("STRATA_GLM_SPEC_PROF") != nullptr;
++    static const bool sprof = maya_env("STRATA_GLM_SPEC_PROF") != nullptr;
+     auto t0 = std::chrono::steady_clock::now();
+     const auto lap = [&](int i) {
+         if (!sprof) return;
+@@ -7887,7 +7901,7 @@
+     the selected device if needed.
+     */
+     dpct::select_device(dev_);
+-    static const bool sprof = getenv("STRATA_GLM_SPEC_PROF") != nullptr;
++    static const bool sprof = maya_env("STRATA_GLM_SPEC_PROF") != nullptr;
+     auto t0 = std::chrono::steady_clock::now();
+     const auto lap = [&](int i) {
+         if (!sprof) return;
+@@ -8044,7 +8058,7 @@
+     // arms a skip_gate before each of its layers) and the redo is enqueued at once, before the next draft - instead of
+     // after the rest of a pass already known to be thrown away.  Only a head group of one GPU (two-GPU splits).
+     static const bool cancel_env = [] {
+-        const char* v = getenv("STRATA_GLM_SPEC_CANCEL");
++        const char* v = maya_env("STRATA_GLM_SPEC_CANCEL");
+         return v != nullptr && std::atoi(v) != 0;
+     }();
+     bool cancel = cancel_env && hl == this;
+@@ -8126,7 +8140,7 @@
+     // the time instead of p(argmax q).  A fixed seed still gives the same answer - but not the plain draw's answer.
+     // Greedy requests (and penalties, which this path does not take) keep the argmax draft and the exact match.
+     static const bool spec_sample_env =
+-        getenv("STRATA_GLM_SPEC_SAMPLE") != nullptr && std::atoi(getenv("STRATA_GLM_SPEC_SAMPLE")) != 0;
++        maya_env("STRATA_GLM_SPEC_SAMPLE") != nullptr && std::atoi(maya_env("STRATA_GLM_SPEC_SAMPLE")) != 0;
+     const bool spec_sample = spec_sample_env && !sp.greedy && sp.temperature > 0.0f && sp.penalty_last_n <= 0;
+     if (spec_sample && TL->fast_->spec_q == nullptr) {
+         /*
+@@ -8193,7 +8207,8 @@
+         Adjust the selected device if needed.
+         */
+         dpct::select_device(TL->dev_);
+-        if (!TL->fast_mtp(p, next, err)) return false;
++        // SYCL port (fixups35): a greedy draft over the draft vocabulary (the verify still takes the whole head)
++        if (!TL->fast_mtp(p, next, err, 0, !spec_sample && TL->fast_->mtp_dv > 0)) return false;
+         if (!glmfast::wait_event(TL->fast_->ev_mtp, "glm spec draft", err) || !TL->fast_->route_ok(err)) return false;
+         d = TL->fast_->mtp_tok_h[0];
+         have_draft = true;
+@@ -8241,7 +8256,7 @@
+     if (!spec_head(q + 2, d, err)) return false;
+     bool ok = true;
+     // STRATA_GLM_SPEC_PROF=1: host time per phase of a step (debug)
+-    static const bool sprof = getenv("STRATA_GLM_SPEC_PROF") != nullptr;
++    static const bool sprof = maya_env("STRATA_GLM_SPEC_PROF") != nullptr;
+     double tp[6] = {0, 0, 0, 0, 0, 0};
+     int64_t np = 0;
+     auto tnow = std::chrono::steady_clock::now();
+@@ -8268,7 +8283,7 @@
+     };
+     // STRATA_GLM_NSYS=<from>,<to>: a profiler capture window over those steps (nsys --capture-range=cudaProfilerApi)
+     int64_t nsys_from = -1, nsys_to = -1;
+-    if (const char* ns = getenv("STRATA_GLM_NSYS")) std::sscanf(ns, "%lld,%lld", (long long*) &nsys_from, (long long*) &nsys_to);
++    if (const char* ns = maya_env("STRATA_GLM_NSYS")) std::sscanf(ns, "%lld,%lld", (long long*) &nsys_from, (long long*) &nsys_to);
+ #if !defined(STRATA_USE_HIP)
+     /*
+     DPCT1026:180: The call to nvtxRangePushA was removed because it annotates
+@@ -8326,7 +8341,7 @@
+         //     next speculative position (its boundary waits for the head's current one)
+         // SYCL port (fixups26): the tail queues from a second thread while this one queues the head
+         static const bool spec_par = [] {
+-            const char* e = std::getenv("MAYA_SPEC_PAR");
++            const char* e = maya_env("MAYA_SPEC_PAR");
+             const bool on = e == nullptr || e[0] != '0';   // default on (8/8 long runs clean)
+             std::fprintf(stderr, "glm spec: tail/head enqueue %s\n", on ? "on two threads" : "serial");
+             return on;
+@@ -8961,7 +8976,7 @@
+     the selected device if needed.
+     */
+     dpct::select_device(dev_);
+-    if (getenv("STRATA_GLM_SLOT_TIMING"))
++    if (maya_env("STRATA_GLM_SLOT_TIMING"))
+         std::fprintf(stderr, "glm slots: save %lld positions - sync %.0f ms, copy %.0f ms, write %.0f ms\n",
+                      (long long) n, t_sync, t_copy, t_write);
+     f.flush();
+@@ -9215,7 +9230,7 @@
+     the selected device if needed.
+     */
+     dpct::select_device(dev_);
+-    if (getenv("STRATA_GLM_SLOT_TIMING"))
++    if (maya_env("STRATA_GLM_SLOT_TIMING"))
+         std::fprintf(stderr, "glm slots: save %lld positions to RAM - sync %.0f ms, copy %.0f ms\n",
+                      (long long) n, t_sync, t_copy);
+     return total;
+--- a/src/core/glm_model.dp.cpp
++++ b/src/core/glm_model.dp.cpp
+@@ -1033,7 +1033,7 @@
+ 
+ // ---- KV streaming (strata/kernels/glm_kv_stream.hpp)
+ int64_t Glm5Model::kv_resident_cells(int kpool, int64_t max_ctx) {
+-    const char* v = getenv("STRATA_GLM_KV_RESIDENT");
++    const char* v = maya_env("STRATA_GLM_KV_RESIDENT");
+     const long long want = v != nullptr ? std::atoll(v) : 0;
+     if (want <= 0 || kpool <= 0) return 0;
+     int64_t cells = std::max<int64_t>(want, strata::kernels::glmf::kKvResidentMin);
+@@ -1214,7 +1214,7 @@
+     if (fast_ != nullptr) return forward_fast(tokens, logits_out, err);
+     // more than one token at a time + a split = the teacher-forced pipeline (STRATA_GLM_PIPE=0
+     // forces the serial per-token path, for A/B and as a fallback)
+-    if (split_next_ && !split_next_->split_next_ && tokens.size() > 1 && getenv("STRATA_GLM_PIPE") == nullptr) {
++    if (split_next_ && !split_next_->split_next_ && tokens.size() > 1 && maya_env("STRATA_GLM_PIPE") == nullptr) {
+         return forward_pipeline(tokens, logits_out, err);
+     }
+     for (int32_t t : tokens)
+@@ -1608,7 +1608,7 @@
+     // is the split's one user - without it the copy would only cost the helper its expert slots)
+     int helper = -1;
+     {
+-        const char* hs = getenv("STRATA_GLM_HEAD_SPLIT");
++        const char* hs = maya_env("STRATA_GLM_HEAD_SPLIT");
+         if (n >= 3 && !dflash_path_.empty() && (hs == nullptr || std::atoi(hs) != 0))
+             for (int i = 1; i + 1 < n; ++i) {
+                 const int cnt = bounds[(size_t) i] - bounds[(size_t) i - 1];
+@@ -1616,7 +1616,7 @@
+             }
+     }
+     // STRATA_GLM_PARALLEL_LOAD=0: sequential. Parts stay unlinked until loaded (load_pack's reset() walks split_next_)
+-    const char* pl = getenv("STRATA_GLM_PARALLEL_LOAD");
++    const char* pl = maya_env("STRATA_GLM_PARALLEL_LOAD");
+     if (pl == nullptr || std::atoi(pl) != 0) {
+         std::vector<std::unique_ptr<Glm5Model>> owned((size_t) n);
+         std::vector<Glm5Model*> parts((size_t) n, this);
+@@ -1901,7 +1901,7 @@
+     }
+     const int L = g.n_layers, n = (int) devs.size();
+     if (n < 2 || L < n) return {};
+-    const bool fast = getenv("STRATA_GLM_SLOW") == nullptr;
++    const bool fast = maya_env("STRATA_GLM_SLOW") == nullptr;
+     const auto find = [&](const std::string& nm) -> const strata::TensorInfo* {
+         for (const auto& gf : gfs)
+             if (const strata::TensorInfo* t = gf->find(nm)) return t;
+@@ -1955,7 +1955,7 @@
+     // a DFlash drafter (STRATA_GLM_DFLASH): its file and ring on the last part; every part keeps the verify window's
+     // buffers - per KDA layer its state backup and the window's inputs, and ~32 MB of rows and logits
+     double dflash = 0, win_kda = 0, win_fixed = 0;
+-    if (const char* df = getenv("STRATA_GLM_DFLASH"); df != nullptr && df[0] != '\0') {
++    if (const char* df = maya_env("STRATA_GLM_DFLASH"); df != nullptr && df[0] != '\0') {
+         std::error_code ec;
+         const auto fsz = std::filesystem::file_size(df, ec);
+         dflash = (ec ? 0.0 : (double) fsz) + (double) (96u << 20);
+@@ -1987,9 +1987,9 @@
+     bool mtp = false;
+     double mtp_dense = 0;
+     std::unique_ptr<strata::GgufFile> extra;
+-    if (fast && n == 2 && getenv("STRATA_GLM_NO_MTP") == nullptr) {
++    if (fast && n == 2 && maya_env("STRATA_GLM_NO_MTP") == nullptr) {
+         const std::string P = "blk." + std::to_string(L) + ".";
+-        const char* mg = getenv("STRATA_GLM_MTP_GGUF");
++        const char* mg = maya_env("STRATA_GLM_MTP_GGUF");
+         if (find(P + "nextn.eh_proj.weight") == nullptr && mg != nullptr && mg[0] != '\0') try {
+                 extra.reset(new strata::GgufFile(mg));
+             } catch (const std::exception&) {
+@@ -2029,7 +2029,7 @@
+             mtp = true;
+         }
+     }
+-    const bool pipelined = n == 2 && mtp && getenv("STRATA_GLM_NO_SPEC") == nullptr;
++    const bool pipelined = n == 2 && mtp && maya_env("STRATA_GLM_NO_SPEC") == nullptr;
+     // a DFlash drafter's pipelined window (dflash_pipelined): the anchor crosses every part, and each draft kept behind
+     // it costs about the slowest part, so a round of a kept drafts costs sum + a * slowest for a + 1 tokens (a ~1.5 at
+     // the pipelined window's default cut); the batched one crosses the parts in turn (the parts added)
+@@ -2040,7 +2040,7 @@
+     // ~0.4 ms of it fixed - priced by reads alone the 3090 took 10 layers and paced every draft (5.9 ms a kept draft;
+     // 8 layers: 4.9 ms, 57.1 / 58.9 -> 61.6 / 63.1 tok/s).  STRATA_GLM_SPLIT_LAYER_MS overrides it
+     const double layer_fixed = !df_pipe ? 0.0
+-                               : getenv("STRATA_GLM_SPLIT_LAYER_MS") ? std::atof(getenv("STRATA_GLM_SPLIT_LAYER_MS"))
++                               : maya_env("STRATA_GLM_SPLIT_LAYER_MS") ? std::atof(maya_env("STRATA_GLM_SPLIT_LAYER_MS"))
+                                                                      : 0.4;
+     // each layer's routes per expert: the usage file (opt-in), else the pack's routing profile
+     std::vector<std::vector<double>> cnt((size_t) L + 1);
+@@ -2086,7 +2086,7 @@
+     // than the curve at 3: EXL3-4.05bpw over 9 GPUs held 80% of a 5060 Ti layer's experts and hit VRAM on 89-96% of
+     // its routes, the curve's 1.4, not 99%.  At 3 the DFlash split kept the 3090 to 7 layers with 8 GB of it idle,
+     // the misses on the CPU lane: 63.8 / 32.6 / 64.4 tok/s; at 1.4 9 layers, 79.8 / 40.4 / 81.9)
+-    const double cover_b = getenv("STRATA_SPLIT_COVER_B") ? std::atof(getenv("STRATA_SPLIT_COVER_B"))
++    const double cover_b = maya_env("STRATA_SPLIT_COVER_B") ? std::atof(maya_env("STRATA_SPLIT_COVER_B"))
+                            : !xtab.layers.empty()         ? 1.4
+                                                           : 3.0;
+     const auto held_share = [&](int l, int64_t s) -> double {
+@@ -2256,7 +2256,7 @@
+         tie = pipelined ? sum : slow;
+         return ok;
+     };
+-    static const bool split_log = getenv("STRATA_GLM_SPLIT_LOG") != nullptr;
++    static const bool split_log = maya_env("STRATA_GLM_SPLIT_LOG") != nullptr;
+     std::vector<int> best, best_any, b((size_t) n - 1);
+     double best_obj = 1e30, best_tie = 1e30, any_obj = 1e30, any_tie = 1e30;
+     const double eps = 1e-6;
+@@ -2372,13 +2372,13 @@
+ // NextN block is not loaded (STRATA_GLM_NO_MTP) and the split search prices the drafter instead.
+ bool Glm5Model::load_pack_env(const std::string& pack_dir, int64_t max_ctx, std::string& err,
+                               const std::string& layer_split) {
+-    if (const char* df = getenv("STRATA_GLM_DFLASH"); df != nullptr && df[0] != '\0') {
++    if (const char* df = maya_env("STRATA_GLM_DFLASH"); df != nullptr && df[0] != '\0') {
+         dflash_path_ = df;
+-        if (getenv("STRATA_GLM_NO_MTP") == nullptr) {
++        if (maya_env("STRATA_GLM_NO_MTP") == nullptr) {
+ #if defined(_WIN32)
+-            _putenv_s("STRATA_GLM_NO_MTP", "1");
++            _putenv_s("STRATA_GLM_NO_MTP", "1"); maya_env_changed();
+ #else
+-            setenv("STRATA_GLM_NO_MTP", "1", 1);
++            setenv("STRATA_GLM_NO_MTP", "1", 1); maya_env_changed();
+ #endif
+         }
+         std::fprintf(stderr, "glm dflash: MTP off - the NextN draft block is not loaded, DFlash drafts instead\n");
+@@ -2394,13 +2394,13 @@
+     // pools are per-part, so 2x capacity halves the demand reads).  STRATA_GLM_SPLIT=0 forces one
+     // device; =<layer>[,<layer>..] pins the boundaries; STRATA_GLM_DEV1 picks the second device of a
+     // two-part split (default 1), STRATA_GLM_DEVS the devices of any split.
+-    const char* sp = getenv("STRATA_GLM_SPLIT");
++    const char* sp = maya_env("STRATA_GLM_SPLIT");
+     const std::string spec = sp != nullptr ? std::string(sp) : layer_split;
+     // STRATA_GLM_EXPERT_HELPER=<device>: the expert helper - alone beside one trunk GPU (no split: dense, state and
+     // MTP stay on device 0), or beside a layer split, which then leaves the helper's device out and gives each part
+     // its own share of the helper over its own layers (fast_helper_setup): two cards and a Ryzen AI Max APU
+     int helper = -1;
+-    if (const char* h = getenv("STRATA_GLM_EXPERT_HELPER"); h != nullptr && h[0] != '\0') {
++    if (const char* h = maya_env("STRATA_GLM_EXPERT_HELPER"); h != nullptr && h[0] != '\0') {
+         if (std::strspn(h, "0123456789") != std::strlen(h)) {
+             err = "GLM expert helper: give a helper device index";
+             return false;
+@@ -2435,7 +2435,7 @@
+     functionality is redundant in SYCL.
+     */
+     std::vector<int> bounds, devs, named;
+-    const char* dv = getenv("STRATA_GLM_DEVS");
++    const char* dv = maya_env("STRATA_GLM_DEVS");
+     if (dv != nullptr && !ints(dv, named)) {
+         err = std::string("MAYA_GLM_DEVS: not a device list: ") + dv;
+         return false;
+@@ -2450,21 +2450,21 @@
+     } else {
+         if (!glm_split_devices(dv != nullptr ? &named : nullptr, n_dev, helper, 0, (int) kMaxParts, devs, err)) return false;
+         if (devs.size() < 2) return load_pack(pack_dir, max_ctx, err, devs.empty() ? 0 : devs[0]);
+-        if (devs.size() == 2 && getenv("STRATA_GLM_DEVS") == nullptr)
+-            if (const char* d1 = getenv("STRATA_GLM_DEV1")) devs[1] = std::atoi(d1);
++        if (devs.size() == 2 && maya_env("STRATA_GLM_DEVS") == nullptr)
++            if (const char* d1 = maya_env("STRATA_GLM_DEV1")) devs[1] = std::atoi(d1);
+         // --layer-split auto: Strata's split search over two to four GPUs (and over more for a DFlash drafter's
+         // pipelined window); more (or a pack it cannot read) share the layers by free VRAM - two GPUs at the midpoint, plus two layers for the head half when the tail also runs
+         // the NextN draft block (2x V100, split 22 / 23 / 24 / 25 / 26 -> 36.3 / 36.7 / 40.0 / 37.3 / 39.4 tok/s)
+-        const char* dfl = getenv("STRATA_GLM_DFLASH");
++        const char* dfl = maya_env("STRATA_GLM_DFLASH");
+         if (devs.size() <= 4 || (dfl != nullptr && dfl[0] != '\0' && dflash_pipelined((int) devs.size())))
+             bounds = glm_search_bounds(pack_dir, max_ctx, devs);
+         if (bounds.empty() && devs.size() == 2)
+             bounds = {g_.n_layers / 2 +
+-                      (getenv("STRATA_GLM_NO_MTP") == nullptr && getenv("STRATA_GLM_NO_SPEC") == nullptr ? 2 : 0)};
++                      (maya_env("STRATA_GLM_NO_MTP") == nullptr && maya_env("STRATA_GLM_NO_SPEC") == nullptr ? 2 : 0)};
+         if (bounds.empty()) bounds = glm_auto_bounds(pack_dir, g_.n_layers, devs);
+     }
+-    if (devs.size() == 2 && getenv("STRATA_GLM_DEVS") == nullptr && !spec.empty() && spec != "auto")
+-        if (const char* d1 = getenv("STRATA_GLM_DEV1")) devs[1] = std::atoi(d1);
++    if (devs.size() == 2 && maya_env("STRATA_GLM_DEVS") == nullptr && !spec.empty() && spec != "auto")
++        if (const char* d1 = maya_env("STRATA_GLM_DEV1")) devs[1] = std::atoi(d1);
+     bool ok = devs.size() == bounds.size() + 1;
+     for (size_t i = 0; ok && i < bounds.size(); ++i)
+         ok = bounds[i] >= 1 && bounds[i] < g_.n_layers && (i == 0 || bounds[i] > bounds[i - 1]);
+@@ -2485,7 +2485,7 @@
+ // nodes llama.cpp's cb_eval dumps) so the python diff can bisect the first divergent component.
+ // The MoE dumps (glm_moe_*, glm_exp*) name their own seams - see NEXT-STEPS.md for the diff recipe.
+ static void cb_dump(const std::string& name, const void* dev, int64_t n) {
+-    static const char* dir = getenv("GLM_CB_DIR");
++    static const char* dir = maya_env("GLM_CB_DIR");
+     if (!dir || !dir[0] || !dev) return;
+     static std::vector<float> buf;
+     buf.resize((size_t) n);
+@@ -2498,7 +2498,7 @@
+ 
+ // same, for values that already live on the host (the CPU expert path)
+ static void cb_dump_h(const std::string& name, const void* host, int64_t n) {
+-    static const char* dir = getenv("GLM_CB_DIR");
++    static const char* dir = maya_env("GLM_CB_DIR");
+     if (!dir || !dir[0] || !host) return;
+     std::FILE* f = std::fopen((std::string(dir) + "/" + name + ".f32").c_str(), "wb");
+     if (f) { std::fwrite(host, 4, (size_t) n, f); std::fclose(f); }
+@@ -2561,7 +2561,7 @@
+             }
+             tt->to_float(pack_emb_src_ + (size_t) token * ggml_row_size((ggml_type) pack_emb_type_, g.n_embd),
+                          emb_host.data(), g.n_embd);
+-            if (getenv("STRATA_GLM_EMB_PROBE") && token < 3) {
++            if (maya_env("STRATA_GLM_EMB_PROBE") && token < 3) {
+                 const size_t rb = ggml_row_size((ggml_type) pack_emb_type_, g.n_embd);
+                 const uint8_t* rp = pack_emb_src_ + (size_t) token * rb;
+                 std::fprintf(stderr, "emb probe: token %d type %d row_bytes %zu src+0: %02x %02x %02x %02x "
+@@ -3621,7 +3621,7 @@
+     const Shard& gs = pack_shards_[(size_t) nl.gate_shard];
+     const Shard& us = pack_shards_[(size_t) nl.up_shard];
+     const Shard& ds = pack_shards_[(size_t) nl.down_shard];
+-    static const bool stats = getenv("STRATA_GLM_POOL_STATS") != nullptr;
++    static const bool stats = maya_env("STRATA_GLM_POOL_STATS") != nullptr;
+     if (bounce_)   // the staging ring is reused every layer: drain queued miss copies first
+         dpct::get_in_order_queue().wait();
+     // STRATA_GLM_TRACE=<file>: append "layer expert" per routed expert (the routing distribution
+@@ -3630,7 +3630,7 @@
+     static bool trace_init = false;
+     if (!trace_init) {
+         trace_init = true;
+-        if (const char* tp = getenv("STRATA_GLM_TRACE")) trace = std::fopen(tp, "w");
++        if (const char* tp = maya_env("STRATA_GLM_TRACE")) trace = std::fopen(tp, "w");
+     }
+     if (trace)
+         for (int i = 0; i < k; ++i) std::fprintf(trace, "%d %d\n", layer, ids[i]);
+@@ -3770,10 +3770,10 @@
+         // STRATA_GLM_PREFETCH=1 opts IN: measured ~6% SLOWER on Mercury (the demand stream already
+         // saturates the 2.2 GB/s drive; extra readahead steals from it), kept for machines with a
+         // faster SSD where the idle bandwidth exists
+-        static const bool pf_on = getenv("STRATA_GLM_PREFETCH") != nullptr &&
+-                                  std::atoi(getenv("STRATA_GLM_PREFETCH")) != 0;
+-        static const int pf_ranks = getenv("STRATA_GLM_PREFETCH_RANKS") != nullptr
+-                                        ? std::atoi(getenv("STRATA_GLM_PREFETCH_RANKS"))
++        static const bool pf_on = maya_env("STRATA_GLM_PREFETCH") != nullptr &&
++                                  std::atoi(maya_env("STRATA_GLM_PREFETCH")) != 0;
++        static const int pf_ranks = maya_env("STRATA_GLM_PREFETCH_RANKS") != nullptr
++                                        ? std::atoi(maya_env("STRATA_GLM_PREFETCH_RANKS"))
+                                         : 3;
+         if (pf_on && pf_ranks > 0 && !host_probs_b_.empty() && (int) host_probs_b_.size() >= (layer + 1) * g.n_expert) {
+             static std::vector<float> lg_host;
+@@ -3973,7 +3973,7 @@
+ // fall back to the view) or with STRATA_GLM_KEEP_MAP=1.
+ void strata::core::Glm5Model::pack_release_views() {
+ #ifdef _WIN32
+-    const char* km = getenv("STRATA_GLM_KEEP_MAP");
++    const char* km = maya_env("STRATA_GLM_KEEP_MAP");
+     if (km != nullptr && std::atoi(km) != 0) return;
+     for (const Shard& s : pack_shards_)
+         if (s.base != nullptr && s.h_direct == nullptr) return;
+@@ -4210,7 +4210,7 @@
+     // the fast path keeps the pack's BIG BF16 rows as BF16 on the device (dense.bin stores them BF16,
+     // so this is lossless; F32 expansion doubled their bytes and their read time) and does not upload
+     // token_embd at all (the embedding row is dequantized on the host from the shard mapping)
+-    fast_mode_ = getenv("STRATA_GLM_SLOW") == nullptr;
++    fast_mode_ = maya_env("STRATA_GLM_SLOW") == nullptr;
+     if (exl3_ && !fast_mode_) {
+         err = "pack: an EXL3 model runs on the fast path only (unset MAYA_GLM_SLOW)";
+         return false;
+@@ -4261,7 +4261,7 @@
+         bytes += b;
+         by_kind[kind_of(r.name.substr(r.name.find('.', 4) + 1)) + how] += b;
+     }
+-    if (getenv("STRATA_GLM_TIMING") != nullptr) {
++    if (maya_env("STRATA_GLM_TIMING") != nullptr) {
+         std::vector<std::pair<uint64_t, std::string>> v;
+         for (auto& kv : by_kind) v.push_back({kv.second, kv.first});
+         std::sort(v.rbegin(), v.rend());
+@@ -4629,7 +4629,7 @@
+     // quant published without one (the block reads the trunk's hidden state and the embedding, so any quant's block
+     // fits), or a more precise block than the model's own: load_mtp looks there first.
+     bool mtp_extra = false;
+-    const char* mtp_gguf = getenv("STRATA_GLM_MTP_GGUF");
++    const char* mtp_gguf = maya_env("STRATA_GLM_MTP_GGUF");
+     if (fast_mode_ && l1_ == g_.n_layers && mtp_gguf != nullptr && mtp_gguf[0] != '\0') {
+         const bool own = find_tensor("blk." + std::to_string(g_.n_layers) + ".nextn.eh_proj.weight") != nullptr;
+         auto extra = std::make_unique<strata::GgufFile>(mtp_gguf);
+@@ -4650,12 +4650,15 @@
+     // (the pipelined speculative decode is a two-part one: a longer split leaves the block unloaded; one GPU loads it
+     // for the one-GPU MTP decode - glm_mtp.cu: by default on the Strix / Gorgon Halo APUs)
+     const bool mtp_one = l0_ == 0 && mtp_decode_wanted(dev_, n_parts_);
+-    if (fast_mode_ && l1_ == g_.n_layers && (g_.nextn > 0 || mtp_extra) && getenv("STRATA_GLM_NO_MTP") == nullptr &&
+-        (l0_ > 0 || getenv("STRATA_GLM_MTP") != nullptr || mtp_one)) {   // any split: the speculative decode, 2+ parts
++    if (fast_mode_ && l1_ == g_.n_layers && (g_.nextn > 0 || mtp_extra) && maya_env("STRATA_GLM_NO_MTP") == nullptr &&
++        (l0_ > 0 || maya_env("STRATA_GLM_MTP") != nullptr || mtp_one)) {   // any split: the speculative decode, 2+ parts
+         if (!load_mtp(gfs, err)) return false;
+         if (mtp_il_ >= 0) lt_ = l1_ + 1;
+         // the draft head's vocabulary (the one-GPU MTP decode; several conversations drafting, STRATA_GLM_MULTI_MTP)
+-        if (mtp_il_ >= 0 && (mtp_one || multi_mtp_setting() > 0)) mtp_vocab_scan(gfs);
++        // SYCL port (fixups35): the split's pipelined speculative decode drafts over the draft vocabulary too
++        // (MAYA_MTP_DV=0: the whole head) - its draft sits on the decode's critical cycle
++        const bool split_dv = l0_ > 0 && (maya_env("MAYA_MTP_DV") == nullptr || maya_env("MAYA_MTP_DV")[0] != '0');
++        if (mtp_il_ >= 0 && (mtp_one || multi_mtp_setting() > 0 || split_dv)) mtp_vocab_scan(gfs);
+     }
+ 
+     // 5. the router bias, host-side: the prefetch ranks the next-best experts per layer, and the
+@@ -4676,8 +4679,8 @@
+     int64_t floats = 2 * hc_dim;
+     // the fast path keeps the DSA latent cache in FP16 (half the bytes: at 128k context ~0.8 GB more for experts on
+     // each card, and the prompt attention reads half as much); the reference path (STRATA_GLM_SLOW) keeps F32
+-    lat_q8_ = fast_mode_ && g_.kv_lora % 32 == 0 && getenv("STRATA_GLM_KV_INT8") != nullptr &&
+-              std::atoi(getenv("STRATA_GLM_KV_INT8")) != 0;
++    lat_q8_ = fast_mode_ && g_.kv_lora % 32 == 0 && maya_env("STRATA_GLM_KV_INT8") != nullptr &&
++              std::atoi(maya_env("STRATA_GLM_KV_INT8")) != 0;
+     // KV streaming (--kv-resident N): the latent cache lives in pinned RAM and the state holds N positions of VRAM slots
+     // a layer (kv_stream_setup, below)
+     const int64_t kv_cells = fast_mode_ ? kv_resident_cells(g_.idx_kpool, max_ctx) : 0;
+@@ -4835,7 +4838,7 @@
+       } }
+ 
+     // STRATA_GLM_TIMING=1: the phase events (step() records them; ~10 us/token)
+-    if (getenv("STRATA_GLM_TIMING")) {
++    if (maya_env("STRATA_GLM_TIMING")) {
+         dpct::event_ptr a = nullptr, b = nullptr, c = nullptr, d = nullptr;
+         if (DPCT_CHECK_ERROR(a = new sycl::event()) == 0 &&
+             DPCT_CHECK_ERROR(b = new sycl::event()) == 0 &&
+@@ -4850,7 +4853,7 @@
+     //    on miss straight from the mmap'd shards, LRU residency.  The grouped kernels read a
+     //    host-mapped plan (UVA), so a token needs no plan copies.  STRATA_GLM_CPU_EXPERTS forces
+     //    the CPU native path (fallback + A/B).
+-    dev_experts_ = !fast_mode_ && getenv("STRATA_GLM_CPU_EXPERTS") == nullptr && g_.n_exp_used <= 8;
++    dev_experts_ = !fast_mode_ && maya_env("STRATA_GLM_CPU_EXPERTS") == nullptr && g_.n_exp_used <= 8;
+     if (dev_experts_) {
+         size_t gu_row_max = 0, d_row_max = 0;
+         for (const auto& nl : pack_layers_) {
+@@ -4894,7 +4897,7 @@
+         const size_t pool_avail = free_b > reserve ? free_b - reserve : 0;
+         // STRATA_GLM_POOL_SLOTS0=n caps the pool at n largest-class-equivalent slots (debug/tuning)
+         size_t pool_bytes_cap = pool_avail;
+-        if (const char* ps = getenv("STRATA_GLM_POOL_SLOTS0"))
++        if (const char* ps = maya_env("STRATA_GLM_POOL_SLOTS0"))
+             pool_bytes_cap = std::min<size_t>(pool_avail, (size_t) std::atoi(ps) * slot_bytes_);
+         // every class first gets one route's worth of slots (n_exp_used): a token's experts for a layer must all be
+         // resident at once, and a rare class (one layer of a different recipe - GLM-5.3 UD-Q2_K_XL's layer 8) given
+@@ -4969,7 +4972,7 @@
+         // pinned staging is faster than the driver's pageable bounce even for local slots.  24
+         // slots drain every layer.
+         constexpr int kBounceSlots = 24;
+-        if (getenv("STRATA_GLM_BOUNCE") &&
++        if (maya_env("STRATA_GLM_BOUNCE") &&
+             /*
+             DPCT1048:7: The original value cudaHostAllocDefault is not
+             meaningful in the migrated code and was removed or replaced with 0.
+@@ -4982,7 +4985,7 @@
+             return false;
+         }
+         // the staging pool: one pinned buffer + one worker per possible miss (n_exp_used <= 8)
+-        stage_on_ = getenv("STRATA_GLM_NO_STAGE") == nullptr;
++        stage_on_ = maya_env("STRATA_GLM_NO_STAGE") == nullptr;
+         if (stage_on_) {
+             stage_bufs_.assign((size_t) g_.n_exp_used, nullptr);
+             for (auto& b : stage_bufs_) {
+--- a/include/maya_compat.hpp
++++ b/include/maya_compat.hpp
+@@ -83,3 +83,32 @@
+     return 0;
+ #endif
+ }
++
++// SYCL port (fixups32): Windows' getenv takes the CRT's environment lock, and the decode path calls it per launch and
++// per poll (the four expert-service threads checked MAYA_TRACE on every spin) - the enqueue threads queued on that
++// lock (~70% of host samples).  maya_env caches each name per thread (no lock); maya_env_changed(), called after every
++// putenv/setenv, makes the next lookups re-read.  Values are never freed, so a returned pointer stays valid.
++#include <atomic>
++#include <deque>
++#include <string>
++#include <unordered_map>
++inline std::atomic<unsigned> maya_env_gen{0};
++inline void maya_env_changed() { maya_env_gen.fetch_add(1, std::memory_order_release); }
++inline const char* maya_env(const char* name) {
++    struct E { unsigned gen; const char* v; };
++    thread_local std::unordered_map<std::string, E> cache;
++    thread_local std::deque<std::string> vals;
++    thread_local std::string key;
++    const unsigned g = maya_env_gen.load(std::memory_order_acquire);
++    key.assign(name);
++    auto it = cache.find(key);
++    if (it != cache.end() && it->second.gen == g) return it->second.v;
++    const char* v = std::getenv(name);
++    const char* keep = nullptr;
++    if (v != nullptr) {
++        if (it != cache.end() && it->second.v != nullptr && std::strcmp(it->second.v, v) == 0) keep = it->second.v;
++        else { vals.emplace_back(v); keep = vals.back().c_str(); }
++    }
++    cache[key] = E{g, keep};
++    return keep;
++}

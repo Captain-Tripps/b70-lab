@@ -41,9 +41,9 @@ then reconcile current usable RAM with historical notes. Existing Qwen and DeepS
 | [llama.cpp-sycl/](llama.cpp-sycl/) | My changes to llama.cpp's SYCL backend: what each does, measured gains, upstream PR status | 2 merged upstream ([ggml-org/llama.cpp#29604](https://github.com/ggml-org/llama.cpp/pull/29604), [ggml-org/llama.cpp#29809](https://github.com/ggml-org/llama.cpp/pull/29809)), 1 open ([ggml-org/llama.cpp#30358](https://github.com/ggml-org/llama.cpp/pull/30358)); the rest live in a local fork or staged |
 | [flash-next/](flash-next/) | Qwen3.8-Flash-Next (180B MoE, 512 experts, 10 per token) tuning: 49 -> ~61 tok/s decode in llama.cpp | live |
 | [deepseek-v4/](deepseek-v4/) | DeepSeek V4 Flash: IQ2_XS/IQ3_XXS MoE kernel, DSpark drafting, sparse attention at depth | live |
-| [glm-5.3/](glm-5.3/) | GLM-5.3-Flash (321B MoE) brought into the fork: 16.5 -> 24-25 tok/s | live |
+| [glm-5.3/](glm-5.3/) | GLM-5.3-Flash (321B MoE): first in the llama.cpp fork (16.5 -> 24-25 tok/s), now [Project Maya's engine ported to SYCL](glm-5.3/sycl-port/): 45.5-45.8 tok/s decode, ~1,000 tok/s prompt read, 128k | live (SYCL port) |
 | [gpt-oss/](gpt-oss/) | gpt-oss-120b: MXFP4 reorder, 3-card layer split, cross-card pipeline | live; MXFP4 work merged upstream |
-| [strata-windows-port/](strata-windows-port/) | Native Windows port of the Strata engine; Level Zero has no peer access between B70s on Windows | current best for Flash-Next: 2 cards, IQ3_S, int8 KV, JIT build, `--ple-io mmap`: ~99 tok/s decode, ~1,420 tok/s prompt read (112k prompt: 1,433 tok/s), 2-hour soak clean, vision working. An AOT miscompile caused the earlier wrong answers |
+| [strata-windows-port/](strata-windows-port/) | Native Windows port of the Strata engine; Level Zero has no peer access between B70s on Windows | current best for Flash-Next: 2 cards, IQ3_S, int8 KV, JIT build, `--ple-io mmap`: ~99 tok/s decode, ~1,420 tok/s prompt read (112k prompt: 1,433 tok/s), 2-hour soak clean, vision working. An AOT miscompile caused the earlier wrong answers. [Slow-start lottery](strata-windows-port/slow-starts/) traced to the Windows file cache; restart-if-slow guard live |
 | [reproducers/](reproducers/) | Standalone programs: Level Zero multi-thread submission deadlock, Windows peer-access probe | deadlock still present on driver 8976; reported to Intel ([forum](https://community.intel.com/t/144119), [intel/llvm#23530](https://github.com/intel/llvm/issues/23530)) |
 | [bench/](bench/) | Benchmark scripts and how to compare fairly | |
 | [rejected-ideas/](rejected-ideas/) | Things that did not help, with numbers | |
@@ -97,12 +97,12 @@ pull requests, and nothing here is meant to be copied into llama.cpp issues or p
 
 This builds on a lot of other people's work: the ggml / llama.cpp authors and the SYCL backend maintainers and
 reviewers (arthw and others); MTP / DSpark speculative decoding in llama.cpp (am17an, PR #25784); the Q8_0 ESIMD /
-wide-load work by cwriter (#29186) and iki007's SYCL fork; Unsloth's GGUF quants; Project Maya's GLM-5.3 quants;
+wide-load work by cwriter (#29186) and iki007's SYCL fork; Unsloth's GGUF quants; Project Maya's GLM-5.3 engine and quants (Peasant Smith and contributors), which the SYCL port starts from; Intel's SYCLomatic;
 the Strata engine (Niko1221 and contributors, with the B70 work from hotschmoe and SergiioB); ISTA-DASLab's
 GSQ-RCO quant. Mistakes in this repo are ours, not theirs.
 
 ## License
 
-Docs and scripts written for this repo: see [LICENSE](LICENSE). Patches and files derived from llama.cpp and Strata stay under
+Docs and scripts written for this repo: see [LICENSE](LICENSE). Patches and files derived from llama.cpp, Strata and Project Maya stay under
 their MIT licenses; the original notices are in [LICENSES/](LICENSES/) and each patch file names its source.
 No model weights or binaries are included.

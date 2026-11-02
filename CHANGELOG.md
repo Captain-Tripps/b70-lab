@@ -3,6 +3,33 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-01
+- GLM-5.3-Flash: Project Maya's CUDA engine ported to SYCL / Level Zero on native Windows, 4 cards, now the live
+  GLM entry: decode 24-25 (llama.cpp fork) -> 45.5-45.8 tok/s, 8k prompt read 309 -> 966-996 tok/s, 128k context.
+  36 fix rounds over two days; the scripts, the shim header, the post-round-31 patch, benchmarks and the eight Level
+  Zero / Windows rules found on the way are in [glm-5.3/sycl-port](glm-5.3/sycl-port/). Rejected with numbers: KDA
+  SYCL graphs, int8 XMX expert GEMM, multi-token draft windows, batched command lists. The llama.cpp-fork GLM entry is
+  retired.
+- Strata slow starts: cause found. Windows' standby list (file cache) filling RAM makes the expert-parallel exchange
+  ~4x slower; purging it before each start gave 8 of 8 fast starts vs 0 of 8 in the same hour. A reboot alone and a
+  clean engine stop do not fix it. The served entry now runs a restart-if-slow guard that purges before a retry.
+  [strata-windows-port/slow-starts](strata-windows-port/slow-starts/).
+- Brought over the 2026-10-29 correction of the served `--adapt-every 0` result (it was one slow start), which had
+  stayed on a side branch.
+- From 2026-10-29, not written up elsewhere: Strata v0.2.8 built from source on Windows (no Windows SYCL package
+  ships): its layer split gives a steady 55.0-57.5 tok/s median on 2 cards, below the lab build's fast starts (served
+  entry unchanged). A community Gemma 4 26B-A4B Q8 recipe (llama.cpp b9769 + fused MoE kernels,
+  [steveseguin/b70-optimization-lab](https://github.com/steveseguin/b70-optimization-lab)) on Windows: 85.7 tok/s median
+  on UD-Q8_K_XL + MTP vs 60.1 for the single-card Q4 entry; Windows needs `/EHsc` kept in `CMAKE_CXX_FLAGS`, and its
+  fused MoE down kernel crashes on non-Unsloth Q8 layouts.
+
+## 2026-10-29
+- Corrected the 2026-10-28 served `--adapt-every 0` result: served Strata speed is set per start and varies 58-100 tok/s
+  with or without the flag, so the "99-104 -> 38-40" was one slow start. No clear served effect; config unchanged.
+- Same-day head-to-head through llama-swap, cold requests, thinking off: Strata (2 cards) 84.2 vs llama.cpp Flash-Next
+  MTP (4 cards) 50.4 tok/s median. A slow state (~39 tok/s on every start) after RAM exhaustion was cleared by a reboot.
+  [STRATA-ADAPT-TIER](work/strata-v41-agent-runner/STRATA-ADAPT-TIER.md).
+
 ## 2026-10-28
 - DeepSeek V4.1 Flash 1017 on the llama.cpp SYCL fork: first real numbers. Best 2.46 tok/s decode / 12.7 prompt read
   (`-ncmoe 24 -t 46` plus one `EmptyWorkingSet` after load); CPU-only 1.65, so the CPU expert layers are the
