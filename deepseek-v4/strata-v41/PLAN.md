@@ -1,5 +1,7 @@
 # Action plan: Strata DeepSeek V4.1 on four B70s, native Windows
 
+> **Update 2026-11-05:** The Strata V4.1 SYCL port remains unmeasured, but the separate llama.cpp SYCL fork now loads and generates with an upstream-layout GSQ-RCO pack including Engram tables. One warm smoke-test run measured 1.505 tok/s decode; independent parity and the bottleneck are unverified. Owner's daily-use target is at least 50 tok/s. See [the current results and next tests](RESULTS-2026-11-05.md). The older 2026-10-28 checkpoint below is historical: its no-throughput and host-mirror claims were superseded by later measurements. These llama.cpp results do not move the Strata gates.
+
 Status: **planned; no DeepSeek V4.1 Intel implementation or performance measurements from this work.**
 Prepared 2026-10-26. Updated for hosted DeepSeek/OpenClaw execution. Start with STEP-000, then STEP-001; later gates retain their IDs.
 This is a research-only handoff, not a claim that the model can currently launch.
