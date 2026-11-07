@@ -8,9 +8,7 @@ token), compressed sparse attention + "lightning indexer", 1M training context.
   model has IQ gate/up experts.
 - Draft model: `dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf` (10.9 GB) from the same repo, for DSpark speculative decoding.
 - Status: **live** on fork runtime `r52`, 131k context with DSpark.
-- Next for **V4.1 Flash 1017**: [native Windows Strata port action plan](strata-v41/PLAN.md), added 2026-10-26;
-  planning only, no V4.1 Intel measurements yet. The older V4 0731 expert-only parallelism proposal was
-  **rejected after profiling**; its evidence remains in [PLAN-expert-parallel.md](PLAN-expert-parallel.md).
+- **V4.1 Flash 1017:** the llama.cpp SYCL fork now loads a converted pack with Engram tables; one warm smoke-test run reached 1.505 tok/s decode. Parity and the bottleneck remain unverified; the daily-use target is at least 50 tok/s. See [2026-11-05 results](strata-v41/RESULTS-2026-11-05.md) and the separate [Strata port plan](strata-v41/PLAN.md). The older V4 0731 expert-only parallelism proposal was **rejected after profiling**; its evidence remains in [PLAN-expert-parallel.md](PLAN-expert-parallel.md).
 
 Main flags (reconstructed from my notes; the fork-only switches are explained in [../llama.cpp-sycl/](../llama.cpp-sycl/)):
 
