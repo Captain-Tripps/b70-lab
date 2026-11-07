@@ -22,7 +22,8 @@
     "STRATA_GLM_CPU_LANE": "0",
     "STRATA_GLM_RAM_GB": "40",
     "ZES_ENABLE_SYSMAN": "1",
-    "STRATA_GLM_RESIDENT_SKIP": "1"
+    "STRATA_GLM_RESIDENT_SKIP": "1",
+    "STRATA_GLM_RESERVE_MB": "400"
   },
   "lib_dirs": [
     "<work>\\rt-live",
@@ -30,5 +31,12 @@
     "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\2026.0\\bin"
   ],
   "reasoning_effort": "high",
-  "thinking_budget": 8192
+  "thinking_budget": 8192,
+  "vision": {
+    "exe": "<work>/maya/build-vision-cpu/bin/maya-vision.exe",
+    "mmproj": "<work>/maya/data/vision/mmproj-GLM-5.3-Flash-F16.gguf",
+    "model": "<work>/maya/data/vision/GLM-5.3-Flash-vocab.gguf",
+    "gpu": false,
+    "threads": 24
+  }
 }

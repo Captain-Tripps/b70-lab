@@ -3,6 +3,18 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-07
+- Replication gaps filled, so both daily recipes can be rebuilt from this repo:
+  - **Strata Flash-Next:** how to build the pack and the MTP draft layer (`iq_pack.py`, `mtp_fetch.py`, `mtp_pack.py`,
+    `mtp_rt.py`), and where the draft vocabulary and expert profile come from (they ship in the Strata checkout). Also
+    the abliterated variant and vision at 1024 image tokens.
+    [strata-windows-port](strata-windows-port/#how-to-run-it).
+  - **GLM SYCL port:** the serving pieces added after 11-01, namely Maya's server and the llama-swap entry, a patch that
+    turns pictures into text notes when there is no vision encoder, the CPU vision encoder, `STRATA_GLM_RESERVE_MB=400`,
+    and the GPU keep-alive. [glm-5.3/sycl-port](glm-5.3/sycl-port/#serving-it-added-2026-11-07).
+- Upstream Strata v0.2.12 helper-card fix (32.1 -> 61.3 tok/s served) sent as Niko1221/Strata#5540.
+- The llama.cpp Flash-Next entries were retired on 2026-11-06; [flash-next](flash-next/) is kept as the reference.
+
 ## 2026-11-01
 - GLM-5.3-Flash: Project Maya's CUDA engine ported to SYCL / Level Zero on native Windows, 4 cards, now the live
   GLM entry: decode 24-25 (llama.cpp fork) -> 45.5-45.8 tok/s, 8k prompt read 309 -> 966-996 tok/s, 128k context.

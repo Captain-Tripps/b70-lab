@@ -7,7 +7,9 @@ This is my daily-driver model.
 
 - Model file: Unsloth `Qwen3.8-Flash-Next-GGUF`, `UD-Q4_K_XL` (4 shards, 111.3 GB) + `mmproj-F16.gguf` for vision.
   K-quants chosen over IQ4_XS because the SYCL backend has reordered (fast) kernels for K-quants.
-- Status: **live** on fork runtime `r62`.
+- Status: **retired 2026-11-06** (was live on fork runtime `r62`). The daily driver is now Strata on two cards, which is
+  faster at a smaller quant: see [../strata-windows-port/](../strata-windows-port/) for the full recipe. The llama.cpp
+  numbers below stay as the reference.
 
 ## Current setup (live)
 

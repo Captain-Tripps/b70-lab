@@ -13,6 +13,9 @@ Intel's `icx` compiler, including two-card expert parallel and int8 KV.
   Not done: AOT with oneAPI 2026.1.
 - Start-to-start speed lottery on the served build (78-89 vs 32-45 tok/s per start): cause = the Windows file cache;
   fix and guard in [slow-starts/](slow-starts/) (2026-11-01).
+- Upstream Strata (Niko1221/Strata) v0.2.12 does not include this two-card expert parallel mode. Built on Windows, its
+  helper-card mode (`--expert-cache-device1 auto`) decoded 32 tok/s because of an adaptive-tier check that ignores the
+  helper's cache; fixed to 61 tok/s in Niko1221/Strata#5540 (2026-11-07).
 
 Patches (prepared with AI assistance; Strata is MIT, notice in
 [../LICENSES/Strata-LICENSE](../LICENSES/Strata-LICENSE)). Apply in order with `git apply`:
@@ -42,7 +45,31 @@ An empty `STRATA_SYCL_AOT` means the GPU driver compiles the device code at firs
 AOT build with int8 KV (wrong answers). On driver 32.0.101.8976 the engine was ready in under a minute. Put the oneAPI
 runtime DLLs next to `strata.exe` or on `PATH`.
 
-**2. Engine config essentials** (full file: `configs/strata-iq3s-200k1-pf8k.json`):
+**2. Model files.** The config points at four things besides the GGUF: a pack, the MTP draft layer, a draft
+vocabulary and an expert profile. Download ISTA-DASLab's `Qwen3.8-Flash-Next-GSQ-RCO-GGUF` IQ3_S, both shards, into one
+folder (check them against the sha256 sums on the model page). Then, from the Strata checkout, in its Python venv:
+
+```
+set STRATA_GGUF_PY=<STRATA_SOURCE_DIR>\build-win\_deps\strata_llamacpp-src\gguf-py
+set PYTHONUTF8=1
+
+rem pack (the dense weights, the tokenizer folder the config names, the expert index)
+python tools\iq_pack.py --gguf <MODELS_DIR>\...\IQ3_S\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf ^
+       --out <STRATA_DATA_DIR>\packs\iq3_s
+
+rem MTP draft layer: fetch (~5 GB; the fetch can drop, so re-run it until it succeeds), verify, pack, runtime layer
+python tools\mtp_fetch.py fetch --out <STRATA_DATA_DIR>\mtp
+python tools\mtp_fetch.py verify --out <STRATA_DATA_DIR>\mtp
+python tools\mtp_pack.py --src <STRATA_DATA_DIR>\mtp --experts q2_0 --out <STRATA_DATA_DIR>\mtp\mtp-q2_0.gguf
+python tools\mtp_rt.py --gguf <STRATA_DATA_DIR>\mtp\mtp-q2_0.gguf --out <STRATA_DATA_DIR>\mtp\rt
+```
+
+`gguf-py` exists after the step 1 build has fetched Strata's pinned llama.cpp. `iq_pack.py` needs shard 2 in the same
+folder as shard 1. The draft vocabulary (`data\draft_vocab_en.bin`) and the expert profile
+(`data\expert-profile-sycl.bin`) ship in the Strata checkout; nothing to build. The config's `--mtp` is the `rt`
+folder, `tokenizer` is the pack's `tokenizer` folder.
+
+**3. Engine config essentials** (full file: `configs/strata-iq3s-200k1-pf8k.json`):
 
 | Setting | Value | Why |
 |---|---|---|
@@ -56,7 +83,7 @@ runtime DLLs next to `strata.exe` or on `PATH`.
 | `STRATA_VERIFY_DEVICE_PLAN`, `STRATA_VERIFY_NO_HOST` | `1`, `1` | without them verify waits on a host doorbell and hangs |
 | `ONEAPI_DEVICE_SELECTOR` | e.g. `level_zero:2,3` | the two cards to use |
 
-**3. Vision (optional, CPU encoder).** `strata-vision.exe`, built from llama.cpp's `mtmd` tool at the llama.cpp
+**4. Vision (optional, CPU encoder).** `strata-vision.exe`, built from llama.cpp's `mtmd` tool at the llama.cpp
 commit the engine pins, with ISTA-DASLab's BF16 mmproj. Config section:
 
 ```json
@@ -65,14 +92,22 @@ commit the engine pins, with ISTA-DASLab's BF16 mmproj. Config section:
   "mmproj": "<MODELS_DIR>\\...\\mmproj-Qwen3.8-Flash-Next-BF16.gguf",
   "model": "<MODELS_DIR>\\...\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
   "gpu": false,
-  "max_tokens": 300,
+  "max_tokens": 1024,
   "threads": 24
 }
 ```
 
-About 4.4 s per new image on the test machine's CPU (24 threads, 300 image tokens).
+Use `max_tokens` 1024 for screenshots and text in images (changed from 300 on 2026-11-06). One terminal screenshot,
+same two questions, temperature 0:
 
-**4. Serve.** Strata's OpenAI-compatible server reads the engine config:
+| `max_tokens` | Image prompt | Error line copied | Time (question 1 / 2) |
+|---|---|---|---|
+| 300 | 361 tokens | misread `invoice.ts` as `invoices.ts` | 9.8 s / 5.6 s |
+| 1024 | 1,093 tokens | exact | 17.7 s / 7.1 s |
+
+The CPU encode was about 4.4 s per new image at 300 tokens (24 threads).
+
+**5. Serve.** Strata's OpenAI-compatible server reads the engine config:
 
 ```
 python sycl\serve\server_intel.py --engine strata --config <CONFIG.json> --host 127.0.0.1 --port <PORT>
@@ -96,6 +131,26 @@ models:
 
 `cmdStop` with `/T` ends the Python server and the `strata.exe` engine under it. One model swap logged
 `stop signal failed: exit status 255` although both processes did end; check the process list after a swap if in doubt.
+
+**Abliterated variant (2026-11-06).** The same recipe runs an abliterated IQ3_S: SC117's
+`Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_S` shard 1 with ISTA-DASLab's shard 2 (the per-layer embedding table,
+unchanged by abliteration). Build its own pack with `iq_pack.py` from the abliterated shard 1, and keep the stock MTP
+`rt` folder.
+- **Shard 2 location:** `iq_pack.py` and the engine expect shard 2 next to shard 1, so put a hardlink (or copy) of
+  ISTA-DASLab's shard 2 in the abliterated folder, renamed `...-abliterated-IQ3_S-00002-of-00002.gguf`.
+- **`--ple-gguf`:** point it at that renamed file, not ISTA-DASLab's path. The same shard reached under two names
+  stops the engine with `native dense: duplicate split shard number`.
+- **Other config changes:** `--native` and the vision `model` are the abliterated shard 1, and `tokenizer` is the new
+  pack's.
+
+Same 4 prompts, temperature 0, one start each:
+
+| | Code | Math | Story | Refusal probe | Load |
+|---|---|---|---|---|---|
+| Stock | 122 tok/s | 121 | 68 | 83, refuses | 287 s |
+| Abliterated | 115 tok/s | 116 | 69 | 90, answers | 195 s |
+
+Speeds are within start-to-start noise, and both got the math right.
 
 ## Results
 
