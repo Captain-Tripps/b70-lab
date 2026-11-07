@@ -15,6 +15,10 @@ changed and when.
 - Upstream Strata v0.2.12 helper-card fix (32.1 -> 61.3 tok/s served) sent as Niko1221/Strata#5540.
 - The llama.cpp Flash-Next entries were retired on 2026-11-06; [flash-next](flash-next/) is kept as the reference.
 
+## 2026-11-05
+- DeepSeek V4.1 Flash 1017: converted the older GSQ-RCO pack and an isolated copy of its Engram tables to the upstream llama.cpp layout. The converted 4-B70 SYCL run gave 1.505 tok/s warm decode and 10.287 prompt in one smoke test. The earlier no-Engram 18-layer run gave 2.730 / 15.237, but used a different physical drive and settings; parity and bottleneck remain unmeasured. Owner target: at least 50 tok/s. [Results and next tests](deepseek-v4/strata-v41/RESULTS-2026-11-05.md).
+- Freed the full system drive by moving older Remote Desktop diagnostic traces to a preserved archive on D:; 131.80 GiB moved. Storage capacities in the results are point-in-time.
+
 ## 2026-11-01
 - GLM-5.3-Flash: Project Maya's CUDA engine ported to SYCL / Level Zero on native Windows, 4 cards, now the live
   GLM entry: decode 24-25 (llama.cpp fork) -> 45.5-45.8 tok/s, 8k prompt read 309 -> 966-996 tok/s, 128k context.
