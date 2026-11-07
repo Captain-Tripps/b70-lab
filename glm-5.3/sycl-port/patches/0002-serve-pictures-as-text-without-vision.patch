@@ -1,0 +1,38 @@
+diff --git a/serve/server.py b/serve/server.py
+index 73897fe..3e7b8e7 100644
+--- a/serve/server.py
++++ b/serve/server.py
+@@ -181,6 +181,22 @@ QUEUE_WARN_S = 60.0
+ 
+ 
+ # ------------------------------------------------------------------------------------------------ engines
++
++def _media_as_text(messages):
++    """The conversation with each picture or video replaced by a short note, for a server without a vision encoder:
++    agents send pictures to text-only models (OpenCode reads back its own screenshots), and one picture left in the
++    history would otherwise fail every later request of the session."""
++    out = []
++    for m in messages:
++        c = m.get("content")
++        if isinstance(c, list) and any(isinstance(i, dict) and i.get("type") in ("image", "video") for i in c):
++            m = {**m, "content": "\n".join(
++                i.get("text", "") if i.get("type") == "text"
++                else f"[{i['type']} omitted: this model has no vision encoder and cannot see it]"
++                for i in c if isinstance(i, dict) and i.get("type") in ("text", "image", "video"))}
++        out.append(m)
++    return out
++
+ class Engine(Protocol):
+     max_context: int
+     def generate(self, ids: list[int], max_new: int, sampling: dict, cancel: threading.Event) -> Iterator[int]: ...
+@@ -2968,6 +2984,10 @@ class Service:
+         a note after that result (_tool_repeat); one it made again after TOOL_NUDGES such notes is blocked in this
+         answer (kwargs["_blocked"] for run(), _block_suffixes); and in a conversation that repeats itself an answer
+         may not end the turn short (kwargs["_blocked"]["_keep"], _keep_suffix)."""
++        if self.vision is None and media_of(messages):
++            print(f"[maya] {len(media_of(messages))} picture(s) or video(s) in the request sent as text notes: "
++                  "no vision encoder", flush=True)
++            messages = _media_as_text(messages)
+         on = self.loop_guard if guard is None else guard
+         blocked = loop_guard.tool_blocked(messages) if on else {}
+         looping = bool(blocked) or bool(on and loop_guard.echoes(messages))
