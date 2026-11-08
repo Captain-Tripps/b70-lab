@@ -15,6 +15,7 @@ Intel's `icx` compiler, including two-card expert parallel and int8 KV.
   card 0's own expert rows went through the host-memory exchange region. Keeping them in VRAM gives ~106 tok/s on
   every start (8 of 8), output identical. Patch and details in [slow-starts/](slow-starts/); sent upstream as
   [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1). The 2026-11-01 file-cache guard is retired.
+  The prompt read had the same kind of leak (card 1's rows buffer): ~1,550 tok/s at 37k on every start, was 775-1,552.
 - Upstream Strata (Niko1221/Strata) v0.2.12 does not include this two-card expert parallel mode. Built on Windows, its
   helper-card mode (`--expert-cache-device1 auto`) decoded 32 tok/s because of an adaptive-tier check that ignores the
   helper's cache; fixed to 61 tok/s in Niko1221/Strata#5540 (2026-11-07).
