@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-08
+- 3/4-card `-sm tensor` all-reduce for ggml-sycl, roughed out for 92es (discussion #3), as a patch on the llama.cpp#30956 head. 4 cards read prompts at ~955 tok/s instead of 110 on the old generic fallback (layer split ~1,020), perplexity equal; decode 9.1 vs layer 17.3, so per-token syncs stay the cost. Direct card-to-card copies are no faster than the old fallback here. [NWAY-ALLREDUCE-2026-11-08.md](llama.cpp-sycl/NWAY-ALLREDUCE-2026-11-08.md).
+
 ## 2026-11-07
 - Strata prompt-read lottery fixed, the same kind of leak as the decode one. With EP reduce on, card 1's 800 MiB rows buffer is never read by card 0, but it was allocated as a shared exchange region, which on Windows is host memory. It is now private VRAM. A 37k-token prompt reads at 1,476-1,570 tok/s on every start (first token ~24 s), against 774-780 on the old allocation; decode and greedy output unchanged. [slow-starts](strata-windows-port/slow-starts/#second-leak-the-prompt-read-2026-11-07).
 - Strata slow starts, real cause found and fixed. With EP psum, card 0's own expert rows were written into the exchange region, which this Windows port has to allocate in host memory, and the combine read them back over PCIe. Keeping them in VRAM: 8 of 8 fresh starts at 104-108 tok/s (median 106.4) vs 54-83 on the old path, greedy output identical; ~30% above the old fast starts too. Found with per-stage stamps on both cards (card 1's side and the handshake were identical across starts). The 11-01 file-cache theory was a side effect, and its restart-if-slow guard and standby purge are retired. Patch in [slow-starts](strata-windows-port/slow-starts/#cause-and-fix-2026-11-07), sent upstream as [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1).
