@@ -11,8 +11,10 @@ Intel's `icx` compiler, including two-card expert parallel and int8 KV.
   `--ple-io mmap`**: decode ~99 tok/s, prompt read ~1,420 tok/s at 33.6k, answers correct, vision working, 2-hour
   soak through llama-swap clean. The AOT build with oneAPI 2026.0 miscompiles the int8 attention (see below).
   Not done: AOT with oneAPI 2026.1.
-- Start-to-start speed lottery on the served build (78-89 vs 32-45 tok/s per start): cause = the Windows file cache;
-  fix and guard in [slow-starts/](slow-starts/) (2026-11-01).
+- Start-to-start speed lottery on the served build (78-89 vs 32-45 tok/s per start), fixed 2026-11-07: with EP psum,
+  card 0's own expert rows went through the host-memory exchange region. Keeping them in VRAM gives ~106 tok/s on
+  every start (8 of 8), output identical. Patch and details in [slow-starts/](slow-starts/); sent upstream as
+  [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1). The 2026-11-01 file-cache guard is retired.
 - Upstream Strata (Niko1221/Strata) v0.2.12 does not include this two-card expert parallel mode. Built on Windows, its
   helper-card mode (`--expert-cache-device1 auto`) decoded 32 tok/s because of an adaptive-tier check that ignores the
   helper's cache; fixed to 61 tok/s in Niko1221/Strata#5540 (2026-11-07).

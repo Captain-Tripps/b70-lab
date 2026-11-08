@@ -1,4 +1,4 @@
-# Strata on Windows: the slow-start lottery (cause: the file cache)
+# Strata on Windows: the slow-start lottery (cause: card 0's own expert rows in host memory)
 
 The served Strata build (Qwen3.8-Flash-Next GSQ-RCO IQ3_S, two B70s with expert parallel, 1 x 200k, see
 [../README.md](../README.md)) landed in one of two speeds per engine start, and stayed there until restarted:
@@ -12,7 +12,53 @@ The served Strata build (Qwen3.8-Flash-Next GSQ-RCO IQ3_S, two B70s with expert 
 Same binary, same config, same cards, same answers. The slow mode is ~2.4x slower on every prompt, prompt reading
 included.
 
-## Cause
+## Cause and fix (2026-11-07)
+
+**Card 0 wrote its own expert results into host memory.** With `STRATA_NIGHT_EP_PSUM=1` (in the served config), card 1
+returns one weighted-sum row per token in its own region (`ep_psum0_`) and never touches card 0's row buffer
+`parts_`. But `Verifier::ep_init` still pointed `parts_` at the exchange region `ep_rows0_`:
+
+```cpp
+if (!ep_verify_ && !self) parts_ = ep_rows0_;
+```
+
+On Linux that costs nothing, because the region is card 0's VRAM, shared with card 1 through Level Zero IPC. Windows
+has no peer access between B70s, so this port allocates the exchange regions as **host USM**. As a result, every grouped
+expert launch on card 0 wrote its rows over PCIe, and the combine read them back. How fast that went depended on the
+pinned pages a process happened to get. That is why speed was fixed per start, why it drifted with the state of
+RAM, and why purging the file cache seemed to help (it changes which pages a new process gets).
+
+Fix: keep `parts_` in VRAM when PSUM is on (`0002-ep-psum-own-rows-in-vram.patch`, 6 lines in `verify.cpp`;
+`STRATA_EP_PARTS_HOST=1` restores the old path). Sent upstream as
+[hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1).
+
+| 8 interleaved fresh starts per arm, no purge, file cache at ~90 GB | Median decode per start (tok/s) |
+|---|---|
+| fix | 106.5, 106.6, 107.5, 106.3, 104.2, 106.0, 107.8, 104.8 |
+| old path (same binary, `STRATA_EP_PARTS_HOST=1`) | 79.3, 82.8, 54.1, 82.6, 80.7, 82.6, 56.8, 59.4 |
+
+The fix is also ~30% faster than the old *fast* starts, because those paid for the PCIe round trip too. Greedy output
+was identical to the unpatched build on 4 fixed prompts. Served through llama-swap: 111-133 tok/s on code / explain /
+summary requests. The restart-if-slow guard and the standby purge below are retired.
+
+How it was found: per-stage stamps on **both** cards. A `gpu_stamp` on card 1's queue at each step of its exchange,
+plus one on card 0 just before its wait, all on the same host clock. Card 1's side and the flag handshake were
+identical in fast and slow starts:
+
+| ms per window (sum over layers) | fast start | slow starts |
+|---|---|---|
+| card 1: copy inbox / experts / send | 0.19 / 5.1 / 0.4 | 0.19 / 5.1 / 0.4 |
+| card 0: waiting for card 1 | 0.0 | 0.0 |
+| card 0: flag seen after both done | 0.17 | 0.18 |
+| **card 0: its own grouped experts** | **11.5** | **31.7-50.9** |
+| card 0 with the fix | 4.4 | - |
+
+GPU memory placement counters (dedicated / shared per card) were identical in every start, so Windows was not
+moving VRAM to system memory. One aside: an earlier test that only changed how the exchange regions are allocated
+(2 MB alignment, an arena, uncached) showed no effect over 8 starts. 3 starts per arm had suggested a win, so this
+lottery needs at least 8 interleaved starts per arm to read.
+
+## First theory (2026-11-01, superseded): the file cache
 
 **Windows' standby list (the file cache) filling RAM.** Purging it before each start made every start fast, in the
 same hour that gave 0 fast starts out of 8 without it:
@@ -28,7 +74,8 @@ standby list held ~71 GB of the machine's 96 GB.
 
 Mechanism (inferred, not measured directly): the two cards exchange expert results through pinned host USM. Pages
 for a new pinned allocation come from wherever free memory is; once the standby list holds most of RAM they are
-repurposed, scattered pages, and the cards' accesses to that buffer get slower.
+repurposed, scattered pages, and the cards' accesses to that buffer get slower. (Partly right: the speed did depend
+on the pinned pages. But the traffic that should not have been there at all was card 0's own rows; see above.)
 
 ## How it was found
 
@@ -41,7 +88,7 @@ the PCIe link, host USM bandwidth and small-copy latency (28.4 / 26.7 GB/s, 3.7 
 CPU spin, GPU compute and clocks (2,800 MHz on both cards), which physical cards, leftovers of killed runs (a clean
 `QUIT` stop does not help), and a reboot by itself.
 
-## The fix in use: restart if slow, purge first
+## The old workaround (2026-11-01, retired 2026-11-07): restart if slow, purge first
 
 `0001-serve-restart-if-slow-guard-with-standby-purge.patch` (against `sycl/serve/server_intel.py`) wraps the engine
 start. After READY it times a short greedy probe (a 39-token chat-templated code prompt, 160 tokens) and starts the
@@ -67,7 +114,8 @@ NSSM). No download.
 `start_ab.py` is the harness behind every table here: N fresh server starts on a spare port (`PORT`, default 8090), 4 prompts each, with
 `FLOOR`, `CLEAN=1` and `PURGE=1` switches (see its header).
 
-## Not done
+## Engine-side fix
 
-An engine-side fix that would make the purge unnecessary: allocate the exchange buffers so their physical layout
-does not depend on the file cache (for example large pages, or one allocation made early and reused).
+Done 2026-11-07, see [Cause and fix](#cause-and-fix-2026-11-07). The idea listed here before (allocate the exchange
+buffers so their layout does not depend on the file cache) was tested and did not help; the real fix was to stop
+card 0's own rows from going through the exchange region at all.

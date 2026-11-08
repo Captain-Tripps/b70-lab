@@ -1,0 +1,46 @@
+From: Captain-Tripps
+Subject: [PATCH] sycl verify: EP psum: keep card 0's own expert rows out of the exchange region
+
+Under STRATA_NIGHT_EP_PSUM the peer returns one weighted-sum row per token
+into ep_psum0_ (ep_send_psum) and never writes parts_. ep_init still aliases
+parts_ to ep_rows0_, so card 0's grouped experts write their own rows into
+the exchange region and ep_combine_psum reads them back from there.
+
+That is free while ep_region_alloc gives card 0 VRAM (zeMemAllocDevice +
+IPC). Where the region has to be host USM instead (e.g. a Windows port with
+no Level Zero IPC between the cards) every grouped launch writes its rows
+over PCIe, at a speed that depends on the pinned pages a process happens to
+get. On 2x Arc Pro B70 (Windows 11, Qwen3.8-Flash-Next IQ3_S, EP + PSUM +
+MTP), decode varied 33-87 tok/s from one fresh start to the next; per-stage
+stamps put all of the difference in card 0's own grouped experts
+(11.5 vs 31-51 ms/window) with card 1's side and the flag handshake equal.
+
+Keep parts_ as the card's own buffer when ep_psum_ is on.
+STRATA_EP_PARTS_HOST=1 restores the alias. Non-PSUM EP is unchanged
+(there the peer does write its rows into parts_).
+
+Measured (Windows, 8 interleaved fresh starts per arm, median tok/s per start):
+  fix:   106.5 106.6 107.5 106.3 104.2 106.0 107.8 104.8
+  alias:  79.3  82.8  54.1  82.6  80.7  82.6  56.8  59.4
+Greedy output identical to the unpatched build on 4 fixed prompts.
+Linux / IPC path: not measured; expected neutral (the region is already VRAM).
+
+---
+diff --git a/sycl/src/core/verify.cpp b/sycl/src/core/verify.cpp
+index d035c69..8cac6af 100644
+--- a/sycl/src/core/verify.cpp
++++ b/sycl/src/core/verify.cpp
+@@ -2062,7 +2062,12 @@ bool Verifier::ep_init(std::string& err) {
+     ep_rows0_ = (float*) parts->local;       ep_parts_on1_ = (float*) parts->remote;
+     // the peer writes its rows straight into parts_; the two checks keep this card's own rows apart from them
+     static const bool self = [] { const char* v = std::getenv("STRATA_EP_SELF"); return v && v[0] == '1'; }();
+-    if (!ep_verify_ && !self) parts_ = ep_rows0_;
++    // Under STRATA_NIGHT_EP_PSUM the peer returns per-token sums into ep_psum0_ and never writes parts_, so this card's
++    // own rows stay in its own buffer. Aliasing parts_ to ep_rows0_ only works out when that region is this card's VRAM
++    // (the IPC path); where ep_region_alloc falls back to host USM every grouped launch writes its rows over PCIe and the
++    // combine reads them back. STRATA_EP_PARTS_HOST=1 restores the alias.
++    static const bool parts_host = [] { const char* v = std::getenv("STRATA_EP_PARTS_HOST"); return v && v[0] == '1'; }();
++    if (!ep_verify_ && !self && (!ep_psum_ || parts_host)) parts_ = ep_rows0_;
+     if (ep_plan1_on_) {
+         ep_plan1_on0_ = sycl::malloc_device<int32_t>((size_t) 2 * (plan_i32_ + 16), *cs_);
+         if (ep_plan1_on0_ == nullptr) { err = "verify: expert parallel: plan buffer failed"; return false; }
