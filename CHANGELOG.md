@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-07
+- Windows check of two changes proposed by 92es in discussion #3. The `nsm` / 8 fix for Xe2 gets most of the fork's TILE split-floor gain: Mistral-Small-3.2 decode at 32k +16.6% vs stock (floor +18.4%), Qwen3.8-27B +4.6% (floor +5.4%), perplexity unchanged. The per-dtype oneDNN probe is correct on B70 but no faster. [NSM-AND-DNNL-PROBE-2026-11-07.md](llama.cpp-sycl/NSM-AND-DNNL-PROBE-2026-11-07.md).
 - Replication gaps filled, so both daily recipes can be rebuilt from this repo:
   - **Strata Flash-Next:** how to build the pack and the MTP draft layer (`iq_pack.py`, `mtp_fetch.py`, `mtp_pack.py`,
     `mtp_rt.py`), and where the draft vocabulary and expert profile come from (they ship in the Strata checkout). Also
