@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-07
+- Strata slow starts, real cause found and fixed. With EP psum, card 0's own expert rows were written into the exchange region, which this Windows port has to allocate in host memory, and the combine read them back over PCIe. Keeping them in VRAM: 8 of 8 fresh starts at 104-108 tok/s (median 106.4) vs 54-83 on the old path, greedy output identical; ~30% above the old fast starts too. Found with per-stage stamps on both cards (card 1's side and the handshake were identical across starts). The 11-01 file-cache theory was a side effect, and its restart-if-slow guard and standby purge are retired. Patch in [slow-starts](strata-windows-port/slow-starts/#cause-and-fix-2026-11-07), sent upstream as [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1).
 - Windows check of two changes proposed by 92es in discussion #3. The `nsm` / 8 fix for Xe2 gets most of the fork's TILE split-floor gain: Mistral-Small-3.2 decode at 32k +16.6% vs stock (floor +18.4%), Qwen3.8-27B +4.6% (floor +5.4%), perplexity unchanged. The per-dtype oneDNN probe is correct on B70 but no faster. [NSM-AND-DNNL-PROBE-2026-11-07.md](llama.cpp-sycl/NSM-AND-DNNL-PROBE-2026-11-07.md).
 - Replication gaps filled, so both daily recipes can be rebuilt from this repo:
   - **Strata Flash-Next:** how to build the pack and the MTP draft layer (`iq_pack.py`, `mtp_fetch.py`, `mtp_pack.py`,
