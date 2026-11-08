@@ -12,6 +12,9 @@ Changes to llama.cpp's SYCL backend (`ggml/src/ggml-sycl/`) made while tuning th
 2026-10-17: the fork was rebased onto upstream master `797de63b2`; what changed and the per-model validation are in
 [REBASE-2026-10-17.md](REBASE-2026-10-17.md). The patch files here still target the older base.
 
+2026-11-08: a 3/4-card `-sm tensor` all-reduce prototype on top of llama.cpp#30956 is in
+[NWAY-ALLREDUCE-2026-11-08.md](NWAY-ALLREDUCE-2026-11-08.md) (patch in `nway-allreduce/`).
+
 All patches: prepared with AI assistance; derived from llama.cpp (MIT, notice in
 [../LICENSES/llama.cpp-LICENSE](../LICENSES/llama.cpp-LICENSE)).
 
