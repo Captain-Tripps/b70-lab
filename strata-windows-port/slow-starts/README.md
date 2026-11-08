@@ -58,6 +58,29 @@ moving VRAM to system memory. One aside: an earlier test that only changed how t
 (2 MB alignment, an arena, uncached) showed no effect over 8 starts. 3 starts per arm had suggested a win, so this
 lottery needs at least 8 interleaved starts per arm to read.
 
+## Second leak: the prompt read (2026-11-07)
+
+Prompt reading had its own lottery after the decode fix. A 37,318-token prompt read at 1,552 or 792 tok/s on the old
+build depending on the start, and at 704 or 796 on the decode-fixed one. The cause was the same pattern on card 1's side.
+With `STRATA_EP_PREFILL_REDUCE=1` (served config), card 1 sums its own expert rows for each prompt chunk and sends card 0
+only the sums. Its rows buffer `rows_reg` (800 MiB: the gathered inputs under the gather alias, and the experts'
+outputs) is never read by card 0 in that mode, yet `Prefill::set_ep_peer` allocated it as a shared exchange region.
+On Windows that is host memory, so every expert GEMM on card 1 went across PCIe.
+
+Fix (`0003-ep-prefill-rows-private.patch`): a new `ep_region_alloc_private` in `ep_mem.hpp` (a plain
+`zeMemAllocDevice` on the owner, no mapping for the other card) is used for `rows_reg` when reduce is on. If it does
+not fit, it falls back to the shared region with a log line. `STRATA_EP_PREFILL_ROWS_HOST=1` restores the old allocation.
+
+| 37,318-token prompt, 4 fresh starts per arm, same binary | Prompt read (tok/s) | First token |
+|---|---|---|
+| private rows buffer | 1,557, 1,561, 1,476, 1,570 | ~24 s |
+| shared region (`STRATA_EP_PREFILL_ROWS_HOST=1`) | 777, 775, 780, 774 | ~48 s |
+
+Decode is unchanged (111 / 155 tok/s on the bench's code prompts, 107-108 right after the long prompt). Greedy output
+was identical to the previous build on 5 fixed prompts, including a ~37k-token one. Card 1's free VRAM after setup
+goes from 2,060 to 1,264 MiB. Served through llama-swap: 1,576 tok/s on the long read, 130 tok/s mean decode on the
+7-prompt bench, answer checks correct.
+
 ## First theory (2026-11-01, superseded): the file cache
 
 **Windows' standby list (the file cache) filling RAM.** Purging it before each start made every start fast, in the

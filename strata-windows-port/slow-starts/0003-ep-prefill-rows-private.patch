@@ -1,0 +1,89 @@
+From: Captain-Tripps
+Subject: [PATCH] sycl prefill: EP reduce: keep card 1's rows buffer private (no exchange region)
+
+With STRATA_EP_PREFILL_REDUCE=1 card 1 sums its own expert rows and card 0
+reads only the sums (sum_reg); rows_reg.remote is read only when reduce is
+off. rows_reg is then card 1's private buffer (its gathered inputs under the
+gather alias, and its experts' outputs), but it was allocated as a shared
+exchange region.
+
+On Linux that region is card 1 VRAM plus an IPC mapping, so the only change
+there is one IPC handle fewer. Where the region has to be host USM (a port
+without Level Zero IPC, e.g. Windows), every expert GEMM on card 1 read and
+wrote it over PCIe, at a speed set by the pinned pages a process got.
+
+Add ep_region_alloc_private (zeMemAllocDevice on the owner, no remote
+mapping; freed by ep_region_free) and use it for rows_reg when reduce is
+on. If it does not fit, fall back to the shared region with a log line.
+STRATA_EP_PREFILL_ROWS_HOST=1 restores the old allocation.
+
+Measured (Windows, 2x Arc Pro B70, Qwen3.8-Flash-Next IQ3_S, 37,318-token
+prompt, 4 fresh starts per arm, same binary):
+  private:     1557 1561 1476 1570 tok/s prompt read (first token ~24 s)
+  shared host:  777  775  780  774 tok/s              (first token ~48 s)
+Decode unchanged; greedy output identical to the previous build on 5 fixed
+prompts including a ~37k-token one. Card 1 free VRAM after setup: 2,060 ->
+1,264 MiB (the 800 MiB buffer moves into VRAM).
+Linux / IPC path: not measured; expected neutral.
+
+---
+diff --git a/sycl/src/prefill/prefill.cpp b/sycl/src/prefill/prefill.cpp
+index 3d046dc..ce67e99 100644
+--- a/sycl/src/prefill/prefill.cpp
++++ b/sycl/src/prefill/prefill.cpp
+@@ -2032,8 +2032,24 @@ bool Prefill::set_ep_peer(int device, core::ExpertCache* cache, std::string& err
+     pp->reduce_rows = reduce && reduce[0] == '1';
+     const char* push = std::getenv("STRATA_EP_PREFILL_PUSH");
+     pp->reduce_push = pp->reduce_rows && push && push[0] == '1';
+-    bool ok = core::ep_region_alloc(device, primary, (size_t) m.T_max * N * 2, pp->x_reg, err) &&
+-              core::ep_region_alloc(device, primary, (size_t) m.T_max * K * N * 4, pp->rows_reg, err);
++    // With STRATA_EP_PREFILL_REDUCE card 1 sums its own rows and card 0 reads only the sums (sum_reg): rows_reg is then
++    // card 1's private buffer (its gathered inputs under the gather alias, and its experts' outputs). Keep it in card 1's
++    // VRAM without an IPC mapping: where ep_region_alloc has to give host memory (a port without Level Zero IPC, e.g.
++    // Windows) every expert GEMM read and wrote it over PCIe.
++    // STRATA_EP_PREFILL_ROWS_HOST=1 restores the shared region.
++    static const bool rows_host = [] { const char* v = std::getenv("STRATA_EP_PREFILL_ROWS_HOST"); return v && v[0] == '1'; }();
++    bool rows_private = pp->reduce_rows && !rows_host;
++    bool ok = core::ep_region_alloc(device, primary, (size_t) m.T_max * N * 2, pp->x_reg, err);
++    if (ok && rows_private && !core::ep_region_alloc_private(device, (size_t) m.T_max * K * N * 4, pp->rows_reg, err)) {
++        std::fprintf(stderr, "strata prefill: card 1's rows buffer does not fit in its VRAM (%s): shared region instead\n",
++                     err.c_str());
++        err.clear();
++        rows_private = false;
++    }
++    if (ok && !rows_private) ok = core::ep_region_alloc(device, primary, (size_t) m.T_max * K * N * 4, pp->rows_reg, err);
++    if (ok) std::fprintf(stderr, "strata prefill: expert parallel: card 1's rows buffer (%zu MiB) in %s%s\n",
++                         ((size_t) m.T_max * K * N * 4) >> 20, rows_private ? "its VRAM" : "the shared exchange region",
++                         rows_private ? "" : " (STRATA_EP_PREFILL_ROWS_HOST=1 or no reduce)");
+     if (ok) pp->rows_bytes = (size_t) m.T_max * K * N * 4;
+     if (ok && pp->reduce_rows)
+         ok = core::ep_region_alloc(pp->reduce_push ? primary : device, pp->reduce_push ? device : primary,
+diff --git a/sycl/include/strata/core/ep_mem.hpp b/sycl/include/strata/core/ep_mem.hpp
+index affcd73..024f23a 100644
+--- a/sycl/include/strata/core/ep_mem.hpp
++++ b/sycl/include/strata/core/ep_mem.hpp
+@@ -53,6 +53,24 @@ inline bool ep_region_alloc(int owner, int other, size_t bytes, EpRegion& r, std
+     return true;
+ }
+ 
++/// `bytes` zeroed on dpct device `owner`, for the owner's own kernels only (remote stays null): a buffer that sits in the
++/// exchange machinery but is never read by the other card, so it needs no IPC handle (and, on a port where
++/// ep_region_alloc must fall back to host memory, stays in VRAM). Freed by ep_region_free like any region.
++inline bool ep_region_alloc_private(int owner, size_t bytes, EpRegion& r, std::string& err) {
++    r = EpRegion{};
++    r.owner_ctx = ep_ze_context(owner);
++    ze_device_mem_alloc_desc_t desc{};
++    desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
++    ze_result_t z = zeMemAllocDevice(r.owner_ctx, &desc, bytes, 4096, ep_ze_device(owner), &r.local);
++    if (z != ZE_RESULT_SUCCESS) {
++        err = "expert parallel: zeMemAllocDevice of " + std::to_string(bytes) + " bytes failed (" + std::to_string((unsigned) z) + ")";
++        r.local = nullptr;
++        return false;
++    }
++    dpct::dev_mgr::instance().get_device(owner).in_order_queue().memset(r.local, 0, bytes).wait();
++    return true;
++}
++
+ inline void ep_region_free(EpRegion& r) {
+     if (r.remote != nullptr) zeMemCloseIpcHandle(r.other_ctx, r.remote);
+     if (r.local != nullptr) zeMemFree(r.owner_ctx, r.local);
