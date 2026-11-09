@@ -94,34 +94,35 @@ build.
   `ext_oneapi_submit_barrier`, which aborts on the Windows v2 adapter (oneapi-src/level-zero#556). The cards share
   one SYCL context here. Not in the patch, since #30956 already has both paths.
 
-Same setup and bench as above, 4 rounds, alternating order, 5 repetitions per run. Perplexity (ub 512, 16 chunks):
+Same setup and bench as above, 5 repetitions per run, rounds in alternating order. Perplexity (ub 512, 16 chunks):
 reduce-scatter 5.4807 (4 cards) / 5.4799 (3 cards), all-to-all 5.4817, 4-buffer 2-card 5.4819, all in line with the
 runs above.
 
-Clean round, tok/s:
+Six speed rounds were run. In the first three, other work on the host and a small background job on the GPUs made
+the numbers noisy (samples within one run up to ~40% apart), so they are left out. The table is the mean of the
+three clean rounds, with nothing else on the GPUs. In those, the 5 samples of every run agree within about 3%.
+
+Mean of 3 clean rounds, tok/s:
 
 | Setup | pp512 | pp2048 | tg64 |
 |---|---:|---:|---:|
-| 4x tensor, reduce-scatter, new / old kernels | 908 / 912 | 835 / 842 | 9.1 / 9.0 |
-| 4x tensor, all-to-all, new / old kernels | 837 / 820 | 800 / 802 | 8.7 / 9.3 |
-| 3x tensor, reduce-scatter, new / old kernels | 807 / 799 | 779 / 762 | 11.9 / 11.9 |
-| 2x tensor, direct upload / 4-buffer | 956 / 868 | 925 / 816 | 15.0 / 15.5 |
-| 4x layer split | 1,022 | 1,016 | 17.5 |
+| 4x tensor, reduce-scatter, new / old kernels | 915 / 920 | 853 / 858 | 9.0 / 9.0 |
+| 4x tensor, all-to-all, new / old kernels | 829 / 810 | 798 / 779 | 9.0 / 8.9 |
+| 3x tensor, reduce-scatter, new / old kernels | 818 / 805 | 780 / 773 | 11.8 / 11.9 |
+| 2x tensor, direct upload / 4-buffer | 1,005 / 852 | 951 / 810 | 15.4 / 15.5 |
+| 4x layer split | 1,021 | 1,015 | 17.5 |
 
-- **The kernel tweaks make no measurable difference.** No consistent winner in any of the four rounds. That is what
-  the profile predicts: the reduce kernels are about 2% of an all-reduce here, and the rest is host round trips. They
-  are kept in v2 because they are simpler to read and cost nothing; they may matter on a host with faster transfers.
-- **Direct upload beats the 4-buffer exchange on prompt read in every round**: pp512 +10-26%, pp2048 +13-34%. Decode
-  is the same within noise. The extra CPU copy sits on the critical path of every prompt all-reduce. So on Windows,
-  a same-context check plus host waits may be a cheap way to get the fast path without the barrier. Not tested with
-  an MTP draft, where #30956 says host waits conflict.
-- **Background GPU work hurts tensor split badly.** In the first three rounds a small process ran a tiny kernel on
-  every card every 15 s (it keeps the cards from powering down). With it, 4-card tensor decode was 6.9-8.2 tok/s and
-  samples within a run swung by up to 40%; without it, 9.0-9.3 with samples within a few percent. Layer split was
-  unaffected (17.3-17.5 either way). Every all-reduce waits for the slowest card, so any other work on one card
-  stalls all of them. For tensor-split benchmarks, make sure nothing else uses the GPUs.
-- Absolute prompt numbers still move between rounds by up to ~15% (the 2- and 3-card rows were lower in the clean
-  round than in the one before), so compare the pairs inside a row, not rows across tables.
+- **The kernel tweaks are worth 0-2% at most.** All-to-all on 4 cards, where each card sums N-1 full tensors, gains
+  about 2% on prompt read and was ahead in all 3 clean rounds. 3-card reduce-scatter gains about 1-2%. 4-card
+  reduce-scatter is about 0.5% behind, which is within noise. Decode is the same everywhere. That fits the profile:
+  the reduce kernels are about 2% of an all-reduce here, and the rest is host round trips. Kept in v2 because they
+  are simpler and cost nothing; they may matter more on a host with faster transfers.
+- **Direct upload beats the 4-buffer exchange on 2-card prompt read**, ahead in every round: about +18% at pp512
+  (+10 to +22% per round) and +17% at pp2048 (+13 to +20%). Decode is the same. The extra CPU copy sits on the
+  critical path of every prompt all-reduce. So on Windows, a same-context check plus host waits may be a cheap way to
+  get the fast path without the barrier. Not tested with an MTP draft, where #30956 says host waits conflict.
+- Absolute levels still move a little between clean rounds (2-card direct upload pp512: 956, 1,033, 1,026), so the
+  pairs inside a row are the comparison to trust.
 
 ## Next
 
