@@ -75,6 +75,10 @@ This is a living repo. Every new result, good or bad, gets:
    fixed-answer prompts).
 3. A dated line in [CHANGELOG.md](CHANGELOG.md).
 
+Results from your own hardware are welcome in Discussions: use the [benchmark report form](https://github.com/Captain-Tripps/b70-lab/discussions/new?category=show-and-tell)
+in Show and tell, or reply in a topic thread ([multi-GPU tensor split](https://github.com/Captain-Tripps/b70-lab/discussions/32),
+[driver and runtime issues](https://github.com/Captain-Tripps/b70-lab/discussions/33), [single-card kernel tuning](https://github.com/Captain-Tripps/b70-lab/discussions/34)).
+
 Failures go in too, in [rejected-ideas/](rejected-ideas/) with their numbers. Nothing here is written for posting to
 llama.cpp.
 

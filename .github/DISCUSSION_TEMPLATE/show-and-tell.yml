@@ -1,0 +1,83 @@
+title: "[Bench] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing numbers. Results are only comparable when the setup is known, so please fill in what you can.
+        Failures, crashes and "no gain" results are just as useful as speed-ups.
+        For an ongoing topic, replying in its thread also works: [multi-GPU tensor split](https://github.com/Captain-Tripps/b70-lab/discussions/32),
+        [driver and runtime issues](https://github.com/Captain-Tripps/b70-lab/discussions/33),
+        [single-card kernel tuning](https://github.com/Captain-Tripps/b70-lab/discussions/34).
+  - type: input
+    id: gpus
+    attributes:
+      label: GPUs
+      description: Card model and count.
+      placeholder: "3x Arc Pro B70 32 GB"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Board, CPU and PCIe layout
+      description: PCIe generation and lanes per card matter a lot for multi-GPU results.
+      placeholder: "X870E, Ryzen 9 9950X; card 0 Gen5 x16, card 1 Gen4 x4, card 2 Gen4 x4"
+    validations:
+      required: true
+  - type: input
+    id: software
+    attributes:
+      label: OS, GPU driver, oneAPI, Level Zero adapter
+      placeholder: "Ubuntu 24.04 (kernel 6.11), compute-runtime 25.x, oneAPI 2026.2, v2 adapter (default)"
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Engine, commit and patches
+      placeholder: "llama.cpp 47ffd99ab (PR #30956) + nway-allreduce-on-pr30956-v2.patch"
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model file and quant
+      placeholder: "Qwen3.8-27B-Q8_0.gguf"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command and environment variables
+      render: shell
+      placeholder: "GGML_SYCL_COMM_RS=0 llama-bench -m model.gguf -ngl 99 -fa 1 -sm tensor -p 512,2048 -n 64 -r 5"
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      description: Paste the llama-bench table or tok/s numbers. Include the baseline you compare against (stock build, layer split, etc.), measured on the same machine and settings.
+    validations:
+      required: true
+  - type: textarea
+    id: correctness
+    attributes:
+      label: Correctness check
+      description: Perplexity, KL divergence, test-backend-ops, or fixed-answer prompts. A speed number without one is hard to trust.
+    validations:
+      required: false
+  - type: checkboxes
+    id: conditions
+    attributes:
+      label: Test conditions
+      options:
+        - label: Nothing else was using the GPUs during the runs (no other model server, keep-alive, display load)
+        - label: Results are from more than one run or round
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything unusual (crashes, warnings, variance between runs, things you tried that did not help).
+    validations:
+      required: false
