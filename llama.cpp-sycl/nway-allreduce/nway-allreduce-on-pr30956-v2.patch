@@ -1,0 +1,500 @@
+diff --git a/ggml/src/ggml-sycl/ggml-sycl.cpp b/ggml/src/ggml-sycl/ggml-sycl.cpp
+index 3b7e14efb..2172b7a1d 100644
+--- a/ggml/src/ggml-sycl/ggml-sycl.cpp
++++ b/ggml/src/ggml-sycl/ggml-sycl.cpp
+@@ -7482,23 +7482,25 @@ static ggml_backend_dev_t ggml_backend_sycl_reg_get_device(ggml_backend_reg_t re
+ // alloc+free per device keeps the SYCL pool's strict-LIFO invariant
+ // trivial.
+ //
+-// For non-(N=2 FP32 contiguous) cases, comm_init or comm_allreduce_tensor
+-// returns null/false, causing the meta-backend to use its generic
+-// butterfly all-reduce fallback.
++// For N=3..GGML_SYCL_MAX_DEVICES, ggml_sycl_comm_allreduce_nway stages every
++// partial through pinned host memory (see the comment there).
++//
++// For other cases (non-F32/F16, non-contiguous, GGML_SYCL_COMM_NWAY=0 with
++// N>2), comm_init or comm_allreduce_tensor returns null/false, causing the
++// meta-backend to use its generic butterfly all-reduce fallback.
+ // ==========================================================================
+ 
+ struct ggml_backend_sycl_comm_context {
+     std::vector<ggml_backend_t> backends;
+-    // ONE persistent per-device byte buffer, 4*nelem bytes.  Both the
++    // ONE persistent per-device byte buffer, 4*(N-1)*nelem bytes (4*nelem for N=2).  Both the
+     // FP32 small-tensor path and the BF16 large-tensor path share it
+     // by reinterpreting.
+-    std::unique_ptr<ggml_sycl_pool_alloc<uint8_t>> buf0;
+-    std::unique_ptr<ggml_sycl_pool_alloc<uint8_t>> buf1;
++    std::vector<std::unique_ptr<ggml_sycl_pool_alloc<uint8_t>>> bufs;
+     int64_t buf_nelem = 0;
+ 
+     // pinned host staging per device context, reused across calls (queues are in-order)
+-    uint8_t * host_out[2] = { nullptr, nullptr };
+-    uint8_t * host_in[2]  = { nullptr, nullptr };  // only used by the 4-buffer path (separate SYCL contexts)
++    std::vector<uint8_t *> host_out;
++    std::vector<uint8_t *> host_in;  // only used by the N=2 4-buffer path (separate SYCL contexts)
+     size_t    host_bytes  = 0;
+ 
+     // SYCL_ENABLE_DEFAULT_CONTEXTS=1 sets comm_exchange_fast on Linux - PR #30956
+@@ -7508,10 +7510,10 @@ struct ggml_backend_sycl_comm_context {
+     exchange_fn_t comm_exchange = nullptr; // Moves same context check out of hot path; tests only once
+ 
+     void free_host() {
+-        for (int i = 0; i < 2; ++i) {
++        for (size_t i = 0; i < host_out.size(); ++i) {
+             const sycl::context sctx = ((ggml_backend_sycl_context *) backends[i]->context)->stream()->get_context();
+             if (host_out[i]) { sycl::free(host_out[i], sctx); host_out[i] = nullptr; }
+-            if (host_in[i])  { sycl::free(host_in[i],  sctx); host_in[i]  = nullptr; }
++            if (i < host_in.size() && host_in[i]) { sycl::free(host_in[i], sctx); host_in[i] = nullptr; }
+         }
+         host_bytes = 0;
+     }
+@@ -7578,6 +7580,347 @@ static void ggml_sycl_comm_exchange(ggml_backend_sycl_comm_context * comm, queue
+     q1->memcpy(dst1, comm->host_in[1], nbytes);
+ }
+ 
++// N-way (N > 2) all-reduce through pinned host memory, generalising the N=2 paths:
++//   1. (BF16 path only) each card compresses its FP32 partial into an outbox
++//   2. each card downloads its partial (or outbox) into its own pinned host buffer; host waits for all
++//   3. each card uploads the other N-1 host buffers into inbox slots on its own queue; host waits
++//      for all (the host buffers are reused next call, so no upload may still be reading them)
++//   4. each card sums the N partials in card order 0..N-1 into its own tensor
++// Per card that is 1 download + (N-1) uploads of nbytes (BF16: half), with no CPU arithmetic.
++// Summing in a fixed order gives identical results on every card for F32 and F16. On the BF16 path a
++// card adds its own partial in FP32 and the others as BF16 (same as the N=2 BF16 path), so the cards
++// can differ in the low bits there.
++// NF > 0: card count known at compile time (3 and 4), so the loop over cards unrolls; NF = 0: runtime n.
++template <typename T_own, typename T_in, bool bf16_in, int NF>
++static void ggml_sycl_comm_nway_sum_n(queue_ptr q, T_own * own, const T_in * inbox, int64_t nelem, int n, int self) {
++    q->parallel_for(sycl::range<1>(nelem), [=](sycl::id<1> id) {
++        const int64_t i  = id[0];
++        const int     nn = NF > 0 ? NF : n;
++        float acc = 0.0f;
++#pragma unroll
++        for (int c = 0; c < nn; ++c) {
++            float v;
++            if (c == self) {
++                v = (float) own[i];
++            } else {
++                const int64_t slot = c < self ? c : c - 1;
++                const T_in x = inbox[slot * nelem + i];
++                if constexpr (bf16_in) {
++                    v = sycl::bit_cast<float>(((uint32_t) x) << 16);
++                } else {
++                    v = (float) x;
++                }
++            }
++            acc += v;
++        }
++        own[i] = (T_own) acc;
++    });
++}
++
++// GGML_SYCL_COMM_FIXN=0: always use the runtime-n kernels
++static bool ggml_sycl_comm_fixn() {
++    static const bool v = [] {
++        const char * s = getenv("GGML_SYCL_COMM_FIXN");
++        return s == nullptr || atoi(s) != 0;
++    }();
++    return v;
++}
++
++template <typename T_own, typename T_in, bool bf16_in>
++static void ggml_sycl_comm_nway_sum(queue_ptr q, T_own * own, const T_in * inbox, int64_t nelem, int n, int self) {
++    if (ggml_sycl_comm_fixn() && n == 3) {
++        ggml_sycl_comm_nway_sum_n<T_own, T_in, bf16_in, 3>(q, own, inbox, nelem, n, self);
++    } else if (ggml_sycl_comm_fixn() && n == 4) {
++        ggml_sycl_comm_nway_sum_n<T_own, T_in, bf16_in, 4>(q, own, inbox, nelem, n, self);
++    } else {
++        ggml_sycl_comm_nway_sum_n<T_own, T_in, bf16_in, 0>(q, own, inbox, nelem, n, self);
++    }
++}
++
++// reduce-scatter step: sum chunk `self` (len elements) in card order, keep FP32 in own, BF16 copy in rd
++template <int NF>
++static void ggml_sycl_comm_rs_sum_n(queue_ptr q, float * own, const uint16_t * in, uint16_t * rd, int64_t len,
++                                    int64_t cm, int n, int self) {
++    q->parallel_for(sycl::range<1>(len), [=](sycl::id<1> id) {
++        const int64_t i  = id[0];
++        const int     nn = NF > 0 ? NF : n;
++        float acc = 0.0f;
++#pragma unroll
++        for (int c = 0; c < nn; ++c) {
++            if (c == self) {
++                acc += own[i];
++            } else {
++                const int64_t slot = c < self ? c : c - 1;
++                acc += sycl::bit_cast<float>(((uint32_t) in[slot * cm + i]) << 16);
++            }
++        }
++        own[i] = acc;
++        rd[i]  = (uint16_t) (sycl::bit_cast<uint32_t>(acc) >> 16);
++    });
++}
++
++static bool ggml_sycl_comm_allreduce_nway(ggml_backend_sycl_comm_context * comm, ggml_tensor ** tensors) {
++    const int n = (int) comm->backends.size();
++    const ggml_type type = tensors[0]->type;
++    if (type != GGML_TYPE_F32 && type != GGML_TYPE_F16) {
++        return false;
++    }
++    for (int j = 0; j < n; ++j) {
++        if (tensors[j]->type != type || !ggml_is_contiguous(tensors[j]) ||
++            ggml_nelements(tensors[j]) != ggml_nelements(tensors[0])) {
++            return false;
++        }
++    }
++    const int64_t nelem = ggml_nelements(tensors[0]);
++    if (nelem == 0) {
++        return true;
++    }
++
++    static constexpr int64_t BF16_THRESHOLD = 32768; // same as the N=2 path
++    const bool   use_bf16 = type == GGML_TYPE_F32 && nelem >= BF16_THRESHOLD;
++    const size_t xbytes   = (size_t) nelem * (type == GGML_TYPE_F32 && !use_bf16 ? 4 : 2);
++
++    std::vector<queue_ptr> q(n);
++    for (int j = 0; j < n; ++j) {
++        q[j] = ((ggml_backend_sycl_context *) comm->backends[j]->context)->stream();
++    }
++
++    // device scratch per card: [outbox (BF16 only)] + (N-1) inbox slots. 4*(N-1)*nelem bytes covers
++    // F32 ((N-1)*4), F16 ((N-1)*2) and BF16 (N*2) for N >= 2.
++    if (comm->buf_nelem < nelem) {
++        for (int j = 0; j < n; ++j) {
++            comm->bufs[j]->realloc((size_t) nelem * 4 * (n - 1));
++        }
++        comm->buf_nelem = nelem;
++    }
++    if (comm->host_bytes < xbytes) {
++        for (int j = 0; j < n; ++j) {
++            q[j]->wait();
++        }
++        comm->free_host();
++        for (int j = 0; j < n; ++j) {
++            comm->host_out[j] = sycl::malloc_host<uint8_t>(xbytes, q[j]->get_context());
++            GGML_ASSERT(comm->host_out[j]);
++        }
++        comm->host_bytes = xbytes;
++    }
++
++    // Large BF16 tensors (prompt batches): reduce-scatter + all-gather. Card j sums only chunk j
++    // (1/N of the elements) and then shares it, so each card uploads 2*(N-1)/N tensors' worth of BF16
++    // instead of N-1, at the cost of one more host wait. Chunk j is summed on card j alone, so the other
++    // cards receive it as BF16 while card j keeps FP32 (low-bit differences, as on the BF16 path above).
++    // GGML_SYCL_COMM_RS=0 keeps the all-to-all path for every size.
++    static const bool rs_enabled = [] {
++        const char * s = getenv("GGML_SYCL_COMM_RS");
++        return s == nullptr || atoi(s) != 0;
++    }();
++    // GGML_SYCL_COMM_P2P=1: copy partials card to card instead of through host memory. Only possible when all
++    // queues share one SYCL context (true on a default Windows B70 runtime); otherwise falls back.
++    static const bool p2p_requested = [] {
++        const char * s = getenv("GGML_SYCL_COMM_P2P");
++        return s != nullptr && atoi(s) != 0;
++    }();
++    bool p2p = p2p_requested;
++    for (int j = 1; j < n && p2p; ++j) {
++        p2p = q[j]->get_context() == q[0]->get_context();
++    }
++    static bool p2p_logged = false;
++    if (p2p_requested && !p2p_logged) {
++        GGML_LOG_INFO("%s: GGML_SYCL_COMM_P2P=1 -> %s\n", __func__, p2p ? "direct peer copies (shared context)" : "host staging (contexts differ)");
++        p2p_logged = true;
++    }
++
++    if (use_bf16 && rs_enabled && !p2p) {
++        auto cbeg = [&](int c) { return (int64_t) c * nelem / n; };
++        std::vector<sycl::event> evs;
++        evs.reserve((size_t) n * (n - 1));
++        auto wait_all = [&]() {
++            for (auto & e : evs) {
++                e.wait();
++            }
++            evs.clear();
++        };
++        // device scratch on card j: [outbox: nelem bf16][inbox: (N-1) slots of ceil(nelem/N) bf16][red: ceil(nelem/N) bf16]
++        const int64_t cmax = (nelem + n - 1) / n;
++        std::vector<uint16_t *> outbox(n), inb(n), red(n);
++        for (int j = 0; j < n; ++j) {
++            uint16_t * b = (uint16_t *) comm->bufs[j]->get();
++            outbox[j] = b;
++            inb[j]    = b + nelem;
++            red[j]    = inb[j] + (size_t) (n - 1) * cmax;
++            const float * part = (const float *) tensors[j]->data;
++            uint16_t *    ob   = outbox[j];
++            q[j]->parallel_for(sycl::range<1>(nelem), [=](sycl::id<1> i) {
++                ob[i] = (uint16_t) (sycl::bit_cast<uint32_t>(part[i]) >> 16);
++            });
++            evs.push_back(q[j]->memcpy(comm->host_out[j], ob, xbytes));
++        }
++        wait_all();
++
++        // reduce-scatter: card j gathers chunk j of every other card's partial
++        for (int j = 0; j < n; ++j) {
++            const int64_t b0 = cbeg(j), len = cbeg(j + 1) - b0;
++            for (int c = 0; c < n; ++c) {
++                if (c == j || len == 0) {
++                    continue;
++                }
++                const int slot = c < j ? c : c - 1;
++                evs.push_back(q[j]->memcpy(inb[j] + (size_t) slot * cmax,
++                                           (const uint16_t *) comm->host_out[c] + b0, len * sizeof(uint16_t)));
++            }
++        }
++        wait_all();
++
++        // sum chunk j in card order, keep FP32 locally, publish it as BF16 in host_out[j] (same region it came from;
++        // every upload reading host_out has finished)
++        for (int j = 0; j < n; ++j) {
++            const int64_t b0 = cbeg(j), len = cbeg(j + 1) - b0;
++            if (len == 0) {
++                continue;
++            }
++            float *          own = (float *) tensors[j]->data + b0;
++            const uint16_t * in  = inb[j];
++            uint16_t *       rd  = red[j];
++            if (ggml_sycl_comm_fixn() && n == 3) {
++                ggml_sycl_comm_rs_sum_n<3>(q[j], own, in, rd, len, cmax, n, j);
++            } else if (ggml_sycl_comm_fixn() && n == 4) {
++                ggml_sycl_comm_rs_sum_n<4>(q[j], own, in, rd, len, cmax, n, j);
++            } else {
++                ggml_sycl_comm_rs_sum_n<0>(q[j], own, in, rd, len, cmax, n, j);
++            }
++            evs.push_back(q[j]->memcpy((uint16_t *) comm->host_out[j] + b0, rd, len * sizeof(uint16_t)));
++        }
++        wait_all();
++
++        // all-gather: card j fetches every other summed chunk and expands it into its own tensor
++        for (int j = 0; j < n; ++j) {
++            for (int c = 0; c < n; ++c) {
++                const int64_t b0 = cbeg(c), len = cbeg(c + 1) - b0;
++                if (c == j || len == 0) {
++                    continue;
++                }
++                const int slot = c < j ? c : c - 1;
++                evs.push_back(q[j]->memcpy(inb[j] + (size_t) slot * cmax,
++                                           (const uint16_t *) comm->host_out[c] + b0, len * sizeof(uint16_t)));
++            }
++        }
++        wait_all();
++        // GGML_SYCL_COMM_AG2D=0: the original 1-D expand kernel (owner chunk found per element)
++        static const bool ag2d = [] {
++            const char * s = getenv("GGML_SYCL_COMM_AG2D");
++            return s == nullptr || atoi(s) != 0;
++        }();
++        for (int j = 0; ag2d && j < n; ++j) {
++            // launch over (foreign slot, offset): no owner search, no work-items for the card's own chunk.
++            // chunk c starts at floor(c*ne/n) = c*base + (c*rem)/n; chunk lengths differ by at most one
++            float *          dst  = (float *) tensors[j]->data;
++            const uint16_t * in   = inb[j];
++            const int64_t    self = j;
++            const int64_t    nn   = n;
++            const int64_t    cm   = cmax;
++            const int64_t    base = nelem / n;
++            const int64_t    rem  = nelem % n;
++            q[j]->parallel_for(sycl::range<2>((size_t) (n - 1), (size_t) cmax), [=](sycl::id<2> id) {
++                const int64_t slot  = id[0];
++                const int64_t off   = id[1];
++                const int64_t c     = slot + (slot >= self);
++                const int64_t begin = c * base + (c * rem) / nn;
++                const int64_t end   = (c + 1) * base + ((c + 1) * rem) / nn;
++                if (off >= end - begin) {
++                    return;
++                }
++                dst[begin + off] = sycl::bit_cast<float>(((uint32_t) in[slot * cm + off]) << 16);
++            });
++        }
++        for (int j = 0; !ag2d && j < n; ++j) {
++            float *          dst = (float *) tensors[j]->data;
++            const uint16_t * in  = inb[j];
++            const int        self = j;
++            const int        nn   = n;
++            const int64_t    cm   = cmax;
++            const int64_t    ne   = nelem;
++            // one pass over the N-1 foreign chunks; element i of the tensor belongs to chunk c = owner(i)
++            q[j]->parallel_for(sycl::range<1>(nelem), [=](sycl::id<1> id) {
++                const int64_t i = id[0];
++                int c = (int) ((i * nn) / ne);
++                while (c + 1 < nn && (int64_t) (c + 1) * ne / nn <= i) { ++c; }
++                while (c > 0 && (int64_t) c * ne / nn > i) { --c; }
++                if (c == self) {
++                    return;
++                }
++                const int64_t slot = c < self ? c : c - 1;
++                const int64_t off  = i - (int64_t) c * ne / nn;
++                dst[i] = sycl::bit_cast<float>(((uint32_t) in[slot * cm + off]) << 16);
++            });
++        }
++        return true;
++    }
++
++    std::vector<uint8_t *> inbox(n);
++    std::vector<const void *> send(n);
++    for (int j = 0; j < n; ++j) {
++        uint8_t * buf = comm->bufs[j]->get();
++        if (use_bf16) {
++            uint16_t *    outbox = (uint16_t *) buf;
++            const float * part   = (const float *) tensors[j]->data;
++            q[j]->parallel_for(sycl::range<1>(nelem), [=](sycl::id<1> i) {
++                outbox[i] = (uint16_t) (sycl::bit_cast<uint32_t>(part[i]) >> 16);
++            });
++            send[j]  = outbox;
++            inbox[j] = buf + xbytes;
++        } else {
++            send[j]  = tensors[j]->data;
++            inbox[j] = buf;
++        }
++    }
++
++    std::vector<sycl::event> ev;
++    ev.reserve((size_t) n * (n - 1));
++    if (p2p) {
++        // direct device-to-device copies inside the shared context: host waits for each card's own work
++        // (self barrier, no cross-queue wait list), then every card pulls the others' partials straight
++        // from their device memory
++        for (int j = 0; j < n; ++j) {
++            ev.push_back(q[j]->ext_oneapi_submit_barrier());
++        }
++    } else {
++        for (int j = 0; j < n; ++j) {
++            ev.push_back(q[j]->memcpy(comm->host_out[j], send[j], xbytes));
++        }
++    }
++    for (auto & e : ev) {
++        e.wait();
++    }
++    ev.clear();
++
++    for (int j = 0; j < n; ++j) {
++        for (int c = 0; c < n; ++c) {
++            if (c == j) {
++                continue;
++            }
++            const int slot = c < j ? c : c - 1;
++            ev.push_back(q[j]->memcpy(inbox[j] + (size_t) slot * xbytes, p2p ? send[c] : comm->host_out[c], xbytes));
++        }
++    }
++    for (auto & e : ev) {
++        e.wait();
++    }
++
++    for (int j = 0; j < n; ++j) {
++        if (type == GGML_TYPE_F16) {
++            ggml_sycl_comm_nway_sum<sycl::half, sycl::half, false>(
++                q[j], (sycl::half *) tensors[j]->data, (const sycl::half *) inbox[j], nelem, n, j);
++        } else if (use_bf16) {
++            ggml_sycl_comm_nway_sum<float, uint16_t, true>(
++                q[j], (float *) tensors[j]->data, (const uint16_t *) inbox[j], nelem, n, j);
++        } else {
++            ggml_sycl_comm_nway_sum<float, float, false>(
++                q[j], (float *) tensors[j]->data, (const float *) inbox[j], nelem, n, j);
++        }
++    }
++    return true;
++}
++
+ void * ggml_backend_sycl_comm_init(ggml_backend_t * backends, size_t n_backends) try {
+     for (size_t i = 0; i < n_backends; ++i) {
+         if (!ggml_backend_is_sycl(backends[i])) {
+@@ -7585,27 +7928,38 @@ void * ggml_backend_sycl_comm_init(ggml_backend_t * backends, size_t n_backends)
+         }
+     }
+ 
+-    // Initial version: N=2 only. For N!=2, returning null makes the
+-    // meta-backend skip this backend-specific allreduce entirely.
+-    if (n_backends != 2) {
++    // N=2: dual-GPU paths below. N=3..GGML_SYCL_MAX_DEVICES: host-staged N-way path
++    // (GGML_SYCL_COMM_NWAY=0 turns it off and leaves N>2 to the meta-backend fallback).
++    // Returning null makes the meta-backend skip this backend-specific allreduce entirely.
++    static const bool nway_enabled = [] {
++        const char * s = getenv("GGML_SYCL_COMM_NWAY");
++        return s == nullptr || atoi(s) != 0;
++    }();
++    if (n_backends < 2 || n_backends > GGML_SYCL_MAX_DEVICES || (n_backends > 2 && !nway_enabled)) {
+         return nullptr;
+     }
+ 
+     auto * ctx = new ggml_backend_sycl_comm_context;
+     ctx->backends.assign(backends, backends + n_backends);
+-    auto * sctx0 = (ggml_backend_sycl_context *) backends[0]->context;
+-    auto * sctx1 = (ggml_backend_sycl_context *) backends[1]->context;
+-    ctx->buf0 = std::make_unique<ggml_sycl_pool_alloc<uint8_t>>(sctx0->pool());
+-    ctx->buf1 = std::make_unique<ggml_sycl_pool_alloc<uint8_t>>(sctx1->pool());
++    ctx->host_out.assign(n_backends, nullptr);
++    ctx->host_in.assign(n_backends, nullptr);
++    for (size_t i = 0; i < n_backends; ++i) {
++        auto * sctx = (ggml_backend_sycl_context *) backends[i]->context;
++        ctx->bufs.push_back(std::make_unique<ggml_sycl_pool_alloc<uint8_t>>(sctx->pool()));
++    }
+ 
++    if (n_backends == 2) {
++        auto * sctx0 = (ggml_backend_sycl_context *) backends[0]->context;
++        auto * sctx1 = (ggml_backend_sycl_context *) backends[1]->context;
+ #if defined(_WIN32) || defined(_WIN64) // Not supported on Windows
+-    ctx->comm_exchange = ggml_sycl_comm_exchange;
++        ctx->comm_exchange = ggml_sycl_comm_exchange;
+ #else
+-    // SYCL_ENABLE_DEFAULT_CONTEXTS=1 sets comm_exchange_fast on Linux - PR #30956
+-    ctx->comm_exchange = (sctx0->stream()->get_context() == sctx1->stream()->get_context())
+-                       ? ggml_sycl_comm_exchange_fast
+-                       : ggml_sycl_comm_exchange;
++        // SYCL_ENABLE_DEFAULT_CONTEXTS=1 sets comm_exchange_fast on Linux - PR #30956
++        ctx->comm_exchange = (sctx0->stream()->get_context() == sctx1->stream()->get_context())
++                           ? ggml_sycl_comm_exchange_fast
++                           : ggml_sycl_comm_exchange;
+ #endif
++    }
+     return ctx;
+ }
+ catch (const sycl::exception &) { return nullptr; }
+@@ -7619,15 +7973,13 @@ void ggml_backend_sycl_comm_free(void * comm_ctx_v) {
+ 
+     // Sync both per-device queues so the pool_alloc destructors don't
+     // return memory still in use by the last kernel.
+-    if (comm_ctx->backends.size() == 2) {
+-        auto * sctx0 = (ggml_backend_sycl_context *) comm_ctx->backends[0]->context;
+-        auto * sctx1 = (ggml_backend_sycl_context *) comm_ctx->backends[1]->context;
+-        try {
+-            sctx0->stream()->wait();
+-            sctx1->stream()->wait();
+-            comm_ctx->free_host();
+-        } catch (...) { /* best effort during shutdown */ }
+-    }
++    try {
++        for (ggml_backend_t b : comm_ctx->backends) {
++            auto * sctx = (ggml_backend_sycl_context *) b->context;
++            sctx->stream()->wait();
++        }
++        comm_ctx->free_host();
++    } catch (...) { /* best effort during shutdown */ }
+ 
+     delete comm_ctx;
+ }
+@@ -7640,6 +7992,9 @@ bool ggml_backend_sycl_comm_allreduce_tensor(void * comm_ctx_v, struct ggml_tens
+     auto * comm_ctx = static_cast<ggml_backend_sycl_comm_context *>(comm_ctx_v);
+     const size_t n_backends = comm_ctx->backends.size();
+ 
++    if (n_backends > 2) {
++        return ggml_sycl_comm_allreduce_nway(comm_ctx, tensors);
++    }
+     // Fast path: N=2, F32/F16, contiguous, matching shapes.
+     if (n_backends != 2) {
+         return false;
+@@ -7673,12 +8028,12 @@ bool ggml_backend_sycl_comm_allreduce_tensor(void * comm_ctx_v, struct ggml_tens
+ 
+     // Grow per-device byte buffers if needed (4 * nelem bytes each).
+     if (comm_ctx->buf_nelem < nelem) {
+-        comm_ctx->buf0->realloc(nelem * 4);
+-        comm_ctx->buf1->realloc(nelem * 4);
++        comm_ctx->bufs[0]->realloc(nelem * 4);
++        comm_ctx->bufs[1]->realloc(nelem * 4);
+         comm_ctx->buf_nelem = nelem;
+     }
+-    uint8_t * buf0 = comm_ctx->buf0->get();
+-    uint8_t * buf1 = comm_ctx->buf1->get();
++    uint8_t * buf0 = comm_ctx->bufs[0]->get();
++    uint8_t * buf1 = comm_ctx->bufs[1]->get();
+ 
+     // F16 native path: direct 2-byte cross-device copy + add, skipping the
+     // F32 round-trip the meta-backend fallback would force. The devices are in separate SYCL
