@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-08
+- N-way all-reduce follow-up for 92es: a 2-D all-gather launch and fixed-card-count sums are worth 0-2% (reduce kernels are ~2% of an all-reduce here; patch v2 keeps them). On 2 cards, uploading straight from the other card's pinned buffer reads prompts ~18% faster than the 4-buffer exchange #30956 uses on Windows, decode equal. Means of 3 clean rounds. [NWAY-ALLREDUCE-2026-11-08.md](llama.cpp-sycl/NWAY-ALLREDUCE-2026-11-08.md#follow-up-kernel-tweaks-and-the-4-buffer-exchange-2026-11-08-evening).
 - 3/4-card `-sm tensor` all-reduce for ggml-sycl, roughed out for 92es (discussion #3), as a patch on the llama.cpp#30956 head. 4 cards read prompts at ~955 tok/s instead of 110 on the old generic fallback (layer split ~1,020), perplexity equal; decode 9.1 vs layer 17.3, so per-token syncs stay the cost. Direct card-to-card copies are no faster than the old fallback here. [NWAY-ALLREDUCE-2026-11-08.md](llama.cpp-sycl/NWAY-ALLREDUCE-2026-11-08.md).
 
 ## 2026-11-07

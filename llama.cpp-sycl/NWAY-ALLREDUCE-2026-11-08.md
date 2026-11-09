@@ -73,6 +73,57 @@ The ub 4 gap between tensor split and layer split is the same on the existing 2-
 the N-way code. Reduce-scatter differs a little because non-owner cards receive the final sums as BF16. KLD against a
 layer-split baseline is not run yet.
 
+## Follow-up: kernel tweaks and the 4-buffer exchange (2026-11-08, evening)
+
+92es suggested two changes to the reduce kernels, and asked how the Windows numbers relate to the 4-buffer N=2
+exchange that #30956 uses on Windows. Patch v2,
+[`nway-allreduce/nway-allreduce-on-pr30956-v2.patch`](nway-allreduce/nway-allreduce-on-pr30956-v2.patch), is v1 plus
+the two kernel changes, against the same head `47ffd99ab`. It compiles there; the numbers are again from the fork
+build.
+
+- **2-D all-gather:** launch over (foreign chunk, offset) instead of one work-item per element that first works out
+  which card owns it. Chunk c starts at `c*base + (c*rem)/n` (`base = ne/n`, `rem = ne%n`), which equals
+  `floor(c*ne/n)`, so it matches the chunking the reduce-scatter uses. No work-items for the card's own chunk.
+  `GGML_SYCL_COMM_AG2D=0` restores the 1-D kernel.
+- **Fixed card count:** the sums over cards are templated on N for 3 and 4 cards, so the loop unrolls.
+  `GGML_SYCL_COMM_FIXN=0` uses the runtime-N kernels.
+- **4-buffer exchange, for comparison (fork only):** `GGML_SYCL_COMM_X4=1` switches the 2-card exchange to the
+  #30956 Windows variant (each card's partial to its own pinned buffer, CPU `memcpy` into the other context's
+  pinned buffer, upload not waited on). The fork's default does what #30956's Linux `comm_exchange_fast` does (each
+  queue uploads straight from the other card's pinned buffer, no CPU copy), but with host waits instead of
+  `ext_oneapi_submit_barrier`, which aborts on the Windows v2 adapter (oneapi-src/level-zero#556). The cards share
+  one SYCL context here. Not in the patch, since #30956 already has both paths.
+
+Same setup and bench as above, 5 repetitions per run, rounds in alternating order. Perplexity (ub 512, 16 chunks):
+reduce-scatter 5.4807 (4 cards) / 5.4799 (3 cards), all-to-all 5.4817, 4-buffer 2-card 5.4819, all in line with the
+runs above.
+
+Six speed rounds were run. In the first three, other work on the host and a small background job on the GPUs made
+the numbers noisy (samples within one run up to ~40% apart), so they are left out. The table is the mean of the
+three clean rounds, with nothing else on the GPUs. In those, the 5 samples of every run agree within about 3%.
+
+Mean of 3 clean rounds, tok/s:
+
+| Setup | pp512 | pp2048 | tg64 |
+|---|---:|---:|---:|
+| 4x tensor, reduce-scatter, new / old kernels | 915 / 920 | 853 / 858 | 9.0 / 9.0 |
+| 4x tensor, all-to-all, new / old kernels | 829 / 810 | 798 / 779 | 9.0 / 8.9 |
+| 3x tensor, reduce-scatter, new / old kernels | 818 / 805 | 780 / 773 | 11.8 / 11.9 |
+| 2x tensor, direct upload / 4-buffer | 1,005 / 852 | 951 / 810 | 15.4 / 15.5 |
+| 4x layer split | 1,021 | 1,015 | 17.5 |
+
+- **The kernel tweaks are worth 0-2% at most.** All-to-all on 4 cards, where each card sums N-1 full tensors, gains
+  about 2% on prompt read and was ahead in all 3 clean rounds. 3-card reduce-scatter gains about 1-2%. 4-card
+  reduce-scatter is about 0.5% behind, which is within noise. Decode is the same everywhere. That fits the profile:
+  the reduce kernels are about 2% of an all-reduce here, and the rest is host round trips. Kept in v2 because they
+  are simpler and cost nothing; they may matter more on a host with faster transfers.
+- **Direct upload beats the 4-buffer exchange on 2-card prompt read**, ahead in every round: about +18% at pp512
+  (+10 to +22% per round) and +17% at pp2048 (+13 to +20%). Decode is the same. The extra CPU copy sits on the
+  critical path of every prompt all-reduce. So on Windows, a same-context check plus host waits may be a cheap way to
+  get the fast path without the barrier. Not tested with an MTP draft, where #30956 says host waits conflict.
+- Absolute levels still move a little between clean rounds (2-card direct upload pp512: 956, 1,033, 1,026), so the
+  pairs inside a row are the comparison to trust.
+
 ## Next
 
 - Tensor split + MTP draft: verify several tokens per all-reduce to spread the per-token syncs.
