@@ -8,6 +8,9 @@ GLM-5.3-Flash (llama.cpp arch `glm5-next`): 321B MoE, ~18B active, MLA attention
 - Status: **superseded 2026-11-01** by [sycl-port/](sycl-port/): Project Maya's own engine ported to SYCL, 45.5-45.8 tok/s
   decode and ~1,000 tok/s prompt read on the same model file. This llama.cpp-fork entry ran from 2026-10-14 to 2026-11-01.
 
+For new optimization work on the live engine, start with the [SYCL agent handoff (2026-11-09)](sycl-port/LEADS-2026-11-09.md).
+The results below describe the older llama.cpp fork.
+
 ## Steps
 
 4x B70, EPYC host, 112 GB RAM, Maya-M, driver 8976. Decode in tok/s, prompt read at short-to-medium prompts.

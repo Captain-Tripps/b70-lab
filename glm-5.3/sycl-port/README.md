@@ -11,6 +11,13 @@ resident in VRAM, 128k context.
 - Status (2026-11-01): **live** (served through llama-swap every day since 2026-11-01).
 - Work: 2026-10-31 to 2026-11-01, 36 numbered fix rounds (`tools/maya_fixups*.py`), prepared with AI assistance.
 
+## Next optimization work
+
+[Agent handoff and ranked leads — 2026-11-09](LEADS-2026-11-09.md): per-head prefill GEMMs, existing decode attention
+variants, incremental prompt preparation, batching/checkpoint tuning, remaining XMX attention paths and resident-routing
+fusion. Includes a first-session checklist, source pointers, benchmark matrix and stop/keep gates. **Planned; no new B70
+measurements or live configuration changes.**
+
 ## Result
 
 | | llama.cpp SYCL fork (`g10`, the previous live entry) | This port |

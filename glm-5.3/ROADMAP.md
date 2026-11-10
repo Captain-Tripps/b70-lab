@@ -1,7 +1,11 @@
 # GLM-5.3 on 4× B70: Hill-Climbing Roadmap
 
-**New session? Start at [HANDOFF-2026-10-21.md](./HANDOFF-2026-10-21.md)** - state of the world, next steps in
-order, tool md5s, and the gotcha list in one page.
+**Live engine update — 2026-11-09:** this roadmap describes the older llama.cpp fork. For new work on the Maya SYCL
+engine live since 2026-11-01, start with [the current agent handoff](sycl-port/LEADS-2026-11-09.md). Its six leads are
+planned and unmeasured; all experts already reside in VRAM. Keep this roadmap as historical evidence.
+
+For the historical llama.cpp campaign, start at [HANDOFF-2026-10-21.md](./HANDOFF-2026-10-21.md) — state of the world,
+next steps, tool md5s and gotchas for that campaign.
 
 ## Checkpoint 2026-10-22 - rank 2 closed: all experts on GPU (placement A), now production
 
