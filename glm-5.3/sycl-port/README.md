@@ -20,6 +20,8 @@ The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/
 gate/up and down spans from row gathers.
 The [grouped XMX profile](experiments/2026-11-10-xmx-profile/) further splits tile copy, activation packing and
 matrix spans and records tile occupancy.
+The first [16-row tile screen](experiments/2026-11-10-bn16-screen/) increased occupancy but was slower and was
+rejected at screening.
 
 ## Result
 

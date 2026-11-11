@@ -1,0 +1,5 @@
+--- a/fused-gemm.cpp
++++ b/fused-gemm.cpp
+@@ -106 +106 @@
+-    static constexpr int BN      = TN > 32 ? TN : 32;
++    static constexpr int BN      = TN == 16 ? 16 : (TN > 32 ? TN : 32); // isolated BN16 screen
