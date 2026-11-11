@@ -8,7 +8,7 @@
     "--expert-cache",
     "auto",
     "--prefill",
-    "1024",
+    "768",
     "--layer-split",
     "13,24,35"
   ],

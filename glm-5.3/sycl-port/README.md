@@ -13,10 +13,9 @@ resident in VRAM, 128k context.
 
 ## Next optimization work
 
-[Agent handoff and ranked leads — 2026-11-09](LEADS-2026-11-09.md): per-head prefill GEMMs, existing decode attention
-variants, incremental prompt preparation, batching/checkpoint tuning, remaining XMX attention paths and resident-routing
-fusion. Includes a first-session checklist, source pointers, benchmark matrix and stop/keep gates. **Planned; no new B70
-measurements or live configuration changes.**
+[Agent handoff and ranked leads — 2026-11-09](LEADS-2026-11-09.md) and
+[2026-11-10 screens](experiments/2026-11-10-screening/): the first profiling, DSA-variant and sub-batch results.
+The screens found a promising sub-batch setting that still needs quality and memory validation; no live setting changed.
 
 ## Result
 

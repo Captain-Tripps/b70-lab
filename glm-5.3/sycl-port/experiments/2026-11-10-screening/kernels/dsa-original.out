@@ -1,0 +1,16 @@
+device=Intel(R) Arc(TM) Pro B70 Graphics
+pools=1 guard=ok finite=ok
+pools=7 guard=ok finite=ok
+pools=8 guard=ok finite=ok
+pools=9 guard=ok finite=ok
+pools=15 guard=ok finite=ok
+pools=16 guard=ok finite=ok
+pools=17 guard=ok finite=ok
+pools=511 guard=ok finite=ok
+pools=7130 guard=ok finite=ok
+warm-cache pools=7130 median_us=83.6394 rounds=7 launches=16
+pools=28523 guard=ok finite=ok
+warm-cache pools=28523 median_us=310.41 rounds=7 launches=16
+pools=32599 guard=ok finite=ok
+warm-cache pools=32599 median_us=356.986 rounds=7 launches=16
+PASS

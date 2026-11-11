@@ -1,0 +1,1 @@
+baseline-logits.bin vs sub768-logits.bin: rows 64 KL mean 0.01107 max 0.08258 top1 63/64 max|dlogit| 3.7089

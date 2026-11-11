@@ -1,0 +1,34 @@
+--- a/src/core/glm_prefill.dp.cpp
++++ b/src/core/glm_prefill.dp.cpp
+@@ -3248,6 +3248,7 @@
+ #endif
+                 {
+                 gb::bf16_to_f32(Ly.k_b, S->w32, (int64_t) g.n_head * g.kv_lora * g.qk_nope, s);
++                S->mark("qabs_prepare", s);
+                 blas_ck(DPCT_CHECK_ERROR(
+                             maya_gemm_heads(
+                                 (S->blas)->get_queue(),
+@@ -3258,6 +3259,7 @@
+                                 g.n_head * g.qk_nope, g.qk_nope, zero, B.q_abs,
+                                 g.n_head * g.kv_lora, g.kv_lora, g.n_head)),
+                         "q_abs");
++                S->mark("qabs_gemm", s);
+                 }
+                 S->mark("dsa_qabs", s);
+ #if defined(STRATA_USE_HIP)
+@@ -3289,6 +3291,7 @@
+ #endif
+                 {
+                 gb::bf16_to_f32(Ly.v_b, S->w32, (int64_t) g.n_head * g.v_head * g.kv_lora, s);
++                S->mark("out_prepare", s);
+                 blas_ck(DPCT_CHECK_ERROR(
+                             maya_gemm_heads(
+                                 (S->blas)->get_queue(),
+@@ -3299,6 +3302,7 @@
+                                 g.n_head * g.kv_lora, g.kv_lora, zero, B.attn,
+                                 g.n_head * g.v_head, g.v_head, g.n_head)),
+                         "mla out");
++                S->mark("out_gemm", s);
+                 }
+                 gb::f32_to_f16(B.attn, B.attn16, (int64_t) tn * g.n_head * g.v_head, s);
+                 if (!skip_output)

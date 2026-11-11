@@ -1,0 +1,42 @@
+{
+  "exe": "<work>\\rt-live\\generate.exe",
+  "args": [
+    "--glm-pack",
+    "<work>\\glm-m\\pack",
+    "--max-context",
+    "131072",
+    "--expert-cache",
+    "auto",
+    "--prefill",
+    "768",
+    "--layer-split",
+    "13,24,35"
+  ],
+  "cwd": "<work>\\maya",
+  "tokenizer": "<work>\\glm-m\\pack\\tokenizer",
+  "model_name": "glm-5.3-flash-maya-sycl",
+  "log": "<work>\\experiments\\codex-20261110\\baseline-engine.log",
+  "env": {
+    "ONEAPI_DEVICE_SELECTOR": "level_zero:0,1,2,3",
+    "MAYA_SYCL_LAYER_SYNC": "0",
+    "STRATA_GLM_CPU_LANE": "0",
+    "STRATA_GLM_RAM_GB": "40",
+    "ZES_ENABLE_SYSMAN": "1",
+    "STRATA_GLM_RESIDENT_SKIP": "1",
+    "STRATA_GLM_RESERVE_MB": "400"
+  },
+  "lib_dirs": [
+    "<work>\\rt-live",
+    "C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\2026.0\\bin",
+    "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\2026.0\\bin"
+  ],
+  "reasoning_effort": "high",
+  "thinking_budget": 8192,
+  "vision": {
+    "exe": "<work>/maya/build-vision-cpu/bin/maya-vision.exe",
+    "mmproj": "<work>/maya/data/vision/mmproj-GLM-5.3-Flash-F16.gguf",
+    "model": "<work>/maya/data/vision/GLM-5.3-Flash-vocab.gguf",
+    "gpu": false,
+    "threads": 24
+  }
+}

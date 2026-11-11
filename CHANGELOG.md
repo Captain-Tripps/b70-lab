@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-10
+- Recorded the first GLM Maya SYCL [optimization screens](glm-5.3/sycl-port/experiments/2026-11-10-screening/): profiler-off and profiler-on projection measurements, a DSA operator parity and warm-cache timing fixture, full-model DSA checks, and the sub-batch comparison with its quality and headroom limitations. Corrected the served example's stale prefill chunk to 768. No candidate was promoted or live configuration changed.
+
 ## 2026-11-09
 - Added a [GLM Maya SYCL optimization handoff](glm-5.3/sycl-port/LEADS-2026-11-09.md) for the next agent: six ranked leads, pinned source evidence, baseline and harness setup, experiment steps, correctness checks and stop/keep gates. Covers prefill projection batching, existing decode attention variants, incremental prompt preparation, sub-batches/checkpoints, remaining XMX paths and resident routing/fusion. Linked from the GLM notes and marked the old roadmap historical. Documentation only: no new B70 measurements or live changes.
 

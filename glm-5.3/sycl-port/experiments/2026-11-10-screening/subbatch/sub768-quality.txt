@@ -1,0 +1,4 @@
+--- json: ```json [ {"name": "Priya Natarajan", "role": "head of data", "start_date": "2021-03-15"}, {"name": "Wei Zhang", "role": "staff engineer", "start_date": "2022-07-01"}, {"name": "Fatima Al-Sayed", "role": "CFO", "start_date": "2020-11-09"} ] ```
+--- math: Weekdays: 340×5=1700/week; Saturdays: 120×0.88=105.6/week. Total: (1700+105.6)×5 = 1805.6×5 = **9028**
+--- capital: Paris, Tokyo, Brasília, Nairobi, Ottawa
+--- count: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
