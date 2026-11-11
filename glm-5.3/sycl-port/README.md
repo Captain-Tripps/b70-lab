@@ -23,6 +23,7 @@ matrix spans and records tile occupancy.
 The first [16-row tile screen](experiments/2026-11-10-bn16-screen/) increased occupancy but was slower and was
 rejected at screening.
 The [64-row screen](experiments/2026-11-10-bn64-screen/) made fewer tiles but was also slower, with more padding.
+The [48-row screen](experiments/2026-11-10-bn48-screen/) showed no established speedup in its small sample.
 
 ## Result
 

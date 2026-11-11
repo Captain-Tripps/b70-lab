@@ -1,0 +1,5 @@
+device=Intel(R) Arc(TM) Pro B70 Graphics rows=337
+type=22 rows=337 finite=ok guard=ok
+type=18 rows=337 finite=ok guard=ok
+type=21 rows=337 finite=ok guard=ok
+PASS

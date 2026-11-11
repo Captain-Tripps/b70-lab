@@ -45,4 +45,4 @@ occupancy fell from about 53% to 33%. The gate/up matrix span increased from 2.4
 from 1.417–1.418 s to 1.692 s. These event spans include submission gaps and marker overhead; they do not isolate
 padding, register pressure or other causes. The one profile showed zero grouped-call declines or trace drops.
 
-The 48-row compromise remains a separate experiment; this result does not prove every larger-tile design loses.
+The subsequent [48-row screen](../2026-11-10-bn48-screen/) showed no established speedup in its small sample.
