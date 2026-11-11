@@ -1,0 +1,5 @@
+code: rows=64 vocab=154880 top1=64/64 KL_mean=0.000006 KL_max=0.000133 max_abs=9.557047 changed_rows=[]
+
+records: rows=64 vocab=154880 top1=64/64 KL_mean=0.000000 KL_max=0.000009 max_abs=4.049636 changed_rows=[]
+
+long32k: rows=64 vocab=154880 top1=60/64 KL_mean=0.013540 KL_max=0.104683 max_abs=5.902460 changed_rows=[47, 49, 51, 57]

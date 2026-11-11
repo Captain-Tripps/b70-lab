@@ -1,0 +1,5 @@
+baseline vs repeat-baseline: top1=64/64 KL_mean=0.00000000 KL_max=0.00000000 max_abs=0.00000000 changed_rows=[] bit_identical=True
+
+sub768 vs repeat-sub768: top1=64/64 KL_mean=0.00000000 KL_max=0.00000000 max_abs=0.00000000 changed_rows=[] bit_identical=True
+
+repeat-baseline vs repeat-sub768: top1=60/64 KL_mean=0.01354034 KL_max=0.10468258 max_abs=5.90245950 changed_rows=[47, 49, 51, 57] bit_identical=False
