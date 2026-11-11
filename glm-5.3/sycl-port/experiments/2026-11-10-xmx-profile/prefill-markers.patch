@@ -1,0 +1,25 @@
+--- a/glm_prefill.dp.cpp
++++ b/glm_prefill.dp.cpp
+@@ -64,0 +65,2 @@
++
++extern "C" void maya_fg_profile_dump(void* q, int dev);
+@@ -2281,0 +2284 @@
++    if (fast_ && fast_->cs) maya_fg_profile_dump(fast_->cs, dev_);
+@@ -3250,0 +3254 @@
++                S->mark("qabs_prepare", s);
+@@ -3260,0 +3265 @@
++                S->mark("qabs_gemm", s);
+@@ -3291,0 +3297 @@
++                S->mark("out_prepare", s);
+@@ -3301,0 +3308 @@
++                S->mark("out_gemm", s);
+@@ -4054,0 +4062 @@
++                    S->mark("mmq_start", s);
+@@ -4055,0 +4064 @@
++                    S->mark("mmq_xq", s);
+@@ -4076,0 +4086 @@
++                    S->mark("mmq_gu", s);
+@@ -4077,0 +4088 @@
++                    S->mark("mmq_hq", s);
+@@ -4093,0 +4105 @@
++                    S->mark("mmq_down", s);

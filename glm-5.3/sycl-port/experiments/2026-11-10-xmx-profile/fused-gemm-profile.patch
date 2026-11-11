@@ -1,0 +1,78 @@
+--- a/fused-gemm.cpp
++++ b/fused-gemm.cpp
+@@ -10,0 +11,5 @@
++#include <chrono>
++#include <stdexcept>
++#include <map>
++#include <cstdio>
++#include <cstdlib>
+@@ -1030,0 +1036,42 @@
++// Opt-in diagnostics. Retain events until prefill_destroy has waited for this queue;
++// do not insert host waits in the hot path. Each bucket belongs to one compute queue.
++struct FgTraceRow {
++    int type; int64_t m, k, rows, experts, tiles, host_ns;
++    sycl::event begin, copied, packed, done;
++};
++struct FgTraceBucket { std::vector<FgTraceRow> rows; uint64_t declined=0, dropped=0; };
++static std::mutex& fg_trace_mutex() { static auto* m=new std::mutex; return *m; }
++static std::unordered_map<void*, FgTraceBucket>& fg_trace_buckets() {
++    static auto* m=new std::unordered_map<void*, FgTraceBucket>; return *m;
++}
++static bool fg_trace_enabled() { static const bool yes=std::getenv("MAYA_XMX_PROFILE")!=nullptr; return yes; }
++extern "C" void maya_fg_profile_declined(void* q) {
++    if (!fg_trace_enabled()) return;
++    std::lock_guard<std::mutex> lock(fg_trace_mutex()); ++fg_trace_buckets()[q].declined;
++}
++extern "C" void maya_fg_profile_dump(void* q, int dev) {
++    if (!fg_trace_enabled()) return;
++    FgTraceBucket bucket;
++    { std::lock_guard<std::mutex> lock(fg_trace_mutex());
++      auto& all=fg_trace_buckets(); auto it=all.find(q); if (it==all.end()) return;
++      bucket=std::move(it->second); all.erase(it); }
++    struct Sum { uint64_t count=0; int64_t rows=0, experts=0, tiles=0, host_ns=0; double copy=0, pack=0, gemm=0; };
++    std::map<std::tuple<int,int64_t,int64_t>,Sum> sums;
++    try {
++        for (auto& r:bucket.rows) {
++            auto& z=sums[{r.type,r.m,r.k}]; ++z.count; z.rows+=r.rows; z.experts+=r.experts;
++            z.tiles+=r.tiles; z.host_ns+=r.host_ns;
++            auto end=[](const sycl::event& e) { return e.get_profiling_info<sycl::info::event_profiling::command_end>(); };
++            auto a=end(r.begin), b=end(r.copied), c=end(r.packed), d=end(r.done);
++            if (a>b || b>c || c>d) throw std::runtime_error("non-monotonic XMX event timestamps");
++            z.copy+=double(b-a)/1e6; z.pack+=double(c-b)/1e6; z.gemm+=double(d-c)/1e6;
++        }
++        std::fprintf(stderr,"xmx profile CUDA%d: accepted=%zu declined=%llu dropped=%llu\n",dev,bucket.rows.size(),(unsigned long long)bucket.declined,(unsigned long long)bucket.dropped);
++        for (const auto& kv:sums) { const auto& z=kv.second;
++            std::fprintf(stderr,"  type=%d M=%lld K=%lld calls=%llu rows=%lld experts=%lld tiles=%lld host_tiles_ms=%.3f copy_ms=%.3f pack_ms=%.3f gemm_ms=%.3f\n",
++                std::get<0>(kv.first),(long long)std::get<1>(kv.first),(long long)std::get<2>(kv.first),
++                (unsigned long long)z.count,(long long)z.rows,(long long)z.experts,(long long)z.tiles,double(z.host_ns)/1e6,z.copy,z.pack,z.gemm);
++        }
++    } catch (const std::exception& e) { std::fprintf(stderr,"xmx profile CUDA%d ERROR: %s\n",dev,e.what()); }
++}
++
+@@ -1035,0 +1083,3 @@
++    const bool trace=fg_trace_enabled();
++    std::chrono::steady_clock::time_point host_begin{};
++    if (trace) host_begin=std::chrono::steady_clock::now();
+@@ -1043,0 +1094,2 @@
++    std::chrono::steady_clock::time_point host_end{};
++    if (trace) host_end=std::chrono::steady_clock::now();
+@@ -1050,0 +1103,2 @@
++    sycl::event ev_begin, ev_copy, ev_pack, ev_done;
++    if (trace) ev_begin=stream->ext_oneapi_submit_barrier();
+@@ -1051,0 +1106 @@
++    if (trace) ev_copy=stream->ext_oneapi_submit_barrier();
+@@ -1054,0 +1110 @@
++    if (trace) ev_pack=stream->ext_oneapi_submit_barrier();
+@@ -1059 +1115 @@
+-    return fg_visit_type(src0_type, reordered, [&](auto tag) {
++    const bool launched=fg_visit_type(src0_type, reordered, [&](auto tag) {
+@@ -1064,0 +1121,9 @@
++    if (trace && launched) {
++        ev_done=stream->ext_oneapi_submit_barrier();
++        int64_t active=0; for (int64_t e=0;e<n_as;++e) active+=expert_row_offsets[e+1]>expert_row_offsets[e];
++        FgTraceRow row{int(src0_type),M,K,expert_row_offsets[n_as],active,n_tiles,
++            std::chrono::duration_cast<std::chrono::nanoseconds>(host_end-host_begin).count(),ev_begin,ev_copy,ev_pack,ev_done};
++        std::lock_guard<std::mutex> lock(fg_trace_mutex()); auto& bucket=fg_trace_buckets()[stream];
++        if (bucket.rows.size()<50000) bucket.rows.push_back(std::move(row)); else ++bucket.dropped;
++    }
++    return launched;

@@ -1,0 +1,11 @@
+--- a/maya_fg_shim.cpp
++++ b/maya_fg_shim.cpp
+@@ -81,0 +82 @@
++extern "C" void maya_fg_profile_declined(void* queue);
+@@ -87,2 +88,4 @@
+-    return ggml_sycl_grouped_dequant_gemm((ggml_type) type, false, w, stride, x, GGML_PREC_DEFAULT, dst, offs, n_as, M, K,
+-                                          offs[n_as], P.tiles, P, q) ? 1 : 0;
++    const bool ok=ggml_sycl_grouped_dequant_gemm((ggml_type) type, false, w, stride, x, GGML_PREC_DEFAULT, dst, offs, n_as, M, K,
++                                          offs[n_as], P.tiles, P, q);
++    if (!ok) maya_fg_profile_declined(queue);
++    return ok ? 1 : 0;

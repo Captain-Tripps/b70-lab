@@ -18,6 +18,8 @@ resident in VRAM, 128k context.
 The screens found a promising sub-batch setting that still needs quality and memory validation; no live setting changed.
 The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/) separates the dominant grouped
 gate/up and down spans from row gathers.
+The [grouped XMX profile](experiments/2026-11-10-xmx-profile/) further splits tile copy, activation packing and
+matrix spans and records tile occupancy.
 
 ## Result
 
