@@ -1,0 +1,1 @@
+rows=64 vocab=154880 top1=62/64 KL_mean=0.014031108 KL_max=0.20937064 max_abs=8.4589348 changed_rows=[7, 29]

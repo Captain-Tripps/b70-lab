@@ -1,0 +1,13 @@
+kda_q-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_k-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_v-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_fa-0.f32 count=128 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_ga-0.f32 count=128 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_beta-0.f32 count=64 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_cq-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_ck-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_cv-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_g1-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_g2-0.f32 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+kda_out16-0.f16 count=8192 unequal=0 maxabs=0 rms=0 rel_rms=0
+mixer-0.f32 count=4096 unequal=3756 maxabs=1.86264515e-08 rms=2.17841943e-09 rel_rms=3.89856668e-07

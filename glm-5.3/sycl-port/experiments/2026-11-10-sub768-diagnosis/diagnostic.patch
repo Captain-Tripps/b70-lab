@@ -1,0 +1,47 @@
+--- a/src/core/glm_prefill.dp.cpp
++++ b/src/core/glm_prefill.dp.cpp
+@@ -3092,6 +3092,14 @@
+                 sgemm_bf16(Ly.f_a, HD, E, xs, E, B.fa, HD, tn, 1.0f);
+                 sgemm_bf16(Ly.g_a, HD, E, xs, E, B.ga, HD, tn, 1.0f);
+                 sgemm_bf16(Ly.beta, g.n_head, E, xs, E, B.beta, g.n_head, tn, 1.0f);
++                if (il == 0 && t0 + tn == T) {
++                    dump_row("kda_q-0", B.proj[0], DI, tn - 1);
++                    dump_row("kda_k-0", B.proj[1], DI, tn - 1);
++                    dump_row("kda_v-0", B.proj[2], DI, tn - 1);
++                    dump_row("kda_fa-0", B.fa, HD, tn - 1);
++                    dump_row("kda_ga-0", B.ga, HD, tn - 1);
++                    dump_row("kda_beta-0", B.beta, g.n_head, tn - 1);
++                }
+                 const float* pr[3] = {B.proj[0], B.proj[1], B.proj[2]};
+                 float* cv[3] = {B.conv[0], B.conv[1], B.conv[2]};
+                 float* cst = state_ + kda_conv_[(size_t) il];
+@@ -3099,6 +3107,13 @@
+                 gb::kda_conv_state(pr, cst, tn, DI, g.d_conv, s);
+                 sgemm_bf16(Ly.f_b, DI, HD, B.fa, HD, B.g1, DI, tn, 1.0f);
+                 sgemm_bf16(Ly.g_b, DI, HD, B.ga, HD, B.g2, DI, tn, 1.0f);
++                if (il == 0 && t0 + tn == T) {
++                    dump_row("kda_cq-0", B.conv[0], DI, tn - 1);
++                    dump_row("kda_ck-0", B.conv[1], DI, tn - 1);
++                    dump_row("kda_cv-0", B.conv[2], DI, tn - 1);
++                    dump_row("kda_g1-0", B.g1, DI, tn - 1);
++                    dump_row("kda_g2-0", B.g2, DI, tn - 1);
++                }
+                 S->mark("kda_proj", s);
+                 // the recurrence over n_head x 4 blocks (kda_rec_split: the value columns are independent) instead of
+                 // one block a head - 32 blocks for a V100's 80 SMs.  Maya-S24, 27K prompts: kda_rec 4.7 / 5.1 -> 3.5 s
+@@ -3165,6 +3180,15 @@
+                 } else {
+                     gb::kda_rec(B.conv[0], B.conv[1], B.conv[2], B.g1, Ly.dt_bias, Ly.ssm_a, g.kda_lb, B.beta, Sl, B.g2,
+                                 Ly.ssm_norm, g.norm_eps, g.n_head, tn, B.out16, s);
++                }
++                if (il == 0 && t0 + tn == T && cb_dir && cb_dir[0]) {
++                    s->wait();
++                    std::vector<sycl::half> buf((size_t) DI);
++                    dpct::get_in_order_queue().memcpy(buf.data(), B.out16 + (size_t)(tn - 1) * DI, (size_t)DI * sizeof(sycl::half)).wait();
++                    if (FILE* f = std::fopen((std::string(cb_dir) + "/kda_out16-0.f16").c_str(), "wb")) {
++                        std::fwrite(buf.data(), sizeof(sycl::half), buf.size(), f);
++                        std::fclose(f);
++                    }
+                 }
+                 S->mark("kda_rec", s);
+                 if (!skip_output) hgemm_q(Ly.out, E, DI, B.out16, DI, mixer, E, tn, 0.0f);

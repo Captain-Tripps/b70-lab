@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-10
+- Sub-batch diagnosis: the first observed layer-0 difference followed a batch-shaped FP16-input output GEMM; expert selections diverged later. Splitting only that GEMM did not restore 32k baseline logits. [Diagnosis](glm-5.3/sycl-port/experiments/2026-11-10-sub768-diagnosis/).
 - Sub-batch 768 follow-up: 32k teacher-forced top-1 agreement was 60/64; baseline repeats were bit-identical to each other, as were candidate repeats. Two additional 8k inputs each agreed 64/64. The numerical difference remains unvalidated; live settings unchanged. [Validation](glm-5.3/sycl-port/experiments/2026-11-10-sub768-validation/).
 - Grouped XMX 48-row screen: 13.4% fewer tiles, but the warmed 8k prompt time was only 0.55% below the surrounding control mean, too little to establish a gain. Synthetic outputs and 64 forced-position logits matched; no live change. [BN48 screen](glm-5.3/sycl-port/experiments/2026-11-10-bn48-screen/).
 - Screened a 64-row grouped XMX tile. It made ~19% fewer tiles but reduced row occupancy to ~33%; warmed 8k prompt time was ~17.5% worse, with 4.1M synthetic outputs and 64-position logits matching. Rejected at screening. [BN64 screen](glm-5.3/sycl-port/experiments/2026-11-10-bn64-screen/).

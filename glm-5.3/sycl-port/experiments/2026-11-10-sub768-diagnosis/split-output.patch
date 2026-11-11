@@ -1,0 +1,20 @@
+--- a/src/core/glm_prefill.dp.cpp
++++ b/src/core/glm_prefill.dp.cpp
+@@ -3191,7 +3191,16 @@
+                     }
+                 }
+                 S->mark("kda_rec", s);
+-                if (!skip_output) hgemm_q(Ly.out, E, DI, B.out16, DI, mixer, E, tn, 0.0f);
++                if (!skip_output) {
++                    static const bool diag_split_out = getenv("MAYA_DIAG_KDA_OUT_512") != nullptr;
++                    if (diag_split_out) {
++                        for (int out_t = 0; out_t < tn; out_t += 512) {
++                            const int out_n = std::min(512, tn - out_t);
++                            hgemm_q(Ly.out, E, DI, B.out16 + (size_t)out_t * DI, DI,
++                                    mixer + (size_t)out_t * E, E, out_n, 0.0f);
++                        }
++                    } else hgemm_q(Ly.out, E, DI, B.out16, DI, mixer, E, tn, 0.0f);
++                }
+             } else {
+                 Carve c{S->uni};
+                 DsaBufs B = carve_dsa(c, (size_t) tn, g, S->max_pools);

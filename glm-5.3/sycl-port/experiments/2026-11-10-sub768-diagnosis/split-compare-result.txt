@@ -1,0 +1,3 @@
+live-baseline vs diagnostic-baseline: top1=64/64 KL_mean=0 KL_max=0 max_abs=0 changed_rows=[] bit_identical=True
+live-baseline vs split-out candidate: top1=61/64 KL_mean=0.021468576 KL_max=0.27128545 max_abs=8.6589277 changed_rows=[49, 51, 55] bit_identical=False
+ordinary-768 vs split-out candidate: top1=61/64 KL_mean=0.025459462 KL_max=0.27391338 max_abs=9.6039274 changed_rows=[47, 55, 57] bit_identical=False
