@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-10
+- Split the dominant GLM resident-expert prefill interval into grouped gate/up + SwiGLU, down product and row-gather event spans, with a profiler-off control and matching 64-position logits. Two [profiles](glm-5.3/sycl-port/experiments/2026-11-10-resident-profile/) identify the grouped products as the next place to investigate; no optimization or live change.
 - Recorded the first GLM Maya SYCL [optimization screens](glm-5.3/sycl-port/experiments/2026-11-10-screening/): profiler-off and profiler-on projection measurements, a DSA operator parity and warm-cache timing fixture, full-model DSA checks, and the sub-batch comparison with its quality and headroom limitations. Corrected the served example's stale prefill chunk to 768. No candidate was promoted or live configuration changed.
 
 ## 2026-11-09

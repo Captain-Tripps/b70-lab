@@ -1,0 +1,146 @@
+glm settings from the environment: STRATA_GLM_CPU_LANE=0, STRATA_GLM_KL_DUMP=<work>\experiments\codex-resident-20261110\off-logits.bin,64, STRATA_GLM_NO_SPEC=1, STRATA_GLM_RAM_GB=40, STRATA_GLM_RESERVE_MB=400, STRATA_GLM_RESIDENT_SKIP=1
+glm mtp: CUDA3 the NextN block (blk.45) loaded: 173 MB dense, experts q3_K/q4_K
+glm mtp: CUDA3 the MTP decode drafts over 98741 of 154880 tokens (the ids below 98304 and 437 more: 316 of 496 MB a draft)
+glm prefill: CUDA0 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA0 the chunk stage line is on (STRATA_GLM_PREFILL_STAGES=0 silences it)
+glm prefill: CUDA0 chunks of 768 tokens (--prefill 768; mixer sub-batches of 512), borrowing 657 MB of the expert pool while a prompt runs (activations 442, weight scratch 96, expert staging 103, prestage 0: 0 experts); disk landing ring 12 experts (103 MB pinned)
+glm fast: CUDA0 VRAM before the expert pool: 2.29 of 31.16 GB in use - dense weights 2.04, state/KV (131072 ctx) 0.49, activations 0.07, other (context, MTP, scratch, prompt path) -0.30
+glm fast: CUDA0 layers [0,13) expert pool 24.40 GB, 299-299 slots/layer (2990 total) - complete: every expert, 3 spares and 8 lendable slots a layer
+glm prefill: CUDA1 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA1 the chunk stage line is on (STRATA_GLM_PREFILL_STAGES=0 silences it)
+glm prefill: CUDA1 chunks of 768 tokens (--prefill 768; mixer sub-batches of 512), borrowing 653 MB of the expert pool while a prompt runs (activations 442, weight scratch 96, expert staging 99, prestage 0: 0 experts); disk landing ring 12 experts (99 MB pinned)
+glm fast: CUDA1 VRAM before the expert pool: 1.75 of 31.16 GB in use - dense weights 1.49, state/KV (131072 ctx) 0.48, activations 0.07, other (context, MTP, scratch, prompt path) -0.29
+glm fast: CUDA1 layers [13,24) expert pool 26.39 GB, 299-299 slots/layer (3289 total) - complete: every expert, 3 spares and 8 lendable slots a layer
+glm prefill: CUDA2 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA2 the chunk stage line is on (STRATA_GLM_PREFILL_STAGES=0 silences it)
+glm prefill: CUDA2 chunks of 768 tokens (--prefill 768; mixer sub-batches of 512), borrowing 653 MB of the expert pool while a prompt runs (activations 442, weight scratch 96, expert staging 99, prestage 0: 0 experts); disk landing ring 12 experts (99 MB pinned)
+glm fast: CUDA2 VRAM before the expert pool: 1.59 of 31.16 GB in use - dense weights 1.48, state/KV (131072 ctx) 0.33, activations 0.07, other (context, MTP, scratch, prompt path) -0.29
+glm fast: CUDA2 layers [24,35) expert pool 26.39 GB, 299-299 slots/layer (3289 total) - complete: every expert, 3 spares and 8 lendable slots a layer
+glm prefill: CUDA3 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA3 the chunk stage line is on (STRATA_GLM_PREFILL_STAGES=0 silences it)
+glm prefill: CUDA3 chunks of 768 tokens (--prefill 768; mixer sub-batches of 512), borrowing 657 MB of the expert pool while a prompt runs (activations 442, weight scratch 96, expert staging 103, prestage 0: 0 experts); disk landing ring 96 experts (823 MB pinned)
+glm fast: CUDA3 VRAM before the expert pool: 2.44 of 31.16 GB in use - dense weights 1.85, state/KV (131072 ctx) 0.62, activations 0.09, other (context, MTP, scratch, prompt path) -0.12
+glm fast: CUDA3 layers [35,45) expert pool 27.63 GB, 298-298 slots/layer, the draft layer 298 (3278 total) - complete: every expert, 3 spares and 7 lendable slots a layer
+glm fast: CUDA0 RAM tier 0.42 GB pinned, 52 slots
+glm fast: CUDA1 RAM tier 0.30 GB pinned, 38 slots
+glm fast: CUDA2 RAM tier 0.30 GB pinned, 38 slots
+glm fast: CUDA3 RAM tier 0.62 GB pinned, 70 slots
+glm fast: CUDA0 warming the expert tiers 10% (2.6 of 25.2 GB, 3 s)
+glm fast: CUDA2 warming the expert tiers 10% (2.7 of 27.2 GB, 3 s)
+glm fast: CUDA1 warming the expert tiers 10% (2.7 of 27.2 GB, 3 s)
+glm fast: CUDA3 warming the expert tiers 10% (2.9 of 28.6 GB, 3 s)
+glm fast: CUDA0 warming the expert tiers 20% (5.1 of 25.2 GB, 5 s)
+glm fast: CUDA2 warming the expert tiers 20% (5.5 of 27.2 GB, 5 s)
+glm fast: CUDA1 warming the expert tiers 20% (5.5 of 27.2 GB, 5 s)
+glm fast: CUDA3 warming the expert tiers 20% (5.8 of 28.6 GB, 5 s)
+glm fast: CUDA0 warming the expert tiers 30% (7.6 of 25.2 GB, 7 s)
+glm fast: CUDA2 warming the expert tiers 30% (8.2 of 27.2 GB, 7 s)
+glm fast: CUDA1 warming the expert tiers 30% (8.2 of 27.2 GB, 8 s)
+glm fast: CUDA3 warming the expert tiers 30% (8.6 of 28.6 GB, 8 s)
+glm fast: CUDA0 warming the expert tiers 40% (10.1 of 25.2 GB, 9 s)
+glm fast: CUDA2 warming the expert tiers 40% (10.9 of 27.2 GB, 10 s)
+glm fast: CUDA3 warming the expert tiers 40% (11.5 of 28.6 GB, 10 s)
+glm fast: CUDA1 warming the expert tiers 40% (10.9 of 27.2 GB, 11 s)
+glm fast: CUDA0 warming the expert tiers 50% (12.6 of 25.2 GB, 12 s)
+glm fast: CUDA2 warming the expert tiers 50% (13.6 of 27.2 GB, 12 s)
+glm fast: CUDA3 warming the expert tiers 50% (14.4 of 28.6 GB, 12 s)
+glm fast: CUDA1 warming the expert tiers 50% (13.6 of 27.2 GB, 14 s)
+glm fast: CUDA2 warming the expert tiers 60% (16.3 of 27.2 GB, 14 s)
+glm fast: CUDA3 warming the expert tiers 60% (17.2 of 28.6 GB, 14 s)
+glm fast: CUDA0 warming the expert tiers 60% (15.2 of 25.2 GB, 15 s)
+glm fast: CUDA2 warming the expert tiers 70% (19.1 of 27.2 GB, 16 s)
+glm fast: CUDA3 warming the expert tiers 70% (20.1 of 28.6 GB, 16 s)
+glm fast: CUDA1 warming the expert tiers 60% (16.3 of 27.2 GB, 17 s)
+glm fast: CUDA0 warming the expert tiers 70% (17.7 of 25.2 GB, 18 s)
+glm fast: CUDA2 warming the expert tiers 80% (21.8 of 27.2 GB, 18 s)
+glm fast: CUDA3 warming the expert tiers 80% (23.0 of 28.6 GB, 18 s)
+glm fast: CUDA1 warming the expert tiers 70% (19.1 of 27.2 GB, 20 s)
+glm fast: CUDA0 warming the expert tiers 80% (20.2 of 25.2 GB, 20 s)
+glm fast: CUDA3 warming the expert tiers 90% (25.8 of 28.6 GB, 20 s)
+glm fast: CUDA2 warming the expert tiers 90% (24.5 of 27.2 GB, 20 s)
+glm fast: CUDA0 warming the expert tiers 90% (22.7 of 25.2 GB, 22 s)
+glm fast: CUDA3 warming the expert tiers 100% (28.6 of 28.6 GB, 21 s)
+glm fast: CUDA3 tiers warm: 3168 experts (28.6 GB) in 21 s (1.34 GB/s)
+glm fast: CUDA1 warming the expert tiers 80% (21.8 of 27.2 GB, 23 s)
+glm fast: CUDA0 warming the expert tiers 100% (25.2 of 25.2 GB, 23 s)
+glm fast: CUDA0 tiers warm: 2880 experts (25.2 GB) in 23 s (1.08 GB/s)
+glm fast: CUDA2 warming the expert tiers 100% (27.2 of 27.2 GB, 23 s)
+glm fast: CUDA2 tiers warm: 3168 experts (27.2 GB) in 23 s (1.18 GB/s)
+glm fast: CUDA1 warming the expert tiers 90% (24.5 of 27.2 GB, 24 s)
+glm fast: CUDA1 warming the expert tiers 100% (27.2 of 27.2 GB, 25 s)
+glm fast: CUDA1 tiers warm: 3168 experts (27.2 GB) in 25 s (1.09 GB/s)
+glm split: layers [0, 13) on CUDA0, [13, 24) on CUDA1, [24, 35) on CUDA2, [35, 45) on CUDA3 (one 64 KB host hop per boundary per token)
+INFO context=131072 kv=fp16 kv_resident=0 expert_slots=12846 expert_cache_mib=107321 engine_kind=glm-fast experts=12096 vram_slots=12846 vram_gb=104.8 ram_slots=198 ram_gb=1.7 mtp=1 dflash=0 vision_lend=0 cpu_threads=0 cpu_threads_max=0 pcie_share=1.00 logit_bias=1
+VRAM dev=0 pci=- total=33456746496 free=4782256128 weights=2189199360 kv=523370496 kv_ram=0 act=74545752 drafter=0 window=0 pool=26199346368 tail=700985856 borrow=688890368 vision=0 slots=2990 ctx=131072 layers=0-13
+VRAM dev=1 pci=- total=33456746496 free=3250544640 weights=1602715392 kv=514392064 kv_ram=0 act=71400024 drafter=0 window=0 pool=28333393088 tail=758084096 borrow=684458240 vision=0 slots=3289 ctx=131072 layers=13-24
+VRAM dev=2 pci=- total=33456746496 free=3420389376 weights=1588975104 kv=359432192 kv_ram=0 act=71400024 drafter=0 window=0 pool=28333393088 tail=758084096 borrow=684458240 vision=0 slots=3289 ctx=131072 layers=24-35
+VRAM dev=3 pci=- total=33456746496 free=1158905856 weights=1981174528 kv=669351936 kv_ram=0 act=98138712 drafter=181694720 window=1970176 pool=29668484256 tail=696910704 borrow=688890368 vision=0 slots=3278 ctx=131072 layers=35-45
+glm prefill: CUDA0 the MMQ scratch pool has 11.5 MB of the loan (16.0 MB past the layout's need; 0 experts more lent for it)
+glm prefill: CUDA1 the MMQ scratch pool has 16.0 MB of the loan (16.0 MB past the layout's need; 0 experts more lent for it)
+glm prefill: CUDA2 the MMQ scratch pool has 16.0 MB of the loan (16.0 MB past the layout's need; 0 experts more lent for it)
+glm prefill: CUDA3 the MMQ scratch pool has 7.6 MB of the loan (16.0 MB past the layout's need; 0 experts more lent for it)
+glm_batch: prompt attention on the XMX engines (fp16, fixups29)
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+glm prefill: CUDA0 chunk 1/11, 768 tokens, wall 1205 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 1205 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+glm prefill: CUDA0 chunk 2/11, 768 tokens, wall 494 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 494 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 3/11, 768 tokens, wall 527 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 527 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 3 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 1/11, 768 tokens, wall 1159 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 1159 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 5 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+glm prefill: CUDA0 chunk 4/11, 768 tokens, wall 531 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 531 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 2/11, 768 tokens, wall 521 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 521 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 3 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 5/11, 768 tokens, wall 524 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 524 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 1/11, 768 tokens, wall 1080 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 1080 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 5 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 3/11, 768 tokens, wall 565 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 565 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 6/11, 768 tokens, wall 532 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 532 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 2/11, 768 tokens, wall 483 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 483 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 3 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+glm prefill: CUDA1 chunk 4/11, 768 tokens, wall 573 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 573 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 7/11, 768 tokens, wall 533 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 533 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 3/11, 768 tokens, wall 518 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 518 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 1/11, 768 tokens, wall 1073 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 1073 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 3 ms host, disk wait 0 ms, hop in 4 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 5/11, 768 tokens, wall 575 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 575 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 8/11, 768 tokens, wall 526 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 526 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 4/11, 768 tokens, wall 519 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 519 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 2/11, 768 tokens, wall 472 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 472 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 6/11, 768 tokens, wall 573 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 573 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 4 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 9/11, 768 tokens, wall 534 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 534 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 5/11, 768 tokens, wall 518 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 518 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 3/11, 768 tokens, wall 505 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 505 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 7/11, 768 tokens, wall 574 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 574 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 10/11, 768 tokens, wall 534 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 534 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 4/11, 768 tokens, wall 507 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 507 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 4 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 6/11, 768 tokens, wall 516 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 516 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 4 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 8/11, 768 tokens, wall 577 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 577 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 11/11, 448 tokens, wall 430 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 430 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (35840 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 5/11, 768 tokens, wall 507 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 507 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 7/11, 768 tokens, wall 518 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 518 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 9/11, 768 tokens, wall 573 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 573 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 6/11, 768 tokens, wall 512 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 512 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 8/11, 768 tokens, wall 517 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 517 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 10/11, 768 tokens, wall 582 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 582 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 7/11, 768 tokens, wall 510 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 510 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 9/11, 768 tokens, wall 517 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 517 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA1 chunk 11/11, 448 tokens, wall 449 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 449 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (39424 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 1 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 8/11, 768 tokens, wall 517 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 517 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 3 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 10/11, 768 tokens, wall 523 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 523 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (67584 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA2 chunk 11/11, 448 tokens, wall 411 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 411 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 3201 (39424 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 1 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 9/11, 768 tokens, wall 512 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 512 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 10/11, 768 tokens, wall 521 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 521 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA3 chunk 11/11, 448 tokens, wall 396 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 396 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (35840 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 2 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: 8128 tokens in 9541.8 ms (1.17 ms/token, 852 tok/s), 11 chunks of 768 tokens | CUDA0 6369 ms, CUDA1 6720 ms (hop in 29 ms), CUDA2 6119 ms (hop in 30 ms), CUDA3 6033 ms (hop in 29 ms)
+glm dsa scores: CUDA0 on the original kernels
+glm mla split attention: CUDA0 on the original kernels
+glm hop: overlapped (L0 adapter v1)
+glm dsa scores: CUDA1 on the original kernels
+glm mla split attention: CUDA1 on the original kernels
+glm dsa scores: CUDA2 on the original kernels
+glm mla split attention: CUDA2 on the original kernels
+glm dsa scores: CUDA3 on the original kernels
+glm mla split attention: CUDA3 on the original kernels
+maya generate: 64 positions' logits in <work>\experiments\codex-resident-20261110\off-logits.bin
+EXIT_CODE=0

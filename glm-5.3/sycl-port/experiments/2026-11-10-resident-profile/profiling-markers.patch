@@ -1,0 +1,62 @@
+--- a/src/core/glm_prefill.dp.cpp
++++ b/src/core/glm_prefill.dp.cpp
+@@ -3248,6 +3248,7 @@
+ #endif
+                 {
+                 gb::bf16_to_f32(Ly.k_b, S->w32, (int64_t) g.n_head * g.kv_lora * g.qk_nope, s);
++                S->mark("qabs_prepare", s);
+                 blas_ck(DPCT_CHECK_ERROR(
+                             maya_gemm_heads(
+                                 (S->blas)->get_queue(),
+@@ -3258,6 +3259,7 @@
+                                 g.n_head * g.qk_nope, g.qk_nope, zero, B.q_abs,
+                                 g.n_head * g.kv_lora, g.kv_lora, g.n_head)),
+                         "q_abs");
++                S->mark("qabs_gemm", s);
+                 }
+                 S->mark("dsa_qabs", s);
+ #if defined(STRATA_USE_HIP)
+@@ -3289,6 +3291,7 @@
+ #endif
+                 {
+                 gb::bf16_to_f32(Ly.v_b, S->w32, (int64_t) g.n_head * g.v_head * g.kv_lora, s);
++                S->mark("out_prepare", s);
+                 blas_ck(DPCT_CHECK_ERROR(
+                             maya_gemm_heads(
+                                 (S->blas)->get_queue(),
+@@ -3299,6 +3302,7 @@
+                                 g.n_head * g.kv_lora, g.kv_lora, zero, B.attn,
+                                 g.n_head * g.v_head, g.v_head, g.n_head)),
+                         "mla out");
++                S->mark("out_gemm", s);
+                 }
+                 gb::f32_to_f16(B.attn, B.attn16, (int64_t) tn * g.n_head * g.v_head, s);
+                 if (!skip_output)
+@@ -4052,7 +4056,9 @@
+                             }
+                         }
+                     }
++                    S->mark("mmq_start", s);
+                     mmq::quantize(S->x, M.row_tok + r0 + a, M.Xq, Ly.gu_type, E, E, nrows, s);
++                    S->mark("mmq_xq", s);
+                     mmq::Product gu;
+                     gu.w = wbase + (size_t) i0 * stride;
+                     gu.type = Ly.gu_type;
+@@ -4074,7 +4080,9 @@
+                         S->mq->run(gu, s);
+                         gb::swiglu_rows(GU, GU, nrows, nff, g.swiglu_exp, s, 2 * nff);   // (in place: no T x K x n_ff buffer)
+                     }
++                    S->mark("mmq_gu", s);
+                     mmq::quantize(GU, nullptr, M.Hq, Ly.d_type, nff, 2 * nff, nrows, s);
++                    S->mark("mmq_hq", s);
+                     mmq::Product dn;
+                     dn.w = wbase + (size_t) i0 * stride + Ly.down_off;
+                     dn.type = Ly.d_type;
+@@ -4091,6 +4099,7 @@
+                     dn.dst = M.OUTP + (size_t) (o - a) * E;
+                     dn.ld_dst = E;
+                     S->mq->run(dn, s);
++                    S->mark("mmq_down", s);
+                 }
+                 i0 = i1;
+             }

@@ -16,6 +16,8 @@ resident in VRAM, 128k context.
 [Agent handoff and ranked leads — 2026-11-09](LEADS-2026-11-09.md) and
 [2026-11-10 screens](experiments/2026-11-10-screening/): the first profiling, DSA-variant and sub-batch results.
 The screens found a promising sub-batch setting that still needs quality and memory validation; no live setting changed.
+The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/) separates the dominant grouped
+gate/up and down spans from row gathers.
 
 ## Result
 
