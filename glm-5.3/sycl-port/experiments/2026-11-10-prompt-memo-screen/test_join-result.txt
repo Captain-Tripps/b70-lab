@@ -1,0 +1,7 @@
+test_concurrent (__main__.Check.test_concurrent) ... ok
+test_edits_and_histories (__main__.Check.test_edits_and_histories) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.084s
+
+OK

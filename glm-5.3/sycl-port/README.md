@@ -18,6 +18,7 @@ resident in VRAM, 128k context.
 The sub-batch setting showed a timing improvement but [further validation](experiments/2026-11-10-sub768-validation/) found repeatable 32k numerical differences; no live setting changed.
 A [numerical diagnosis](experiments/2026-11-10-sub768-diagnosis/) traced early differences and tested a targeted intervention.
 A [selective-batching screen](experiments/2026-11-10-selective-sub-batches/) did not establish a useful gain.
+A [partial prompt-memo pilot](experiments/2026-11-10-prompt-memo-screen/) measured CPU savings but no established served follow-up gain.
 The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/) separates the dominant grouped
 gate/up and down spans from row gathers.
 The [grouped XMX profile](experiments/2026-11-10-xmx-profile/) further splits tile copy, activation packing and

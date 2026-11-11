@@ -1,0 +1,8 @@
+{"tag": "prime", "mode": "0", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 102.641918099951, "elapsed_s": 102.74197339999955, "answer": "**Status: review"}
+{"tag": "warm-memo", "mode": "1", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.2653818000108004, "elapsed_s": 2.402145600062795, "answer": "**Review 1"}
+{"tag": "measured-1", "mode": "0", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.2787854000926018, "elapsed_s": 2.4176867000060156, "answer": "**Review 2"}
+{"tag": "measured-2", "mode": "1", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.263316399999894, "elapsed_s": 2.4012120999395847, "answer": "**Review 3"}
+{"tag": "measured-3", "mode": "1", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.2448826000327244, "elapsed_s": 2.381809600046836, "answer": "**Review 4"}
+{"tag": "measured-4", "mode": "0", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.751632299972698, "elapsed_s": 2.888883800012991, "answer": "**Review 5"}
+{"tag": "measured-5", "mode": "1", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.9891858000773937, "elapsed_s": 3.126860700082034, "answer": "**Review 6"}
+{"tag": "measured-6", "mode": "0", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.5236887000501156, "elapsed_s": 2.6606958999764174, "answer": "**Review 7"}

@@ -1,0 +1,8 @@
+test_histories_and_fuzz (__main__.Check.test_histories_and_fuzz) ... ok
+test_image_bypass (__main__.Check.test_image_bypass) ... ok
+test_suffix_fallback (__main__.Check.test_suffix_fallback) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.055s
+
+OK
