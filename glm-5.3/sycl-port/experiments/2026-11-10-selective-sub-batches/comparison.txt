@@ -1,0 +1,4 @@
+32k diagnostic control: top1=64/64 KL_mean=0 KL_max=0 max_abs=0 changed_rows=[] bit_identical=True
+32k recurrent original: top1=61/64 KL_mean=0.015692742 KL_max=0.12688422 max_abs=8.5377564 changed_rows=[49, 57, 60] bit_identical=False
+32k recurrent+dense original: top1=63/64 KL_mean=0.011349093 KL_max=0.10115805 max_abs=7.7667694 changed_rows=[49] bit_identical=False
+8k recurrent+dense original: top1=64/64 KL_mean=4.6779175e-06 KL_max=4.8395095e-05 max_abs=8.1071026 changed_rows=[] bit_identical=False

@@ -1,0 +1,24 @@
+--- a/src/core/glm_prefill.dp.cpp
++++ b/src/core/glm_prefill.dp.cpp
+@@ -3080,4 +3080,8 @@
+         // ---- the mixer, in sub-batches of S->sub tokens (the recurrences carry their state across)
+-        for (int t0 = 0; t0 < T; t0 += S->sub) {
+-            const int tn = std::min(S->sub, T - t0);
++        const bool diag_kda_512 = getenv("MAYA_DIAG_KDA_SUB512") != nullptr;
++        const int mixer_batch = diag_kda_512 && Ly.recr
++            ? mixer_sub((size_t) T, g, S->has_kda, S->has_dsa, S->has_dense, S->has_moe, S->max_pools, 0)
++            : S->sub;
++        for (int t0 = 0; t0 < T; t0 += mixer_batch) {
++            const int tn = std::min(mixer_batch, T - t0);
+             const float* xs = S->x + (size_t) t0 * E;
+@@ -3415,4 +3419,8 @@
+         if (!Ly.moe) {
+-            for (int t0 = 0; t0 < T; t0 += S->sub) {
+-                const int tn = std::min(S->sub, T - t0);
++            const bool diag_dense_default = getenv("MAYA_DIAG_DENSE_DEFAULT") != nullptr;
++            const int dense_batch = diag_dense_default
++                ? mixer_sub((size_t) T, g, S->has_kda, S->has_dsa, S->has_dense, S->has_moe, S->max_pools, 0)
++                : S->sub;
++            for (int t0 = 0; t0 < T; t0 += dense_batch) {
++                const int tn = std::min(dense_batch, T - t0);
+                 Carve c{S->uni};
