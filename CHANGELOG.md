@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-10
+- Long-follow-up slot screen: RAM-backed slots cut mean 115k edited follow-up TTFT from 2.334 to 1.224 s in three sequential samples per arm; a switch-back was 2.582 vs 0.519 s. Needs broader validation and memory checks. A slots-disabled arm hit a GPU-driver access violation during initial prefill; cause unknown. [Slot screen](glm-5.3/sycl-port/experiments/2026-11-10-slot-storage-screen/).
 - Partial prompt-memo pilot passed exact token checks and cut CPU serialization time but did not establish a served 115k follow-up TTFT gain in three noisy samples per arm. Full upstream port unmeasured; no live change. [Prompt memo](glm-5.3/sycl-port/experiments/2026-11-10-prompt-memo-screen/).
 - Selective prefill sub-batches: preserving recurrent and dense original batching with 768 elsewhere left one changed 32k top-token choice and no demonstrated prompt-time gain in a single screen. No live change. [Selective batches](glm-5.3/sycl-port/experiments/2026-11-10-selective-sub-batches/).
 - Sub-batch diagnosis: the first observed layer-0 difference followed a batch-shaped FP16-input output GEMM; expert selections diverged later. Splitting only that GEMM did not restore 32k baseline logits. [Diagnosis](glm-5.3/sycl-port/experiments/2026-11-10-sub768-diagnosis/).

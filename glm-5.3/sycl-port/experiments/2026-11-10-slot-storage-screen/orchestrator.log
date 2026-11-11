@@ -1,0 +1,18 @@
+START disk
+DONE disk
+START ram
+GPU model in use
+At line:1 char:226
++ ... '^(generate|llama-server)\.exe$' }) {throw 'GPU model in use'};$g=@(( ...
++                                          ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (GPU model in use:String) [], RuntimeException
+    + FullyQualifiedErrorId : GPU model in use
+
+Traceback (most recent call last):
+  File "<work>\experiments\codex-slot-screen-20261110\slot_run.py", line 8, in <module>
+    subprocess.run(['powershell.exe','-NoProfile','-Command',preflight],check=True,timeout=60)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['powershell.exe', '-NoProfile', '-Command', "$r=Invoke-RestMethod http://100.89.126.50:8080/running -TimeoutSec 5;if (@($r.running).Count -gt 0) {throw 'swap in use'};if (Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(generate|llama-server)\\.exe$' }) {throw 'GPU model in use'};$g=@((Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | Where-Object { $_.InstanceName -notmatch '0x000159ed' } | ForEach-Object {$_.CookedValue/1GB});if ($g.Count -lt 4 -or ($g | Measure-Object -Maximum).Maximum -gt 1.2) {throw 'GPU not clear'}"]' returned non-zero exit status 1.

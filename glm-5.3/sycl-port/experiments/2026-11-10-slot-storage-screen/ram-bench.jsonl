@@ -1,0 +1,6 @@
+{"arm": "ram", "label": "prime", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 104.87127560004592, "elapsed_s": 104.97152780008037, "answer": "**Status: review"}
+{"arm": "ram", "label": "edited-1", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 1.2342560000251979, "elapsed_s": 1.3720244000433013, "answer": "**Review 1"}
+{"arm": "ram", "label": "edited-2", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 1.2533168999943882, "elapsed_s": 1.3914043999975547, "answer": "**Review 2"}
+{"arm": "ram", "label": "edited-3", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 1.1845911999698728, "elapsed_s": 1.3226912999525666, "answer": "**Review 3"}
+{"arm": "ram", "label": "switch-b", "prompt_tokens": 7673, "completion_tokens": 4, "ttft_s": 8.061436500051059, "elapsed_s": 8.164751400006935, "answer": "# Summary\n\nThis"}
+{"arm": "ram", "label": "return-a", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 0.5194915999891236, "elapsed_s": 0.6567474000621587, "answer": "**Review 3"}

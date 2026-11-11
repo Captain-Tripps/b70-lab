@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "<work>\experiments\codex-slot-screen-20261110\slot_bench.py", line 23, in <module>
+    req('prime',longmsg(0))
+    ~~~^^^^^^^^^^^^^^^^^^^^
+  File "<work>\experiments\codex-slot-screen-20261110\slot_bench.py", line 20, in req
+    if first is None or usage is None:raise RuntimeError('missing first token or usage')
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: missing first token or usage

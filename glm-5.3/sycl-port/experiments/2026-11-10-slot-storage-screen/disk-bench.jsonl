@@ -1,0 +1,6 @@
+{"arm": "disk", "label": "prime", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 107.68739809992258, "elapsed_s": 107.78763709997293, "answer": "**Status: review"}
+{"arm": "disk", "label": "edited-1", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.345030099968426, "elapsed_s": 2.482008899911307, "answer": "**Review 1"}
+{"arm": "disk", "label": "edited-2", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.3162550000706688, "elapsed_s": 2.453945800079964, "answer": "**Review 2"}
+{"arm": "disk", "label": "edited-3", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.3411229000194, "elapsed_s": 2.4787410999415442, "answer": "**Review 3"}
+{"arm": "disk", "label": "switch-b", "prompt_tokens": 7673, "completion_tokens": 4, "ttft_s": 9.403465299983509, "elapsed_s": 9.507871399982832, "answer": "# Summary\n\nThis"}
+{"arm": "disk", "label": "return-a", "prompt_tokens": 115116, "completion_tokens": 4, "ttft_s": 2.5824839000124484, "elapsed_s": 2.720156700001098, "answer": "**Review 3"}

@@ -1,0 +1,24 @@
+glm spec: CUDA1 the head's recurrent-state backup (34 MB) before the expert pool
+glm spec: CUDA0 the head's recurrent-state backup (43 MB) before the expert pool
+glm vram: prompt 115116 tokens read in 107.5 s; VRAM free CUDA0 4.4 of 31.2, CUDA1 3.0 of 31.2, CUDA2 3.2 of 31.2, CUDA3 1.0 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: tail/head enqueue on two threads
+glm spec: 2 of 2 drafts accepted (100.0%)
+glm slots: saved a 115115-token conversation (1.74 GB in 1.7 s); 1 kept, 1.74 GB
+glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 0 of 2 drafts accepted (0.0%)
+glm slots: saved a 115115-token conversation (1.74 GB in 1.7 s); 2 kept, 3.49 GB
+glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 0 of 2 drafts accepted (0.0%)
+glm slots: saved a 115115-token conversation (1.74 GB in 1.7 s); 3 kept, 5.23 GB
+glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 0 of 2 drafts accepted (0.0%)
+glm slots: saved a 115115-token conversation (1.74 GB in 1.7 s); 4 kept, 6.98 GB
+glm vram: prompt 7673 tokens read in 7.7 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 1 of 2 drafts accepted (50.0%)
+glm slots: saved a 7672-token conversation (0.26 GB in 0.3 s); 4 kept, 5.49 GB
+glm slots: took back a 115115-token conversation from disk (2.0 s); 1 new tokens to read
+glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 3[maya] reading the prompt: 115,116 of 115,116 tokens, 3 s soglm stat: decode 33.84 ms/tok (29.55 tok/s) | vram hit 100.00% | ram fetches 0.00/tok | disk 0.00 reads/tok in 0.00 waits/tok, 0.00 ms/tok | promotions 0.00/tok | cpu lane 0.00/tok in 0.00 ms/tok | prompt 0.0 ms/tok | vram 12384/12846 ram 0/198
+glm spec: 0 of 2 drafts accepted (0.0%)

@@ -19,6 +19,7 @@ The sub-batch setting showed a timing improvement but [further validation](exper
 A [numerical diagnosis](experiments/2026-11-10-sub768-diagnosis/) traced early differences and tested a targeted intervention.
 A [selective-batching screen](experiments/2026-11-10-selective-sub-batches/) did not establish a useful gain.
 A [partial prompt-memo pilot](experiments/2026-11-10-prompt-memo-screen/) measured CPU savings but no established served follow-up gain.
+A [slot-storage screen](experiments/2026-11-10-slot-storage-screen/) found a promising RAM-backed follow-up option requiring more validation.
 The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/) separates the dominant grouped
 gate/up and down spans from row gathers.
 The [grouped XMX profile](experiments/2026-11-10-xmx-profile/) further splits tile copy, activation packing and

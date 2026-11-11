@@ -1,0 +1,11 @@
+START ram
+DONE ram
+START none
+Traceback (most recent call last):
+  File "<work>\experiments\codex-slot-screen-20261110\slot_run_remaining.py", line 30, in <module>
+    subprocess.run([sys.executable,str(root/'slot_bench.py'),arm],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1200)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['D:\\maya-sycl\\venv\\Scripts\\python.exe', 'D:\\maya-sycl\\experiments\\codex-slot-screen-20261110\\slot_bench.py', 'none']' returned non-zero exit status 1.
