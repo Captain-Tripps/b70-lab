@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-10
+- Screened a 64-row grouped XMX tile. It made ~19% fewer tiles but reduced row occupancy to ~33%; warmed 8k prompt time was ~17.5% worse, with 4.1M synthetic outputs and 64-position logits matching. Rejected at screening. [BN64 screen](glm-5.3/sycl-port/experiments/2026-11-10-bn64-screen/).
 - Screened a narrower 16-row grouped XMX tile. It raised row occupancy but created ~47% more tiles and took about 17% more prompt time in the warmed 8k screen; 64-position logits matched. Rejected at screening; no live change. [BN16 screen](glm-5.3/sycl-port/experiments/2026-11-10-bn16-screen/).
 - Profiled the GLM grouped XMX expert path at 8k: matrix spans dominate packing and tile-copy spans; row occupancy suggests a narrower-tile hypothesis. Two instrumented passes and off controls matched 64-row baseline logits; no live change. [XMX profile](glm-5.3/sycl-port/experiments/2026-11-10-xmx-profile/).
 - Split the dominant GLM resident-expert prefill interval into grouped gate/up + SwiGLU, down product and row-gather event spans, with a profiler-off control and matching 64-position logits. Two [profiles](glm-5.3/sycl-port/experiments/2026-11-10-resident-profile/) identify the grouped products as the next place to investigate; no optimization or live change.
