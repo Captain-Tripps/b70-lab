@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-12",
+  "candidate": "branch-preservation option off/on",
+  "executed_scripts": {
+    "broad_ab.py": "0cf963376c44a4e769e4b205e26ebd428fc318acca0c96f1cdcb1dcc987b9884",
+    "cap1gb_ab.py": "70d769b3b4e72557a07e62371eb0c9517c355978bf7f220d1addc9746910542c",
+    "fairness_ab.py": "60ba527ae21f53aaa0cd319ccf79f6735ac79e9df9b4e162cc42afa2b93618b9"
+  },
+  "matched_request_counts": {
+    "broad_12gb": 21,
+    "cap_1gib": 22,
+    "focused_fairness": 21
+  },
+  "all_off_on_output_hashes_match": true,
+  "proxy_restore": {
+    "http_status": 200,
+    "model_state": "ready",
+    "slot_processing": false
+  },
+  "live_config_changed": false,
+  "committed": false
+}

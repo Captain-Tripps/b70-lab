@@ -1,0 +1,120 @@
+[maya] this server's lines go to <work>\experiments\codex-slot-branch-broad-20261112\on\engine.log too
+[maya] sampling defaults from the model: temperature=1.0, top_p=0.95
+loading the vision encoder ...
+loading the model (the first start takes a minute or two) ...
+[maya] starting the engine: reading the model's weights ...
+[maya] still starting (20 s) - please wait ...
+[maya] still starting (41 s) - please wait ...
+[maya] sessions: slots parked in RAM (12.88 GB max) - nothing is written to disk, the states die with the run
+[maya] thinking level when a request names none: high
+[maya] thinking budget: 8192 tokens (then the answer)
+ready: http://127.0.0.1:9076/v1  (OpenAI: /v1/chat/completions, /v1/responses, Anthropic: /v1/messages, context 131072 tokens, images on)
+       open http://127.0.0.1:9076/ in a browser to chat; close this window to stop the model
+[maya] reading the prompt: 768 of 9,096 tokens, 5 s so far
+[maya] reading the prompt: 3,072 of 9,096 tokens, 6 s so far
+[maya] reading the prompt: 5,376 of 9,096 tokens, 7 s so far
+[maya] reading the prompt: 6,912 of 9,096 tokens, 8 s so far
+[maya] reading the prompt: 8,448 of 9,096 tokens, 9 s so far
+[maya] reading the prompt: 9,095 of 9,096 tokens, 10 s so far
+[maya] answering: 41 of max 96 tokens, 42.5 tok/s, 11 s
+[maya] answering: 82 of max 96 tokens, 40.9 tok/s, 13 s
+[maya] done: 96 tokens in 13 s (41.6 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 9095-token conversation (0.28 GB in RAM in 0.1 s); 1 kept, 0.28 GB
+[maya] reading the prompt: 704 of 3,484 tokens, 2 s so far
+[maya] reading the prompt: 2,112 of 3,484 tokens, 3 s so far
+[maya] reading the prompt: 3,480 of 3,484 tokens, 5 s so far
+[maya] answering: 33 of max 96 tokens, 37.8 tok/s, 6 s
+[maya] answering: 67 of max 96 tokens, 35.5 tok/s, 7 s
+[maya] done: 90 tokens in 7 s (36.7 tok/s) (stop, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 3483-token conversation (0.20 GB in RAM in 0.1 s); 2 kept, 0.48 GB
+[maya] reading the prompt: 768 of 10,208 tokens, 2 s so far
+[maya] reading the prompt: 2,304 of 10,208 tokens, 3 s so far
+[maya] reading the prompt: 3,840 of 10,208 tokens, 4 s so far
+[maya] reading the prompt: 5,376 of 10,208 tokens, 6 s so far
+[maya] reading the prompt: 6,912 of 10,208 tokens, 7 s so far
+[maya] reading the prompt: 8,448 of 10,208 tokens, 8 s so far
+[maya] reading the prompt: 9,984 of 10,208 tokens, 9 s so far
+[maya] answering: 4 of max 96 tokens, 33.4 tok/s, 10 s
+[maya] answering: 46 of max 96 tokens, 40.4 tok/s, 11 s
+[maya] answering: 90 of max 96 tokens, 41.4 tok/s, 12 s
+[maya] done: 96 tokens in 12 s (41.4 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 3 kept, 0.77 GB
+[maya] answering: 11 of max 96 tokens, 42.7 tok/s, 1 s
+[maya] answering: 54 of max 96 tokens, 42.4 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (45.4 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 4 kept, 1.07 GB
+[maya] answering: 9 of max 96 tokens, 34.7 tok/s, 1 s
+[maya] answering: 49 of max 96 tokens, 38.4 tok/s, 2 s
+[maya] answering: 88 of max 96 tokens, 38.4 tok/s, 3 s
+[maya] done: 96 tokens in 3 s (39.1 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 5 kept, 1.36 GB
+[maya] answering: 10 of max 96 tokens, 38.7 tok/s, 1 s
+[maya] answering: 55 of max 96 tokens, 43.2 tok/s, 2 s
+[maya] answering: 95 of max 96 tokens, 41.0 tok/s, 3 s
+[maya] done: 96 tokens in 3 s (41.5 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 6 kept, 1.65 GB
+[maya] answering: 10 of max 96 tokens, 35.6 tok/s, 1 s
+[maya] answering: 56 of max 96 tokens, 43.2 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (43.6 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 7 kept, 1.95 GB
+[maya] answering: 10 of max 96 tokens, 38.5 tok/s, 1 s
+[maya] answering: 53 of max 96 tokens, 41.4 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (42.5 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 8 kept, 2.24 GB
+[maya] answering: 10 of max 96 tokens, 38.6 tok/s, 1 s
+[maya] answering: 55 of max 96 tokens, 43.1 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (43.7 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 8 kept, 2.26 GB
+[maya] answering: 10 of max 96 tokens, 41.9 tok/s, 1 s
+[maya] answering: 54 of max 96 tokens, 43.0 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (45.3 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 8 kept, 2.35 GB
+[maya] answering: 10 of max 96 tokens, 41.7 tok/s, 1 s
+[maya] answering: 50 of max 96 tokens, 40.3 tok/s, 2 s
+[maya] answering: 87 of max 96 tokens, 38.5 tok/s, 3 s
+[maya] done: 96 tokens in 3 s (39.6 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 8 kept, 2.35 GB
+[maya] answering: 9 of max 96 tokens, 34.6 tok/s, 1 s
+[maya] answering: 55 of max 96 tokens, 43.2 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (45.8 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 10207-token conversation (0.29 GB in RAM in 0.1 s); 8 kept, 2.35 GB
+[maya] reading the prompt: 768 of 9,097 tokens, 2 s so far
+[maya] reading the prompt: 2,304 of 9,097 tokens, 3 s so far
+[maya] reading the prompt: 3,840 of 9,097 tokens, 4 s so far
+[maya] reading the prompt: 5,376 of 9,097 tokens, 6 s so far
+[maya] reading the prompt: 6,912 of 9,097 tokens, 7 s so far
+[maya] reading the prompt: 8,448 of 9,097 tokens, 8 s so far
+[maya] answering: 3 of max 96 tokens, 50.1 tok/s, 9 s
+[maya] answering: 40 of max 96 tokens, 37.1 tok/s, 10 s
+[maya] done: 61 tokens in 11 s (38.1 tok/s) (stop, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 9096-token conversation (0.28 GB in RAM in 0.1 s); 8 kept, 2.33 GB
+[maya] answering: 21 of max 96 tokens, 43.8 tok/s, 1 s
+[maya] answering: 63 of max 96 tokens, 42.1 tok/s, 2 s
+[maya] done: 96 tokens in 3 s (41.7 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] answering: 41 of max 96 tokens, 42.6 tok/s, 1 s
+[maya] answering: 82 of max 96 tokens, 41.0 tok/s, 2 s
+[maya] done: 96 tokens in 2 s (41.7 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 9095-token conversation (0.28 GB in RAM in 0.1 s); 8 kept, 2.32 GB
+[maya] reading the prompt: 190 of 191 tokens, 1 s so far
+[maya] done: 14 tokens in 1 s (56.2 tok/s) (stop, cancel=False), expert cache 100.0% hit
+[maya] answering: 11 of max 96 tokens, 48.1 tok/s, 1 s
+[maya] done: 13 tokens in 1 s (48.7 tok/s) (stop, cancel=False), expert cache 100.0% hit
+[maya] reading the prompt: 512 of 992 tokens, 2 s so far
+[maya] answering: 24 of max 96 tokens, 46.6 tok/s, 3 s
+[maya] answering: 75 of max 96 tokens, 49.0 tok/s, 4 s
+[maya] done: 96 tokens in 4 s (49.0 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] reading the prompt: 512 of 992 tokens, 2 s so far
+[maya] answering: 28 of max 96 tokens, 50.8 tok/s, 3 s
+[maya] done: 58 tokens in 3 s (46.8 tok/s) (stop, cancel=False), expert cache 100.0% hit
+[maya] sessions: took back a 9095-token conversation from RAM (0.0 s); 1 new tokens to read
+[maya] answering: 41 of max 96 tokens, 42.8 tok/s, 1 s
+[maya] answering: 82 of max 96 tokens, 41.1 tok/s, 2 s
+[maya] done: 96 tokens in 2 s (41.8 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 9095-token conversation (0.28 GB in RAM in 0.1 s); 8 kept, 2.32 GB
+[maya] reading the prompt: 704 of 3,891 tokens, 2 s so far
+[maya] reading the prompt: 2,112 of 3,891 tokens, 3 s so far
+[maya] reading the prompt: 3,520 of 3,891 tokens, 4 s so far
+[maya] answering: 13 of max 96 tokens, 47.0 tok/s, 5 s
+[maya] answering: 54 of max 96 tokens, 41.9 tok/s, 6 s
+[maya] answering: 93 of max 96 tokens, 40.1 tok/s, 7 s
+[maya] done: 96 tokens in 7 s (40.7 tok/s) (length, cancel=False), expert cache 100.0% hit
