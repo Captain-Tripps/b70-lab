@@ -1,0 +1,117 @@
+{
+  "requests": 35,
+  "cancelled": 1,
+  "engine_pids": [
+    26824
+  ],
+  "host_free_min_gib": 82.23688888549805,
+  "monitor_minutes": 14.407008794943492,
+  "monitor_alerts": 1,
+  "labels": {
+    "after-image": {
+      "n": 1,
+      "median_ttft_s": 101.45099159993697,
+      "min_ttft_s": 101.45099159993697,
+      "max_ttft_s": 101.45099159993697,
+      "distinct_hashes": 1
+    },
+    "append": {
+      "n": 4,
+      "median_ttft_s": 0.863313450012356,
+      "min_ttft_s": 0.8596940999850631,
+      "max_ttft_s": 0.9385587000288069,
+      "distinct_hashes": 1
+    },
+    "image-0": {
+      "n": 1,
+      "median_ttft_s": 9.551523300004192,
+      "min_ttft_s": 9.551523300004192,
+      "max_ttft_s": 9.551523300004192,
+      "distinct_hashes": 1
+    },
+    "image-1": {
+      "n": 1,
+      "median_ttft_s": 9.400463499943726,
+      "min_ttft_s": 9.400463499943726,
+      "max_ttft_s": 9.400463499943726,
+      "distinct_hashes": 1
+    },
+    "long-edit-1": {
+      "n": 4,
+      "median_ttft_s": 3.9748129500076175,
+      "min_ttft_s": 2.3231082999845967,
+      "max_ttft_s": 101.92009929998312,
+      "distinct_hashes": 1
+    },
+    "long-edit-2": {
+      "n": 4,
+      "median_ttft_s": 3.3715630499646068,
+      "min_ttft_s": 2.2896285000024363,
+      "max_ttft_s": 4.0327862000558525,
+      "distinct_hashes": 1
+    },
+    "long-edit-3": {
+      "n": 4,
+      "median_ttft_s": 53.564413950021844,
+      "min_ttft_s": 2.3131534000858665,
+      "max_ttft_s": 103.63203650002833,
+      "distinct_hashes": 1
+    },
+    "long-prime": {
+      "n": 1,
+      "median_ttft_s": 102.54968620010186,
+      "min_ttft_s": 102.54968620010186,
+      "max_ttft_s": 102.54968620010186,
+      "distinct_hashes": 1
+    },
+    "long-return": {
+      "n": 4,
+      "median_ttft_s": 2.420758449996356,
+      "min_ttft_s": 2.1145614000270143,
+      "max_ttft_s": 2.5420351999346167,
+      "distinct_hashes": 1
+    },
+    "medium-switch": {
+      "n": 2,
+      "median_ttft_s": 30.141055049956776,
+      "min_ttft_s": 30.053343900013715,
+      "max_ttft_s": 30.228766199899837,
+      "distinct_hashes": 1
+    },
+    "retry": {
+      "n": 1,
+      "median_ttft_s": 0.05593739997129887,
+      "min_ttft_s": 0.05593739997129887,
+      "max_ttft_s": 0.05593739997129887,
+      "distinct_hashes": 1
+    },
+    "short-switch": {
+      "n": 4,
+      "median_ttft_s": 9.40459839993855,
+      "min_ttft_s": 9.330990700051188,
+      "max_ttft_s": 9.653414500062354,
+      "distinct_hashes": 1
+    },
+    "tool-call": {
+      "n": 1,
+      "median_ttft_s": 1.1385817000409588,
+      "min_ttft_s": 1.1385817000409588,
+      "max_ttft_s": 1.1385817000409588,
+      "distinct_hashes": 1
+    },
+    "tool-response": {
+      "n": 1,
+      "median_ttft_s": 0.7893610999453813,
+      "min_ttft_s": 0.7893610999453813,
+      "max_ttft_s": 0.7893610999453813,
+      "distinct_hashes": 1
+    },
+    "truncated": {
+      "n": 1,
+      "median_ttft_s": 6.929195999982767,
+      "min_ttft_s": 6.929195999982767,
+      "max_ttft_s": 6.929195999982767,
+      "distinct_hashes": 1
+    }
+  }
+}
