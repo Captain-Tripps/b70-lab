@@ -124,9 +124,36 @@ Mean of 3 clean rounds, tok/s:
 - Absolute levels still move a little between clean rounds (2-card direct upload pp512: 956, 1,033, 1,026), so the
   pairs inside a row are the comparison to trust.
 
+## Follow-up: MoE garbage on N-way (Flash-Next, 2026-11-12)
+
+AdamN1 reported Flash-Next IQ3_S producing `I!!!!...` garbage on 3-card `-sm tensor`. Reproduced on Zeus
+(4x B70) with this N-way tree:
+
+| Arm | Result |
+|---|---|
+| 3-card N-way (default / RS=0 / ub 4 / ub 512) | garbage (`I!!!!`) |
+| 3-card layer split | OK |
+| 3-card `GGML_SYCL_COMM_NWAY=0` (meta fallback) | OK |
+| 2-card tensor | OK |
+| dense Qwen 3-card N-way | OK |
+
+**Cause:** `ggml-backend-meta.cpp` zeros non-`GGML_TENSOR_FLAG_COMPUTE` slices only inside the generic
+allreduce fallback. The backend path (SYCL N-way, and any other `comm_allreduce`) skipped that step. MoE
+tensor-split leaves empty slices on some cards; N-way summed uninitialized device memory into the reduce.
+
+**Fix:** zero those slices before *any* allreduce path. Same FILL sequence the fallback already used.
+Patch: [`nway-allreduce/meta-zero-noncompute-before-allreduce.patch`](nway-allreduce/meta-zero-noncompute-before-allreduce.patch)
+(apply after the N-way sycl patch, or on a tree that already has N-way). Landed on the fork branch
+`proto/sycl-nway-allreduce`.
+
+After the fix, Flash-Next 3-card N-way returned coherent `sum_list` Python, matching fallback. Dense
+perplexity arms from 2026-11-08 were not re-run; this is a correctness fix for empty MoE slices.
+
 ## Next
 
 - Tensor split + MTP draft: verify several tokens per all-reduce to spread the per-token syncs.
 - For the v2 adapter's cross-queue barrier abort (oneapi-src/level-zero#556): try `depends_on` instead of
   `ext_oneapi_submit_barrier`.
 - Check whether a 2+2 mix (tensor split inside pairs, layer split across them) is possible in the meta backend.
+- Consider upstreaming the meta zero-before-allreduce change (affects any backend `comm_allreduce` + MoE
+  empty slices, not only SYCL N-way).

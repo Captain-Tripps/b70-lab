@@ -4,6 +4,8 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-12
+- Locked in Xe2 `nsm = CUs / 8` (arch-aware BMG-G31) from [llama.cpp#32058](https://github.com/ggml-org/llama.cpp/pull/32058) / discussion #3: Windows A/B on Zeus Qwen3.8-27B 1-card pp512 **+9.3%** vs stock `/16`; dense decode flat; fusion noisy. Applied to fork (`proto/sycl-nway-allreduce` + `b70-r67`), live graph6-vcache rebuild, and patch [`nsm-xe2-bmg-g31-from-32058.patch`](llama.cpp-sycl/nsm-xe2-bmg-g31-from-32058.patch). Confirms the 2026-11-07 probe; still prefer `/8` over the TILE floor alone for upstream.
+- Flash-Next MoE garbage on 3-card N-way all-reduce (AdamN1): meta backend skipped zeroing non-COMPUTE tensor-split slices on the backend allreduce path. Fixed in fork `proto/sycl-nway-allreduce` and patch [`meta-zero-noncompute-before-allreduce.patch`](llama.cpp-sycl/nway-allreduce/meta-zero-noncompute-before-allreduce.patch). [NWAY follow-up](llama.cpp-sycl/NWAY-ALLREDUCE-2026-11-08.md#follow-up-moe-garbage-on-n-way-flash-next-2026-11-12).
 - Revisited [llama.cpp#28778](https://github.com/ggml-org/llama.cpp/issues/28778) after a stale-bot close: the TDR/OOM was covered by the merged BMG-G31 60% max-alloc workaround ([#28953](https://github.com/ggml-org/llama.cpp/pull/28953)); no local patch needed. Root cause remains open at [intel/compute-runtime#998](https://github.com/intel/compute-runtime/issues/998). Logged in [STATUS](STATUS.md) and [hardware notes](hardware-and-windows-notes.md#bmg-g31-single-allocation-ceiling-and-host-ram).
 
 ## 2026-11-11
