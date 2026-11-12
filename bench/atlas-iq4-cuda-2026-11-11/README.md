@@ -35,3 +35,15 @@ Across the three post-warmup requests, aggregate generated-token throughput was 
 During the first restore, the 17 GiB model took approximately eight minutes to load. A four-second process sample attributed about 25.8 MB/s of reads to `llama-server`; concurrent `iostat` reported NVMe utilization around 99% and negligible writes. Composite NVMe temperature was 45°C (a second sensor read 62°C), PCIe link was 16 GT/s ×4, and the kernel journal showed no recent error-level entries. The model load caused the observed read pressure; the reason for the low read rate remains undetermined. A subsequent reload with a warm cache was much faster.
 
 Before considering deployment, repeat with controlled draft behavior and matching generated tokens or teacher-forced verification, capture the actual loaded library and dispatched graph, and measure enough independent prompts. Respect active proxy requests and record a post-variant baseline.
+
+## Retest with idle Atlas
+
+After OpenClaw was paused, the Qwen slot was idle and a one-second `iostat` sample showed approximately 1.4% NVMe utilization before the test. We repeated the real server configuration in original → variant → original order, with one warmup and six distinct synthetic prompts per arm. Each asked for 192 tokens, temperature zero, prompt caching off. The variant server's `/proc/<pid>/maps` confirmed that the experimental CUDA library was actually loaded. The restored original completed the final baseline with no competing request. [Measurements](server-controlled-v2.jsonl), [runner](server_ab_v2.py), [prompt harness](server_sample_v2.py).
+
+| Arm | Generated tokens | Aggregate generation rate |
+|---|---:|---:|
+| Original before | 1,152 | 56.78 tokens/s |
+| Two-warp variant | 1,152 | 58.70 tokens/s |
+| Original after | 1,152 | 56.91 tokens/s |
+
+The baseline output hashes and draft counts matched across all six prompts, supporting a stable before/after comparison. **However, only two of the six variant outputs matched the original**, and draft counts also changed. Thus the 3.3% aggregate increase versus the midpoint of the baselines is an observed workload result, not a clean estimate of the kernel's speedup. For the two prompts with matching output hashes, aggregate rates were 54.29, 55.38 and 54.30 tokens/s respectively (about 2.0% higher for the variant), but draft counts differed slightly and two prompts are too few to establish a reliable gain. Temperature zero does not guarantee bit-identical output when floating-point reductions change. The test does not establish quality or production safety, and kernel dispatch was not captured. Qwen was restored to its original library and was idle at the final check; NVMe utilization was about 0.3% in a one-second sample.
