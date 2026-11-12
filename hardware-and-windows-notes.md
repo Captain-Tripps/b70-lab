@@ -23,6 +23,26 @@ load and my RAM watchdog killed the server. Observed for llama.cpp's Flash-Next,
   `GGML_SYCL_IDLE_HEARTBEAT_SEC=30`; exactly one did not - the production GLM entry - and that was the model that
   kept dying. Grep your config before blaming the next build.
 
+## BMG-G31 single-allocation ceiling and host RAM
+
+Filed as a DFlash2 dual-B70 TDR ([ggml-org/llama.cpp#28778](https://github.com/ggml-org/llama.cpp/issues/28778));
+debugging showed large single SYCL device allocations (~>19.3 GB) failing while the driver still reports
+~30 GB `max_mem_alloc_size`. On two cards that sometimes landed as `VIDEO_TDR_TIMEOUT_DETECTED` (bugcheck
+`0x141`) with no application Error 1000.
+
+- Workaround in upstream llama.cpp ([#28953](https://github.com/ggml-org/llama.cpp/pull/28953), merged
+  2026-09-17): for `intel_gpu_bmg_g31`, `ggml_backend_sycl_buffer_type_get_max_size` returns 60% of the
+  reported max. Still present in master with a TODO to remove it when the runtime is fixed. Verified here
+  on the PR branch (2x B70, driver 8805): all four repros passed, including the original dual-GPU command;
+  no LiveKernelEvent in the test window.
+- Root cause is still open at [intel/compute-runtime#998](https://github.com/intel/compute-runtime/issues/998).
+  Intel and reporters found the real single-alloc ceiling tracks **host RAM + swap**, not the advertised
+  device max. Raising swap helped a B65 box; this machine’s 112 GB RAM (since 2026-10-13) is far from that
+  failure regime. B65 feedback on the PR: 60% can still be high on low-RAM hosts (~57% / ~18 GiB).
+- No local patch. Reopen #28778 only if a post-#28953 build still TDRs; watch #998 for when the 0.6 cap can
+  go away (this high-RAM box may leave contiguous VRAM on the table until then).
+- Related but separate: host-RAM pressure from mmap / standby / PLE, and WDDM spill below.
+
 ## Silent spill into system RAM when a config does not fit
 
 - WDDM lets GPU allocations overflow into shared (system) memory instead of failing. Speed collapses (gpt-oss-120b

@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-12
+- Revisited [llama.cpp#28778](https://github.com/ggml-org/llama.cpp/issues/28778) after a stale-bot close: the TDR/OOM was covered by the merged BMG-G31 60% max-alloc workaround ([#28953](https://github.com/ggml-org/llama.cpp/pull/28953)); no local patch needed. Root cause remains open at [intel/compute-runtime#998](https://github.com/intel/compute-runtime/issues/998). Logged in [STATUS](STATUS.md) and [hardware notes](hardware-and-windows-notes.md#bmg-g31-single-allocation-ceiling-and-host-ram).
+
 ## 2026-11-11
 - Atlas inspection: its CUDA Qwen Q4_K_XL model contains 61 IQ4_XS and 6 IQ4_NL tensors (~2.98 GB combined); the B70 SYCL reorder patches cannot be used directly on NVIDIA. [Notes](glm-5.3/sycl-port/experiments/2026-11-11-weight-reorder/#atlas-applicability).
 - IQ2_S weight-reorder lead: Maya grouped XMX uses unreordered weights and lacks an IQ2_S planar reader. Isolated prototype compiled and a CPU byte round-trip passed; GPU parity and timing await free cards. [Weight reorder](glm-5.3/sycl-port/experiments/2026-11-11-weight-reorder/).
