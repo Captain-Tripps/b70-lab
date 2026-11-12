@@ -54,6 +54,7 @@ def main():
     ap.add_argument('--fixture',type=Path,required=True,help='Existing long_body.txt')
     ap.add_argument('--media-dir',type=Path,required=True,help='Directory with llama0/llama1 logo fixtures')
     ap.add_argument('--output',type=Path,required=True,help='New JSONL file; must not already exist')
+    ap.add_argument('--reference',type=Path,help='Completed baseline JSONL; compare matching request types')
     ap.add_argument('--minutes',type=int,default=60)
     args=ap.parse_args()
     if not 1<=args.minutes<=120:ap.error('--minutes must be between 1 and 120')
@@ -86,6 +87,17 @@ def main():
             if not state.get('busy') and not state.get('queued'):return
             time.sleep(2)
         raise RuntimeError('proxy remained busy for five minutes')
+    reference={}
+    if args.reference:
+        for line in args.reference.read_text(encoding='utf8').splitlines():
+            row=json.loads(line)
+            if row.get('cancelled'):continue
+            key=row['label'].split(':')[-1];value=row['output_sha256']
+            if key in reference and reference[key]!=value:raise RuntimeError('baseline responses differ for '+key)
+            reference[key]=value
+        if not reference:raise RuntimeError('empty baseline reference')
+        required={'long-prime','long-edit-1','long-edit-2','long-edit-3','short-switch','long-return','append','medium-switch','retry','tool-call','tool-response','image-0','image-1','after-image','truncated'}
+        if required-reference.keys():raise RuntimeError('baseline lacks required request types: '+', '.join(sorted(required-reference.keys())))
     check();engine_pid=check_engine();deadline=time.monotonic()+args.minutes*60
     system={'role':'system','content':'Be precise; treat the supplied text as evidence.'}
     def msg(text,question):return [system,{'role':'user','content':text},{'role':'assistant','content':'I have read it.'},{'role':'user','content':question}]
@@ -100,9 +112,11 @@ def main():
             with urllib.request.urlopen(req,timeout=1800) as response:first,usage,canonical,calls=parse_stream(response,start,cancel)
             row={'label':label,'time':time.time(),'ttft_s':first-start,'elapsed_s':time.perf_counter()-start,'prompt_tokens':(usage or {}).get('prompt_tokens'),'completion_tokens':(usage or {}).get('completion_tokens'),'output_sha256':hashlib.sha256(json.dumps(canonical,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),'tool_calls':canonical['tool_calls'],'cancelled':cancel,'host_available_bytes':memory_free(),'engine_pid_at_start':engine_pid}
             log.write(json.dumps(row,ensure_ascii=False)+'\n');log.flush();print(json.dumps(row),flush=True)
+            key=label.split(':')[-1]
+            if not cancel and key in reference and row['output_sha256']!=reference[key]:raise RuntimeError('output differs from baseline for '+key)
             if cancel:wait_idle()
             return canonical['content'],calls
-        longtext=source[:390000];short=source[390000:415000]
+        longtext=source[:390000];short=source[390000:415000];medium=source[300000:410000]
         request('long-prime',msg(longtext,'Give a short status for review 0.'))
         cycle=0
         while time.monotonic()<deadline:
@@ -112,17 +126,18 @@ def main():
             branch=msg(longtext,'Give a short status for review 3.')
             answer,_=request(f'{cycle}:long-return',branch)
             request(f'{cycle}:append',branch+[{'role':'assistant','content':answer},{'role':'user','content':'Continue with one more brief observation.'}])
-            if cycle%5==0:
+            if cycle%3==1:request(f'{cycle}:medium-switch',msg(medium,'Summarize this briefly.'))
+            if cycle%5==1:
                 cancel_msg=[{'role':'user','content':'List 100 useful practices for testing software services, with explanations.'}]
                 request(f'{cycle}:cancel',cancel_msg,cancel=True);request(f'{cycle}:retry',cancel_msg)
-            if cycle%8==0:
+            if cycle%8==1:
                 tools=[{'type':'function','function':{'name':'lookup_order','description':'Look up a synthetic order by its ID.','parameters':{'type':'object','properties':{'order_id':{'type':'string'}},'required':['order_id'],'additionalProperties':False}}}]
                 m=[{'role':'system','content':'Use the supplied function; do not invent results.'},{'role':'user','content':'Look up synthetic order BB-204 and report its status.'}]
                 _,calls=request(f'{cycle}:tool-call',m,tools)
                 if not calls:raise RuntimeError('expected tool call was not emitted')
                 c=calls[0];m += [{'role':'assistant','content':None,'tool_calls':[c]},{'role':'tool','tool_call_id':c['id'],'content':'{"order_id":"BB-204","status":"packed"}'},{'role':'user','content':'Summarize the returned status.'}]
                 request(f'{cycle}:tool-response',m,tools)
-            if cycle%12==0:
+            if cycle%12==1:
                 for i,image in enumerate(images):
                     m=[{'role':'user','content':[{'type':'text','text':'Describe this image briefly.'},{'type':'image_url','image_url':{'url':image}}]}]
                     request(f'{cycle}:image-{i}',m)

@@ -4,6 +4,7 @@
   "candidate_executable_sha256": "f89820fe92e49ffa6e563b538d5dc5aebe9b246e95d29d523f3e76f0ed0acea8",
   "candidate_config_sha256": "ca9b0074d18f817d1869897110d389ad7e8a64abb583da7ff35627b63477b9e7",
   "tested_config_matches_except_log_and_ram_ignored_slot_dir": true,
-  "started_anything": false,
-  "canary_client_zeus_sha256": "97c58356eec903a2ecdf28db750ae1456b26a2f1eaa63dbe8777961916dc064a"
+  "preparation_started_anything": false,
+  "canary_client_zeus_sha256": "114cb036f135dd51e01a5d5c4d6d2e14f584d9f7ebd04564c9a9180d7c49cf57",
+  "canary_monitor_zeus_sha256": "4d87a5f00cc0e7a5c951133a94ce9f9b0131fd2058b3cdc573c9c9bea112235c"
 }
