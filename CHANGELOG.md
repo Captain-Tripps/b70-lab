@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-11
+- Atlas inspection: its CUDA Qwen Q4_K_XL model contains 61 IQ4_XS and 6 IQ4_NL tensors (~2.98 GB combined); the B70 SYCL reorder patches cannot be used directly on NVIDIA. [Notes](glm-5.3/sycl-port/experiments/2026-11-11-weight-reorder/#atlas-applicability).
 - IQ2_S weight-reorder lead: Maya grouped XMX uses unreordered weights and lacks an IQ2_S planar reader. Isolated prototype compiled and a CPU byte round-trip passed; GPU parity and timing await free cards. [Weight reorder](glm-5.3/sycl-port/experiments/2026-11-11-weight-reorder/).
 - RAM conversation-slot candidate: edited follow-ups improved in sequential 8k–130k screens; at 130k the three-run means were 2.542 s disk vs 1.245 s RAM. All 31 paired visible responses matched, including an image case. Multi-chat and 32k earlier-edit/retry were exercised; 30-minute soak and other gates remain open. [Validation](glm-5.3/sycl-port/experiments/2026-11-11-slot-validation/).
 

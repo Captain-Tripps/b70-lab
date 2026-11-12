@@ -17,3 +17,11 @@ The fixture allocates a second host copy during conversion and excludes conversi
 ## Related device-ID PR
 
 [#32013](https://github.com/ggml-org/llama.cpp/pull/32013) replaces a mutex-protected main-device check with a cached per-thread lookup before llama.cpp graph compute. It is a plausible Zeus Qwen/llama.cpp lead, with no measured before/after gain in its description. The older `D:\llama-master-1108` tree has the old check and its `get_current_device_id()` still delegates to the device manager. The change builds on the [#31126](https://github.com/ggml-org/llama.cpp/pull/31126) cache; replacing one call alone in that old tree would not give the advertised caching. Zeus's bundled `ggml-sycl.cpp.kvget-src` snapshot also shows the old check but describes an earlier prototype, so the exact live DLL source must be established. Multi-GPU device-selection and graph-cache correctness require careful validation. Maya's grouped shim does not call the full llama.cpp graph-compute path, so this PR does not directly address the GLM bottleneck.
+
+## Atlas applicability
+
+Atlas has two NVIDIA RTX 3060 GPUs and its Qwen daily driver runs the llama.cpp **CUDA** backend. The PRs above modify the SYCL backend, so neither patch is a direct CUDA change. The layout idea could still be tested in CUDA-specific kernels, but their existing implementation and performance must be measured separately; the B70 results cannot be transferred to the 3060s.
+
+A read-only GGUF-header inventory of Atlas's running `Huihui-Qwen3.8-27B-abliterated-UD-Q4_K_XL.gguf` found **61 IQ4_XS tensors (2,698,936,320 bytes) and 6 IQ4_NL tensors (280,166,400 bytes)**, including FFN weights, as well as Q4_K, Q5_K, Q6_K, Q8_0 and other types. Thus the IQ4 format is relevant to this particular mixed-quant model despite its Q4_K filename. This does not mean the SYCL PR's implementation or its speedups apply to CUDA. Atlas's CUDA source already has IQ4-specific matrix-vector kernels; compare its current kernels first.
+
+The Maya RAM-slot setting is part of a different server/engine and does not configure Atlas's llama.cpp server. At this inspection the two 12 GiB GPUs held about 10.1 and 10.6 GiB, and system memory was ~12 GiB available with 3.3 GiB swap in use. Those are momentary resource readings, not a safe reservation for an 8 GiB slot cache. The Atlas Qwen server was left running.
