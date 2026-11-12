@@ -1,0 +1,25 @@
+glm fast: CUDA1 warming the expert tiers 100% (27.2 of 27.2 GB, 26 s)
+glm fast: CUDA1 tiers warm: 3168 experts (27.2 GB) in 26 s (1.06 GB/s)
+glm split: layers [0, 13) on CUDA0, [13, 24) on CUDA1, [24, 35) on CUDA2, [35, 45) on CUDA3 (one 64 KB host hop per boundary per token)
+maya serve: CUDA0: 4500 MiB of VRAM free with everything loaded
+maya serve: CUDA1: 4048 MiB of VRAM free with everything loaded
+maya serve: CUDA2: 3252 MiB of VRAM free with everything loaded
+maya serve: CUDA3: 3136 MiB of VRAM free with everything loaded
+maya generate: glm5-next serve (M3.1): GEN <max_new> [keys] <ids>, GENI <max_new> [keys] <embeddings> <ids>; QUIT to end
+glm prefill: CUDA0 the MMQ scratch pool has 11.5 MB of the loan (16.0 MB past the layout's need; 0 experts more lent for it)
+glm prefill: CUDA1 the MMQ scratch pool has 16.0 MB of the loan (16.0 MB past the layout's need; 52 experts more lent for it)
+glm prefill: CUDA2 the MMQ scratch pool has 16.0 MB of the loan (16.0 MB past the layout's need; 0 experts more lent for it)
+glm prefill: CUDA3 the MMQ scratch pool has 7.6 MB of the loan (16.0 MB past the layout's need; 44 experts more lent for it)
+glm_batch: prompt attention on the XMX engines (fp16, fixups29)
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+glm prefill: CUDA0 chunk 1/86, 768 tokens, wall 1175 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 1175 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 2 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+glm prefill: CUDA0 chunk 2/86, 768 tokens, wall 499 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 499 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 3 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm nan guard: glm router: prompt layer 14 invalid expert ID or non-finite score (5552 of 6144 routes) - this conversation's state is dropped; it is read again from token 0
+glm prefill: CUDA0 chunk 1/86, 768 tokens, wall 445 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 445 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm prefill: CUDA0 chunk 2/86, 768 tokens, wall 497 ms | the copy lane 0 ms: copies 0 (0.0 GB/s), ring wait 0, gaps 0, mixer windows 0 | lead 0, tail 497 | pcie 0.00 GB (ram 0.00, disk 0.00) + 0.00 GB vram | experts: staged 0, resident 2910 (61440 rows), prestaged 0, cpu 0 (0 rows, 0 ms) | plan 1 ms host, disk wait 0 ms, hop in 0 ms | layer lane 0.0/0.0 ms max/min (no staged groups)
+glm nan guard: glm router: prompt layer 14 invalid expert ID or non-finite score (5552 of 6144 routes) - this conversation's state is dropped; it is read again from token 0
+[maya] the engine reported an error: glm router: prompt layer 14 invalid expert ID or non-finite score (5552 of 6144 routes)
+[maya] done: 0 tokens in 4 s (0.0 tok/s) (error, cancel=False)
