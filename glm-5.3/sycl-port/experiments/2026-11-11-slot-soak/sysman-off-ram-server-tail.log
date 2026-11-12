@@ -1,0 +1,20 @@
+[maya] answering: 42 of max 64 tokens, 36.3 tok/s, 2 s
+[maya] done: 64 tokens in 3 s (38.6 tok/s) (length, cancel=False), expert cache 100.0% hit
+[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 4 kept, 5.49 GB
+[maya] reading the prompt: 768 of 115,116 tokens, 3 s so far
+[maya] reading the prompt: 2,304 of 115,116 tokens, 4 s so far
+[maya] reading the prompt: 3,840 of 115,116 tokens, 5 s so far
+[maya] reading the prompt: 5,376 of 115,116 tokens, 6 s so far
+[maya] reading the prompt: 6,912 of 115,116 tokens, 7 s so far
+[maya] reading the prompt: 8,448 of 115,116 tokens, 9 s so far
+[maya] reading the prompt: 9,984 of 115,116 tokens, 10 s so far
+[maya] reading the prompt: 11,520 of 115,116 tokens, 11 s so far
+[maya] reading the prompt: 13,056 of 115,116 tokens, 12 s so far
+[maya] reading the prompt: 14,592 of 115,116 tokens, 13 s so far
+[maya] reading the prompt: 16,128 of 115,116 tokens, 15 s so far
+[maya] reading the prompt: 17,664 of 115,116 tokens, 16 s so far
+[maya] reading the prompt: 19,200 of 115,116 tokens, 17 s so far
+[maya] reading the prompt: 20,736 of 115,116 tokens, 18 s so far
+[maya] reading the prompt: 22,272 of 115,116 tokens, 19 s so far
+[maya] the engine stopped unexpectedly (exit code 3221225477). The usual cause is running out of RAM: Linux then ends the biggest program (check: sudo dmesg | grep -i -E 'killed process|out of memory'); Windows slows down instead. Close other programs or use a smaller model (Q2_0 / IQ2_XS). The next request starts the engine again. Its log: <work>\experiments\codex-slot-soak-ram-sysman-off-20261111\engine.log
+[maya] done: 0 tokens in 24 s (0.0 tok/s) (error, cancel=False)

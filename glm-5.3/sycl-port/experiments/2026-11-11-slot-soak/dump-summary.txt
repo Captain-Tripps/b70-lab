@@ -1,0 +1,17 @@
+Windows application events, RAM-slot and disk-slot crashes:
+  Exception: 0xc0000005 (access violation)
+  Faulting module: ze_intel_gpu64.dll, version 1.15.39183.4
+  Fault offset: 0x4d2d87
+  DLL product version: 32.0.101.8976
+
+Debugger .ecxr for both corresponding local crash dumps:
+  rax=0, rcx=0x1c
+  cmp qword ptr [rax+rcx*8+8], -2
+  attempted address: 0xe8
+  Stack: ze_intel_gpu64 (three frames), DXCore!Ordinal22,
+         Windows thread-pool callback, BaseThreadInitThunk, RtlUserThreadStart
+
+The Intel module was available with export symbols only. The debugger's nearest
+export label has a large offset and should not be interpreted as an identified
+private function. A third crash, with ZES_ENABLE_SYSMAN=0, produced the same
+application-event module, exception and offset. Its dump was not inspected here.
