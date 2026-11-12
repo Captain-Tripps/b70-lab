@@ -1,0 +1,9 @@
+{
+  "production_config_sha256": "d46603a071083d0ba2d4aeb7e6e60f1758116f153394e2bc2e4ae5709ac2087e",
+  "baseline_executable_sha256": "497f1d4238a724eafbf056af33910e4e0d94e6b7571a33ae61187512b0ca7198",
+  "candidate_executable_sha256": "f89820fe92e49ffa6e563b538d5dc5aebe9b246e95d29d523f3e76f0ed0acea8",
+  "candidate_config_sha256": "ca9b0074d18f817d1869897110d389ad7e8a64abb583da7ff35627b63477b9e7",
+  "tested_config_matches_except_log_and_ram_ignored_slot_dir": true,
+  "started_anything": false,
+  "canary_client_zeus_sha256": "97c58356eec903a2ecdf28db750ae1456b26a2f1eaa63dbe8777961916dc064a"
+}

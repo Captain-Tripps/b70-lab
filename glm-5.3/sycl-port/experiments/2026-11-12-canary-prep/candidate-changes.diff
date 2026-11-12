@@ -1,0 +1,36 @@
+--- baseline-live-config.json
++++ candidate-config.json
+@@ -1,5 +1,5 @@
+ {
+-  "exe": "<work>\\rt-live\\generate.exe",
++  "exe": "<work>\\experiments\\codex-slot-branch-20261112\\tree\\link\\generate.exe",
+   "args": [
+     "--glm-pack",
+     "<work>\\glm-m\\pack",
+@@ -10,12 +10,12 @@
+     "--prefill",
+     "768",
+     "--layer-split",
+-    "13,24,35"
++    "14,25,36"
+   ],
+   "cwd": "<work>\\maya",
+   "tokenizer": "<work>\\glm-m\\pack\\tokenizer",
+   "model_name": "glm-5.3-flash-maya-sycl",
+-  "log": "<work>\\configs\\glm-maya-sycl-128k-engine.log",
++  "log": "<work>\\experiments\\codex-glm-canary-prep-20261112\\canary-engine.log",
+   "env": {
+     "ONEAPI_DEVICE_SELECTOR": "level_zero:0,1,2,3",
+     "MAYA_SYCL_LAYER_SYNC": "0",
+@@ -23,7 +23,10 @@
+     "STRATA_GLM_RAM_GB": "40",
+     "ZES_ENABLE_SYSMAN": "1",
+     "STRATA_GLM_RESIDENT_SKIP": "1",
+-    "STRATA_GLM_RESERVE_MB": "400"
++    "STRATA_GLM_RESERVE_MB": "400",
++    "STRATA_GLM_SLOT_RAM_GB": "12",
++    "STRATA_GLM_SLOTS": "8",
++    "STRATA_GLM_SLOT_KEEP_BRANCH": "1"
+   },
+   "lib_dirs": [
+     "<work>\\rt-live",
