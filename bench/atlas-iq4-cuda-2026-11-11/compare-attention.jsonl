@@ -1,0 +1,8 @@
+{"rep": 0, "arm": "base", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=102.505 weight_bytes=29491200 cpu_nmse=8.46078e-08 max_abs=0.0448227"}
+{"rep": 1, "arm": "variant", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=95.5082 weight_bytes=29491200 cpu_nmse=8.46079e-08 max_abs=0.0448189"}
+{"rep": 2, "arm": "variant", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=95.4642 weight_bytes=29491200 cpu_nmse=8.46079e-08 max_abs=0.0448189"}
+{"rep": 3, "arm": "base", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=102.506 weight_bytes=29491200 cpu_nmse=8.46078e-08 max_abs=0.0448227"}
+{"rep": 4, "arm": "base", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=102.501 weight_bytes=29491200 cpu_nmse=8.46078e-08 max_abs=0.0448227"}
+{"rep": 5, "arm": "variant", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=95.5197 weight_bytes=29491200 cpu_nmse=8.46079e-08 max_abs=0.0448189"}
+{"rep": 6, "arm": "variant", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=95.4579 weight_bytes=29491200 cpu_nmse=8.46079e-08 max_abs=0.0448189"}
+{"rep": 7, "arm": "base", "m": 10240, "status": "ok", "result": "type=iq4_nl m=10240 n=4 k=5120 us=102.491 weight_bytes=29491200 cpu_nmse=8.46078e-08 max_abs=0.0448227"}

@@ -1,0 +1,16 @@
+{"rep": 0, "arm": "base", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=250.736 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742"}
+{"rep": 0, "arm": "base", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=170.586 weight_bytes=50135040 cpu_nmse=8.4638e-08 max_abs=0.0448227"}
+{"rep": 1, "arm": "variant", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=161.228 weight_bytes=50135040 cpu_nmse=9.20744e-08 max_abs=0.0940723"}
+{"rep": 1, "arm": "variant", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=157.452 weight_bytes=50135040 cpu_nmse=8.46378e-08 max_abs=0.0448189"}
+{"rep": 2, "arm": "variant", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=161.454 weight_bytes=50135040 cpu_nmse=9.20744e-08 max_abs=0.0940723"}
+{"rep": 2, "arm": "variant", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=157.491 weight_bytes=50135040 cpu_nmse=8.46378e-08 max_abs=0.0448189"}
+{"rep": 3, "arm": "base", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=250.779 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742"}
+{"rep": 3, "arm": "base", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=170.598 weight_bytes=50135040 cpu_nmse=8.4638e-08 max_abs=0.0448227"}
+{"rep": 4, "arm": "base", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=250.514 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742"}
+{"rep": 4, "arm": "base", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=170.585 weight_bytes=50135040 cpu_nmse=8.4638e-08 max_abs=0.0448227"}
+{"rep": 5, "arm": "variant", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=161.31 weight_bytes=50135040 cpu_nmse=9.20744e-08 max_abs=0.0940723"}
+{"rep": 5, "arm": "variant", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=157.442 weight_bytes=50135040 cpu_nmse=8.46378e-08 max_abs=0.0448189"}
+{"rep": 6, "arm": "variant", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=161.283 weight_bytes=50135040 cpu_nmse=9.20744e-08 max_abs=0.0940723"}
+{"rep": 6, "arm": "variant", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=157.564 weight_bytes=50135040 cpu_nmse=8.46378e-08 max_abs=0.0448189"}
+{"rep": 7, "arm": "base", "m": 5120, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=250.598 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742"}
+{"rep": 7, "arm": "base", "m": 17408, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=170.584 weight_bytes=50135040 cpu_nmse=8.4638e-08 max_abs=0.0448227"}

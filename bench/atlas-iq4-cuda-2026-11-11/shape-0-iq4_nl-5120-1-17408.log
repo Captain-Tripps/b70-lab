@@ -1,0 +1,3 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 11909 MiB):
+  Device 0: NVIDIA GeForce RTX 3060, compute capability 8.6, VMM: yes, VRAM: 11909 MiB
+type=iq4_nl m=5120 n=1 k=17408 us=152.1 weight_bytes=50135040 cpu_nmse=9.44439e-08 max_abs=0.092308

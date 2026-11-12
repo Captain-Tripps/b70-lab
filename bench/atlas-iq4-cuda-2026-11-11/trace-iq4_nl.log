@@ -1,0 +1,8 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 11909 MiB):
+  Device 0: NVIDIA GeForce RTX 3060, compute capability 8.6, VMM: yes, VRAM: 11909 MiB
+type=iq4_nl m=5120 n=4 k=17408 us=252.931 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742
+Importer error status: The importer binary and its dependencies were not found.
+Unable to retrieve the importer version: skipping importation of the QDSTRM file.
+Generating '/tmp/nsys-report-c352.qdstrm'
+Generated:
+    <atlas-home>/experiments/codex-atlas-iq4-20261111/trace-iq4_nl.qdstrm

@@ -1,0 +1,16 @@
+{"type": "iq4_xs", "m": 17408, "n": 1, "k": 5120, "rep": 0, "status": "ok", "result": "type=iq4_xs m=17408 n=1 k=5120 us=143.08 weight_bytes=47349760 cpu_nmse=2.52426e-05 max_abs=17.5299"}
+{"type": "iq4_xs", "m": 17408, "n": 4, "k": 5120, "rep": 0, "status": "ok", "result": "type=iq4_xs m=17408 n=4 k=5120 us=176.182 weight_bytes=47349760 cpu_nmse=2.52871e-05 max_abs=20.6765"}
+{"type": "iq4_xs", "m": 5120, "n": 1, "k": 17408, "rep": 0, "status": "ok", "result": "type=iq4_xs m=5120 n=1 k=17408 us=143.46 weight_bytes=47349760 cpu_nmse=2.57673e-05 max_abs=31.1148"}
+{"type": "iq4_xs", "m": 5120, "n": 4, "k": 17408, "rep": 0, "status": "ok", "result": "type=iq4_xs m=5120 n=4 k=17408 us=158.486 weight_bytes=47349760 cpu_nmse=2.52302e-05 max_abs=31.1148"}
+{"type": "iq4_nl", "m": 17408, "n": 1, "k": 5120, "rep": 0, "status": "ok", "result": "type=iq4_nl m=17408 n=1 k=5120 us=151.254 weight_bytes=50135040 cpu_nmse=9.89233e-08 max_abs=0.0447884"}
+{"type": "iq4_nl", "m": 17408, "n": 4, "k": 5120, "rep": 0, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=170.529 weight_bytes=50135040 cpu_nmse=8.4638e-08 max_abs=0.0448227"}
+{"type": "iq4_nl", "m": 5120, "n": 1, "k": 17408, "rep": 0, "status": "ok", "result": "type=iq4_nl m=5120 n=1 k=17408 us=152.1 weight_bytes=50135040 cpu_nmse=9.44439e-08 max_abs=0.092308"}
+{"type": "iq4_nl", "m": 5120, "n": 4, "k": 17408, "rep": 0, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=249.544 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742"}
+{"type": "iq4_xs", "m": 17408, "n": 1, "k": 5120, "rep": 1, "status": "ok", "result": "type=iq4_xs m=17408 n=1 k=5120 us=143.089 weight_bytes=47349760 cpu_nmse=2.52426e-05 max_abs=17.5299"}
+{"type": "iq4_xs", "m": 17408, "n": 4, "k": 5120, "rep": 1, "status": "ok", "result": "type=iq4_xs m=17408 n=4 k=5120 us=176.163 weight_bytes=47349760 cpu_nmse=2.52871e-05 max_abs=20.6765"}
+{"type": "iq4_xs", "m": 5120, "n": 1, "k": 17408, "rep": 1, "status": "ok", "result": "type=iq4_xs m=5120 n=1 k=17408 us=143.408 weight_bytes=47349760 cpu_nmse=2.57673e-05 max_abs=31.1148"}
+{"type": "iq4_xs", "m": 5120, "n": 4, "k": 17408, "rep": 1, "status": "ok", "result": "type=iq4_xs m=5120 n=4 k=17408 us=158.556 weight_bytes=47349760 cpu_nmse=2.52302e-05 max_abs=31.1148"}
+{"type": "iq4_nl", "m": 17408, "n": 1, "k": 5120, "rep": 1, "status": "ok", "result": "type=iq4_nl m=17408 n=1 k=5120 us=151.264 weight_bytes=50135040 cpu_nmse=9.89233e-08 max_abs=0.0447884"}
+{"type": "iq4_nl", "m": 17408, "n": 4, "k": 5120, "rep": 1, "status": "ok", "result": "type=iq4_nl m=17408 n=4 k=5120 us=170.525 weight_bytes=50135040 cpu_nmse=8.4638e-08 max_abs=0.0448227"}
+{"type": "iq4_nl", "m": 5120, "n": 1, "k": 17408, "rep": 1, "status": "ok", "result": "type=iq4_nl m=5120 n=1 k=17408 us=152.076 weight_bytes=50135040 cpu_nmse=9.44439e-08 max_abs=0.092308"}
+{"type": "iq4_nl", "m": 5120, "n": 4, "k": 17408, "rep": 1, "status": "ok", "result": "type=iq4_nl m=5120 n=4 k=17408 us=249.296 weight_bytes=50135040 cpu_nmse=9.20736e-08 max_abs=0.0940742"}
