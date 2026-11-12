@@ -1,6 +1,6 @@
 # Zeus GLM canary preparation — 2026-11-12
 
-**Controlled canary completed on 2026-11-12.** The first production baseline aborted on an access violation; a repeated baseline and a 60-minute candidate run then completed. Production was restored and health-checked. See the [results](canary-results.md) and [first baseline incident](baseline-incident.md). The remainder of this document describes the original preparation and planned procedure.
+**Promoted on 2026-11-12 at the user's request.** The first production baseline aborted on an access violation; a repeated baseline and a 60-minute candidate run then completed. The tested executable and settings are now live. See the [promotion and rollback record](promotion.md), [canary results](canary-results.md), and [first baseline incident](baseline-incident.md). The remainder of this document describes the original preparation and planned procedure.
 
 On Zeus, an exact byte copy of the current production GLM config and a separate candidate are staged in `D:\maya-sycl\experiments\codex-glm-canary-prep-20261112`. The [redacted baseline](baseline-live-config.json), [redacted candidate](candidate-config.json), [configuration diff](candidate-changes.diff), and [hash manifest](manifest.json) make the proposed change reviewable. The manifest hashes refer to the **unredacted on-machine files**, so the redacted copies in this repository will have different hashes.
 
