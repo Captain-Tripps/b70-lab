@@ -1,0 +1,25 @@
+WinDbg with Microsoft's public DXCore symbols, disk-slot and RAM-slot dumps
+
+Common crashing stack:
+  ze_intel_gpu64.dll + 0x4d2d87 (access violation; rax=0, rcx=0x1c)
+  ze_intel_gpu64.dll internal callers (private symbols unavailable)
+  DXCore!DxTrimWnfCallback+0xdd
+  ntdll!RtlpWnfWalkUserSubscriptionList
+  ntdll!RtlpWnfProcessCurrentDescriptor
+  ntdll!RtlpWnfNotificationThread
+
+DXCore!DxTrimWnfCallback disassembly constructs a three-field callback argument
+at [rbp-0x30] and passes its address to the registered Intel callback:
+  [rbp-0x30] = callback context pointer
+  [rbp-0x28] = 32-bit flags
+  [rbp-0x20] = 64-bit bytes-to-trim
+
+The relevant stack memory in each dump is:
+  disk: context <pointer>; flags 0x00000001; bytes-to-trim 0x0
+  RAM:  context <pointer>; flags 0x00000001; bytes-to-trim 0x0
+
+The layout matches Microsoft's D3DKMT_TRIMNOTIFICATION structure. Its flag
+definition assigns bit 0 to PeriodicTrim and bit 2 to TrimToBudget. This is
+an inferred interpretation from public DXCore symbols and disassembly, not
+Intel private symbols. It does not establish why the Intel callback dereferenced
+a null pointer or exclude simultaneous memory pressure from other causes.
