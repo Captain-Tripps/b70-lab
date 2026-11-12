@@ -1,4 +1,4 @@
-param([ValidateSet('off1b','on1','on2','off2','generic-off1','generic-on1','generic-on2','generic-off2','audit-off','audit-on','audit-generic','fused-off1','fused-on1','fused-on2','fused-off2')][Parameter(Mandatory=$true)][string]$Arm)
+param([ValidateSet('off1b','on1','on2','off2','generic-off1','generic-on1','generic-on2','generic-off2','audit-off','audit-on','audit-generic','fused-off1','fused-on1','fused-on2','fused-off2','fusedprof-off1','fusedprof-on1','fusedprof-on2','fusedprof-off2')][Parameter(Mandatory=$true)][string]$Arm)
 $ErrorActionPreference = 'Stop'
 $root = 'D:\maya-sycl'
 $dir = Join-Path $root 'experiments\codex-decode-fusion-audit-20261112'
@@ -9,7 +9,7 @@ if ($Arm -like 'audit-*') {
     $exe = Join-Path $dir 'instrumented-tree\link\generate.exe'
     $expected = '9710d81b305fd5098b2dce661645ff4679fa42afb821fc1221fcefd5d13aef25'
 }
-if ($Arm -like 'fused-*') {
+if ($Arm -like 'fused-*' -or $Arm -like 'fusedprof-*') {
     $exe = Join-Path $dir 'fused-tree\link\generate.exe'
     $expected = 'a33f023ca298a628807bfc74ec715760918d175907c50a3bb8ff69ddbd6eca44'
 }
@@ -32,6 +32,8 @@ if ($Arm -like 'generic-on*') { $env:STRATA_GLM_MV_GENERIC='1' }
 if ($Arm -in @('audit-on','audit-generic')) { $env:MAYA_MV_AUDIT='1' }
 if ($Arm -eq 'audit-generic') { $env:STRATA_GLM_MV_GENERIC='1' }
 if ($Arm -like 'fused-on*') { $env:MAYA_MV_Q6_BF16_FUSED='1' }
+if ($Arm -like 'fusedprof-*') { $env:STRATA_GLM_PROF='8' }
+if ($Arm -like 'fusedprof-on*') { $env:MAYA_MV_Q6_BF16_FUSED='1' }
 $argsList = @('--glm-pack',"$root\glm-m\pack",'--tokens-file',"$root\prompt1.txt",'--max-new','256',
               '--max-context','131072','--greedy','--expert-cache','auto','--layer-split','14,25,36','--prefill','768')
 $p = Start-Process -FilePath $exe -ArgumentList $argsList -WorkingDirectory "$root\maya" -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru

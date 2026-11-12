@@ -55,6 +55,25 @@ All 256 generated tokens matched across the four arms (same hash as above). A1 e
 
 All candidate runs used separate processes following a proxy-idle guard, with the production promoted binary/config untouched. The promoted service was restarted and returned `READY` afterward. Raw logs remain in the Zeus experiment directory. The existing driver-crash issue remains open.
 
+## Fused regression diagnosis
+
+The same prototype and fixed input were profiled in A/B/B/A order with `STRATA_GLM_PROF=8`. The profiling markers affect performance and include queue timing/gaps, so these are diagnostic comparisons, not clean model throughput measurements. All arms generated the same 256-token hash and accepted 216/254 drafts.
+
+| Arm | Profiled decode | CUDA0 `kda_proj_mv` | CUDA2 `kda_proj_mv` |
+| --- | ---: | ---: | ---: |
+| A1 fused off | 43.16 tok/s | 2.358 ms/profiled token | 1.689 ms/profiled token |
+| B1 fused on | 14.26 tok/s | 25.253 ms/profiled token | 18.350 ms/profiled token |
+| B2 fused on | 14.29 tok/s | 25.239 ms/profiled token | 18.365 ms/profiled token |
+| A2 fused off | 43.32 tok/s | 2.353 ms/profiled token | 1.690 ms/profiled token |
+
+The regression is localized to the projection interval, which increased roughly tenfold on both measured split streams. The intervals are per-stream and not additive model-wall times.
+
+Intel VTune 2026.0 GPU-hotspots characterization then collected one off and one on run, 128 generated tokens each, all four B70s. Both collected successfully and generated the same token hash `f398f5cb9783baf8d7e4cf7342afe64d40bda6475a433f35a3728e2c390058b7`; both accepted 102/126 drafts. VTune off/on model decode was 41.01/14.24 tok/s, including collection overhead. The instrumented fused dispatch has global/local work sizes 796672/256: `(3*8192 + 128 + 128 + 64) / 8 * 256`. Its matched VTune task reported 4,963 instances averaging **2.301 ms**. The original Q6 task of 786432/256 reported 5,434 instances averaging **0.201 ms**; the original BF16 task of 10240/256 reported 4,963 instances averaging **0.010 ms**. The Q6 task count includes 471 additional instances, so its average is not strictly limited to the six-job calls. These are observed task averages under VTune, not independent precision benchmarks.
+
+VTune reported **0 bytes of spill memory** for the three identified task rows. That does not establish the exact register count or rule out every occupancy/resource issue, but the captured spill field does not support claiming a spill caused the regression. The slower fused task's 78.3% occupancy figure in VTune's summary is not directly comparable to overall occupancy; collection spans model load and unrelated kernels. Determine compiler code generation or memory behavior before attributing a precise cause. Raw VTune results and kernel reports remain on Zeus in the experiment directory; [vtune.ps1](vtune.ps1) records the guarded invocation. VTune could not locate private debug information for the Intel driver, which limits attribution.
+
+After each batch the promoted GLM service was restored and returned `READY`. No live executable or config changed. The fusion prototype remains rejected; the evidence points to its expensive fused projection kernel rather than overhead elsewhere, while the underlying code-generation reason remains open.
+
 ## Next step
 
-Do not promote or further tune this exact mixed kernel without a measured explanation for its severe regression. If pursuing fusion, inspect compiler resource use and per-kernel device timings first, or choose another independently measured opportunity such as depth-specific attention/indexer work. The untouched generic path was also not a demonstrated win.
+The generic one-launch alternative did not establish a speedup, and the narrow specialized attempt was substantially slower. Per the handoff's two-attempt stop rule, do not continue this fusion lane without new measured evidence. The still-unmeasured depth-specific MLA/indexer path is a separate candidate; first establish its model-wall-time ceiling before investing in a kernel rewrite.
