@@ -1,0 +1,19 @@
+--- a/src/program/generate.cpp	2026-11-01 14:29:57.420228100 -0600
++++ b/src/program/generate.cpp	2026-11-12 01:38:20.736601000 -0600
+@@ -1590,11 +1590,14 @@
+     // the conversation in the model (its snapshot, snap_tokens) into a slot
+     const auto slot_put = [&](const char* why) {
+         if (slot_max <= 0 || snap_in_slot || snap_tokens.size() < slot_min) return;
+-        // an earlier state of this conversation is superseded (the same pictures: the same tokens with other
+-        // pictures are another conversation)
++        // Preserve a shorter RAM snapshot when explicitly requested, so a later edit can return to that branch.
++        // Equal snapshots still replace each other. Existing count and byte limits still bound retention.
++        const char* keep_env = std::getenv("STRATA_GLM_SLOT_KEEP_BRANCH");
++        const bool keep_branch = slot_ram && keep_env != nullptr && std::atoi(keep_env) != 0;
+         for (size_t i = slots.size(); i-- > 0;)
+             if (!slots[i].anchor && !slots[i].prefix && slots[i].img == snap_img_hash &&
+                 slots[i].tokens.size() <= snap_tokens.size() &&
++                (!keep_branch || slots[i].tokens.size() == snap_tokens.size()) &&
+                 std::equal(slots[i].tokens.begin(), slots[i].tokens.end(), snap_tokens.begin()))
+                 slot_drop(i);
+         while (!slots.empty() && slots.size() >= (size_t) slot_max) slot_drop(slot_lru(SIZE_MAX));

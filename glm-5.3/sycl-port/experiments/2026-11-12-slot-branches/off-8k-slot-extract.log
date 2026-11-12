@@ -1,0 +1,16 @@
+glm slots: slots parked in RAM (12.88 GB max) - nothing is written to disk, the states die with the run
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 1 kept, 0.26 GB
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 2 kept, 0.53 GB
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 3 kept, 0.79 GB
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 4 kept, 1.06 GB
+glm slots: saved a 7949-token conversation (0.26 GB in RAM in 0.1 s); 5 kept, 1.32 GB
+glm slots: took back a 8110-token conversation from RAM (0.0 s); 1 new tokens to read
+glm slots: saved a 8185-token conversation (0.27 GB in RAM in 0.1 s); 5 kept, 1.32 GB
+glm slots: took back a 8110-token conversation from RAM (0.0 s); 1 new tokens to read
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 5 kept, 1.32 GB
+glm slots: took back a 8110-token conversation from RAM (0.0 s); 1 new tokens to read
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 5 kept, 1.32 GB
+glm slots: saved a 8110-token conversation (0.26 GB in RAM in 0.1 s); 6 kept, 1.59 GB
+glm slots: took back a 7949-token conversation from RAM (0.0 s); 1 new tokens to read
+glm slots: saved a 7949-token conversation (0.26 GB in RAM in 0.1 s); 6 kept, 1.59 GB
+glm slots: took back a 8110-token conversation from RAM (0.0 s); 1 new tokens to read

@@ -1,0 +1,31 @@
+glm slots: slots parked in RAM (12.88 GB max) - nothing is written to disk, the states die with the run
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 1 kept, 1.74 GB
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 2 kept, 3.49 GB
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 3 kept, 5.23 GB
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 4 kept, 6.98 GB
+glm slots: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 5 kept, 7.23 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115190-token conversation (1.75 GB in RAM in 0.7 s); 5 kept, 7.24 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 5 kept, 7.24 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 5 kept, 7.24 GB
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.9 s); 6 kept, 8.98 GB
+glm slots: took back a 7682-token conversation from RAM (0.0 s); 1 new tokens to read
+glm slots: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 6 kept, 8.98 GB
+glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+glm slots: saved a 115190-token conversation (1.75 GB in RAM in 0.7 s); 5 kept, 7.24 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 5 kept, 7.24 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 5 kept, 7.24 GB
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 6 kept, 8.98 GB
+glm slots: took back a 7682-token conversation from RAM (0.0 s); 1 new tokens to read
+glm slots: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 6 kept, 8.98 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115190-token conversation (1.75 GB in RAM in 0.6 s); 5 kept, 7.24 GB
+glm slots: saved a 31442-token conversation (0.59 GB in RAM in 0.2 s); 6 kept, 7.82 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 6 kept, 7.82 GB
+glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 6 kept, 7.82 GB

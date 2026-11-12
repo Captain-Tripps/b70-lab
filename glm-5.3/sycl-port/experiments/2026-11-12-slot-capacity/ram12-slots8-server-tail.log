@@ -1,0 +1,12 @@
+[maya] reading the prompt: 48,384 of 115,116 tokens, 40 s so far
+[maya] reading the prompt: 49,920 of 115,116 tokens, 42 s so far
+[maya] reading the prompt: 51,456 of 115,116 tokens, 43 s so far
+[maya] reading the prompt: 52,992 of 115,116 tokens, 44 s so far
+[maya] reading the prompt: 54,528 of 115,116 tokens, 45 s so far
+[maya] reading the prompt: 56,064 of 115,116 tokens, 47 s so far
+[maya] reading the prompt: 57,600 of 115,116 tokens, 48 s so far
+[maya] reading the prompt: 59,136 of 115,116 tokens, 49 s so far
+[maya] reading the prompt: 60,672 of 115,116 tokens, 50 s so far
+[maya] reading the prompt: 62,208 of 115,116 tokens, 52 s so far
+[maya] the engine stopped unexpectedly (exit code 3221225477). The usual cause is running out of RAM: Linux then ends the biggest program (check: sudo dmesg | grep -i -E 'killed process|out of memory'); Windows slows down instead. Close other programs or use a smaller model (Q2_0 / IQ2_XS). The next request starts the engine again. Its log: <work>\experiments\codex-slot-split-ram12-slots8-20261112\engine.log
+[maya] done: 0 tokens in 57 s (0.0 tok/s) (error, cancel=False)
