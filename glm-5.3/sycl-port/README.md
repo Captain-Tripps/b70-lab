@@ -21,6 +21,7 @@ A [selective-batching screen](experiments/2026-11-10-selective-sub-batches/) did
 A [partial prompt-memo pilot](experiments/2026-11-10-prompt-memo-screen/) measured CPU savings but no established served follow-up gain.
 A [slot-storage screen](experiments/2026-11-10-slot-storage-screen/) found a promising RAM-backed follow-up option requiring more validation.
 [Multi-depth RAM-slot validation](experiments/2026-11-11-slot-validation/) includes 8k–130k, multi-chat and an image case; a subsequent [mixed soak](experiments/2026-11-11-slot-soak/) failed with a driver crash also seen with disk slots.
+[Branch-preservation prototype](experiments/2026-11-12-slot-branches/) cut one edited-branch revisit from 8.273 to 0.190 s at 8k and from 102.200 to 0.870 s at 115k, with matching outputs; broader validation remains incomplete and it is not live.
 An [IQ2_S weight-reorder prototype](experiments/2026-11-11-weight-reorder/) passed a GPU parity fixture but was slower at the tested shape.
 The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/) separates the dominant grouped
 gate/up and down spans from row gathers.
