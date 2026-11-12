@@ -1,0 +1,33 @@
+--- a/src/forkxmx/fused-gemm.cpp
++++ b/src/forkxmx/fused-gemm.cpp
+@@ -689,0 +690,24 @@
++// Isolated experiment: losslessly planar IQ2_S per expert [qs][qh][scales][d].
++template <> struct fg_soa<block_iq2_s> {
++    static constexpr bool supported = true;
++    template <typename E>
++    static __dpct_inline__ void stage(const uint8_t * x, const size_t nblocks, const size_t block, const int kb,
++                                      typename E::pair * a) {
++        const int sub = kb % (QK_K / 32);
++        const uint8_t * qs = x + block * (QK_K / 4);
++        const uint8_t * qh = x + nblocks * (QK_K / 4) + block * (QK_K / 32);
++        const uint8_t * scales = x + nblocks * (QK_K / 4 + QK_K / 32) + block * (QK_K / 32);
++        const float base = (float) ((const sycl::half *) (x + nblocks * (QK_K / 4 + QK_K / 16)))[block];
++#pragma unroll
++        for (int il = 0; il < 4; ++il) {
++            const uint8_t * grid = (const uint8_t *) (iq2s_grid + (qs[4 * sub + il] | ((qh[sub] << (8 - 2 * il)) & 0x300)));
++            const float d = base * (0.5f + ((scales[sub] >> (4 * (il / 2))) & 0xf)) * 0.25f;
++            const uint8_t signs = qs[QK_K / 8 + 4 * sub + il];
++            float t[8];
++#pragma unroll
++            for (int j = 0; j < 8; ++j) t[j] = d * grid[j] * (signs & kmask_iq2xs[j] ? -1.f : 1.f);
++            fg_pack_quarter<E>(t, a, il);
++        }
++    }
++};
++
+--- a/src/forkxmx/maya_fg_shim.cpp
++++ b/src/forkxmx/maya_fg_shim.cpp
+@@ -88 +88,2 @@
+-    const bool ok=ggml_sycl_grouped_dequant_gemm((ggml_type) type, false, w, stride, x, GGML_PREC_DEFAULT, dst, offs, n_as, M, K,
++    const bool reordered = type == 22 && std::getenv("MAYA_FG_REORDER_IQ2") != nullptr;
++    const bool ok=ggml_sycl_grouped_dequant_gemm((ggml_type) type, reordered, w, stride, x, GGML_PREC_DEFAULT, dst, offs, n_as, M, K,

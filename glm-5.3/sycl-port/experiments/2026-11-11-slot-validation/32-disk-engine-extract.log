@@ -1,0 +1,29 @@
+glm spec: CUDA1 the head's recurrent-state backup (34 MB) before the expert pool
+glm spec: CUDA0 the head's recurrent-state backup (43 MB) before the expert pool
+glm vram: prompt 32118 tokens read in 31.4 s; VRAM free CUDA0 4.4 of 31.2, CUDA1 3.0 of 31.2, CUDA2 3.2 of 31.2, CUDA3 1.0 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: tail/head enqueue on two threads
+glm spec: 53 of 62 drafts accepted (85.5%)
+glm slots: saved a 32117-token conversation (0.60 GB in 0.6 s); 1 kept, 0.60 GB
+glm checkpoints: 32105 of the prompt's 32118 tokens from a checkpoint
+glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 52 of 62 drafts accepted (83.9%)
+glm slots: saved a 32117-token conversation (0.60 GB in 0.6 s); 2 kept, 1.19 GB
+glm checkpoints: 32105 of the prompt's 32118 tokens from a checkpoint
+glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 52 of 62 drafts accepted (83.9%)
+glm slots: saved a 32117-token conversation (0.60 GB in 0.6 s); 3 kept, 1.79 GB
+glm checkpoints: 32105 of the prompt's 32118 tokens from a checkpoint
+glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 56 of 62 drafts accepted (90.3%)
+glm slots: saved a 32117-token conversation (0.60 GB in 0.6 s); 4 kept, 2.39 GB
+glm vram: prompt 7351 tokens read in 7.4 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 44 of 62 drafts accepted (71.0%)
+glm slots: saved a 7350-token conversation (0.25 GB in 0.2 s); 4 kept, 2.04 GB
+glm slots: took back a 32117-token conversation from disk (0.7 s); 1 new tokens to read
+glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 56 of 62 drafts accepted (90.3%)
+glm slots: saved a 32117-token conversation (0.60 GB in 0.6 s); 4 kept, 2.04 GB
+glm vram: prompt 32125 tokens read in 30.0 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 51 of 62 drafts accepted (82.3%)
+glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 4.1 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.9 of 31.2, CUDA3 0.7 of 31.2 GB before, 4.1, 2.7, 2.9, 0.7 after
+glm spec: 51 of 62 drafts accepted (82.3%)

@@ -3,6 +3,10 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-11
+- IQ2_S weight-reorder lead: Maya grouped XMX uses unreordered weights and lacks an IQ2_S planar reader. Isolated prototype compiled and a CPU byte round-trip passed; GPU parity and timing await free cards. [Weight reorder](glm-5.3/sycl-port/experiments/2026-11-11-weight-reorder/).
+- RAM conversation-slot candidate: edited follow-ups improved in sequential 8k–130k screens; at 130k the three-run means were 2.542 s disk vs 1.245 s RAM. All 31 paired visible responses matched, including an image case. Multi-chat and 32k earlier-edit/retry were exercised; 30-minute soak and other gates remain open. [Validation](glm-5.3/sycl-port/experiments/2026-11-11-slot-validation/).
+
 ## 2026-11-10
 - Long-follow-up slot screen: RAM-backed slots cut mean 115k edited follow-up TTFT from 2.334 to 1.224 s in three sequential samples per arm; a switch-back was 2.582 vs 0.519 s. Needs broader validation and memory checks. A slots-disabled arm hit a GPU-driver access violation during initial prefill; cause unknown. [Slot screen](glm-5.3/sycl-port/experiments/2026-11-10-slot-storage-screen/).
 - Partial prompt-memo pilot passed exact token checks and cut CPU serialization time but did not establish a served 115k follow-up TTFT gain in three noisy samples per arm. Full upstream port unmeasured; no live change. [Prompt memo](glm-5.3/sycl-port/experiments/2026-11-10-prompt-memo-screen/).

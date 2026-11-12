@@ -20,6 +20,8 @@ A [numerical diagnosis](experiments/2026-11-10-sub768-diagnosis/) traced early d
 A [selective-batching screen](experiments/2026-11-10-selective-sub-batches/) did not establish a useful gain.
 A [partial prompt-memo pilot](experiments/2026-11-10-prompt-memo-screen/) measured CPU savings but no established served follow-up gain.
 A [slot-storage screen](experiments/2026-11-10-slot-storage-screen/) found a promising RAM-backed follow-up option requiring more validation.
+[Multi-depth RAM-slot validation](experiments/2026-11-11-slot-validation/) includes 8k–130k, multi-chat and an image case; soak remains open.
+An [IQ2_S weight-reorder prototype](experiments/2026-11-11-weight-reorder/) awaits GPU parity and timing.
 The follow-up [resident-expert profile](experiments/2026-11-10-resident-profile/) separates the dominant grouped
 gate/up and down spans from row gathers.
 The [grouped XMX profile](experiments/2026-11-10-xmx-profile/) further splits tile copy, activation packing and
