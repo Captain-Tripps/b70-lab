@@ -1,0 +1,13 @@
+fg_device_combos: Intel(R) Arc(TM) Pro B70 Graphics: XMX dequant-GEMM combinations available 0x6f, allowed 0xff
+fg_pick_combo: src1 f32, src1 prec 0 -> f16xf16 8x16x16 sg16
+sample_ms=0.8603
+sample_ms=0.8641
+sample_ms=0.8651
+sample_ms=0.861
+sample_ms=0.8579
+sample_ms=0.8545
+sample_ms=0.8678
+sample_ms=0.8629
+sample_ms=0.8568
+sample_ms=0.8616
+PASS reorder=0 rows=337 values=1380352 source_bytes=53739520 reorder_plus_verify_ms=0 device=Intel(R) Arc(TM) Pro B70 Graphics
