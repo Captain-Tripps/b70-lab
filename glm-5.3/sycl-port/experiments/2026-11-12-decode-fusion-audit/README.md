@@ -34,6 +34,27 @@ All four 256-token sequences had the same hash as the profile arms. This small, 
 
 The promoted config and executable were not modified. After both batches the live proxy was restarted with the promoted config and a `READY` health response. Raw diagnostic logs and the executed script remain on Zeus at `D:\maya-sycl\experiments\codex-decode-fusion-audit-20261112`; [run.ps1](run.ps1) is the runner. The prior unrelated Intel-driver access violation remains unresolved.
 
+## Actual launch audit
+
+An opt-in, bounded host trace in an isolated copy of the promoted source counted the real single-column dispatches for six-job calls. The first 64 sampled calls all had the same signature: three Q6_K (`type=14`) 4096→8192 projections and three BF16 (`type=30`) projections, 4096→128, 4096→128, and 4096→64. The normal path took **one typed Q6_K launch and one generic BF16 launch** per sampled call. With `STRATA_GLM_MV_GENERIC=1` it took **one generic launch**. This is a bounded early sample, not a census across all workloads or multi-column paths. See [instrument_mv.py](instrument_mv.py); the instrumented executable SHA-256 was `9710d81b305fd5098b2dce661645ff4679fa42afb821fc1221fcefd5d13aef25`.
+
+The tracing-disabled, tracing-enabled and generic-tracing runs generated 256 identical tokens (same hash as above) and took 48.17, 47.36 and 47.75 tok/s respectively. These single samples check behavior and tracing viability, not a statistical overhead or performance claim.
+
+## Exact-shape mixed-kernel prototype
+
+An isolated, off-by-default `MAYA_MV_Q6_BF16_FUSED` prototype dispatches one kernel only for the six exact shapes above, retaining the specialized Q6_K dot product and BF16 dot product; all other shapes and multi-column work follow the original path. The single fused kernel uses a per-job type branch. The source modification is reproducible with [prepare_fused.py](prepare_fused.py); it is experimental and not part of the live binary. Its source SHA-256 was `581dc3b6e855f367d643e441e50eaa95560e4ae732c298d87972fba1fb06b039`, binary SHA-256 `a33f023ca298a628807bfc74ec715760918d175907c50a3bb8ff69ddbd6eca44`. Runtime logs confirmed the fused dispatch was active in both candidate arms.
+
+| Arm | Decode | Prompt ms/token | Accepted/proposed |
+| --- | ---: | ---: | ---: |
+| A1 fused off | 34.93 tok/s | 3763.5 | 216/254 |
+| B1 fused on | 14.89 tok/s | 261.6 | 216/254 |
+| B2 fused on | 14.89 tok/s | 120.5 | 216/254 |
+| A2 fused off | 48.04 tok/s | 60.8 | 216/254 |
+
+All 256 generated tokens matched across the four arms (same hash as above). A1 exhibited a much higher prompt time, consistent with a cold-start effect but without independently measured JIT timing. Even after the B repeat, its decode was about 69% slower than the closing control. This is a decisive rejection for this prototype on this short workload, not a finding about every possible fusion. The cause of the slowdown has not been profiled; register pressure, scheduling, compilation, or another mechanism are hypotheses, not established causes. No longer quality, deep-context, or multi-user claims follow from this one token-parity check.
+
+All candidate runs used separate processes following a proxy-idle guard, with the production promoted binary/config untouched. The promoted service was restarted and returned `READY` afterward. Raw logs remain in the Zeus experiment directory. The existing driver-crash issue remains open.
+
 ## Next step
 
-Instrument actual `gf::mv` job types and launch counts at the recurrent-mixer call in a separate, gated build, using the already-promoted runtime as control. This can establish whether the expensive stage is actually paying multiple launches and identify the exact quantization combinations; preserve the existing multi-column and fallback behavior. Only pursue a narrow mixed-type fusion if exact-shape profiling gives a plausible end-to-end ceiling, then test arithmetic parity and full-model A/B/B/A. No production setting change is justified by this screen.
+Do not promote or further tune this exact mixed kernel without a measured explanation for its severe regression. If pursuing fusion, inspect compiler resource use and per-kernel device timings first, or choose another independently measured opportunity such as depth-specific attention/indexer work. The untouched generic path was also not a demonstrated win.

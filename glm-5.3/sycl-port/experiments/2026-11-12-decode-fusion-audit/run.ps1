@@ -1,10 +1,18 @@
-param([ValidateSet('off1b','on1','on2','off2','generic-off1','generic-on1','generic-on2','generic-off2')][Parameter(Mandatory=$true)][string]$Arm)
+param([ValidateSet('off1b','on1','on2','off2','generic-off1','generic-on1','generic-on2','generic-off2','audit-off','audit-on','audit-generic','fused-off1','fused-on1','fused-on2','fused-off2')][Parameter(Mandatory=$true)][string]$Arm)
 $ErrorActionPreference = 'Stop'
 $root = 'D:\maya-sycl'
 $dir = Join-Path $root 'experiments\codex-decode-fusion-audit-20261112'
 $exe = Join-Path $root 'rt-glm-branch-20261112\generate.exe'
 $proxy = 'http://100.89.126.50:8080'
 $expected = 'f89820fe92e49ffa6e563b538d5dc5aebe9b246e95d29d523f3e76f0ed0acea8'
+if ($Arm -like 'audit-*') {
+    $exe = Join-Path $dir 'instrumented-tree\link\generate.exe'
+    $expected = '9710d81b305fd5098b2dce661645ff4679fa42afb821fc1221fcefd5d13aef25'
+}
+if ($Arm -like 'fused-*') {
+    $exe = Join-Path $dir 'fused-tree\link\generate.exe'
+    $expected = 'a33f023ca298a628807bfc74ec715760918d175907c50a3bb8ff69ddbd6eca44'
+}
 if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ne $expected) { throw 'Unexpected promoted executable' }
 if ((Invoke-RestMethod "$proxy/running" -TimeoutSec 5).running.Count -gt 0) { throw 'Proxy has a loaded model' }
 if (Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('generate.exe','llama-server.exe') }) { throw 'Another model engine is active' }
@@ -21,6 +29,9 @@ $env:STRATA_GLM_SLOT_RAM_GB='12'; $env:STRATA_GLM_SLOTS='8'; $env:STRATA_GLM_SLO
 $env:STRATA_GLM_SPEC_PROF='1'
 if ($Arm -like 'on*') { $env:STRATA_GLM_PROF='8' }
 if ($Arm -like 'generic-on*') { $env:STRATA_GLM_MV_GENERIC='1' }
+if ($Arm -in @('audit-on','audit-generic')) { $env:MAYA_MV_AUDIT='1' }
+if ($Arm -eq 'audit-generic') { $env:STRATA_GLM_MV_GENERIC='1' }
+if ($Arm -like 'fused-on*') { $env:MAYA_MV_Q6_BF16_FUSED='1' }
 $argsList = @('--glm-pack',"$root\glm-m\pack",'--tokens-file',"$root\prompt1.txt",'--max-new','256',
               '--max-context','131072','--greedy','--expert-cache','auto','--layer-split','14,25,36','--prefill','768')
 $p = Start-Process -FilePath $exe -ArgumentList $argsList -WorkingDirectory "$root\maya" -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
