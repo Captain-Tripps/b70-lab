@@ -70,6 +70,14 @@ Qwen3.8-27B Q8_0, fixed English text (the repository's `docs/*.md`), `-fa on -ct
 The ub 1 run covers the decode path, where the split change applies (one query row). The stock-vs-split difference
 there (0.0044) is far inside the error bar and comes from a different reduction order.
 
+## Follow-up: locked in (2026-11-12)
+
+Arch-aware `xve_engines_per_core` (BMG-G31 → 8, else 16) is in the Captain-Tripps fork and Zeus live
+`master-797de6-b70-r67c-pr30956-graph6-vcache-nsm8`. Patch:
+[`nsm-xe2-bmg-g31-from-32058.patch`](nsm-xe2-bmg-g31-from-32058.patch). Same-day Windows A/B against
+[llama.cpp#32058](https://github.com/ggml-org/llama.cpp/pull/32058): Qwen3.8-27B 1-card pp512 **+9.3%** vs
+stock `/16`; dense decode flat; fusion arms noisy.
+
 ## Conclusions
 
 - **`nsm` / 8 is the fix to send upstream.** It fixes the undercount at its source, not one kernel on one GPU, and gets

@@ -1,0 +1,36 @@
+diff --git a/ggml/src/ggml-sycl/ggml-sycl.cpp b/ggml/src/ggml-sycl/ggml-sycl.cpp
+index 65c691dc3..6728539a6 100644
+--- a/ggml/src/ggml-sycl/ggml-sycl.cpp
++++ b/ggml/src/ggml-sycl/ggml-sycl.cpp
+@@ -713,6 +713,14 @@ void ggml_sycl_pipe_relock() {
+     sycl_pipe::t_submit_held = true;
+ }
+ 
++// Vector engines per Xe-core, by architecture (nsm counts Xe-cores = CUs / xve):
++//   1st-gen Xe : 16 @ SIMD8
++//   2nd-gen Xe2:  8 @ SIMD16 (2x throughput per clock)
++// BMG-G31 verified on Arc Pro B70 (llama.cpp#32058 + Zeus Windows A/B 2026-11-12).
++static int xve_engines_per_core(gpu_arch arch) {
++    return (arch == gpu_arch::intel_gpu_bmg_g31) ? 8 : 16;
++}
++
+ static bool g_sycl_loaded = false;
+ int g_ggml_sycl_debug = 0;
+ int g_ggml_sycl_dev_debug = 0;
+@@ -861,7 +869,6 @@ static ggml_sycl_device_info ggml_sycl_init() {
+ 
+         info.devices[i].cc =
+             100 * prop.get_major_version() + 10 * prop.get_minor_version();
+-        info.devices[i].nsm = prop.get_max_compute_units() / 16; //16: Number of Xe Cores
+         info.devices[i].opt_feature.reorder = device.ext_oneapi_architecture_is(syclex::arch_category::intel_gpu);
+ #if GGML_SYCL_DNNL
+         info.devices[i].opt_feature.onednn_optimized_gemm = ggml_sycl_dnnl_detect_optimized_gemm(i);
+@@ -873,6 +880,8 @@ static ggml_sycl_device_info ggml_sycl_init() {
+         info.max_work_group_sizes[i] = prop.get_max_work_group_size();
+         info.devices[i].max_wg_per_cu = info.max_work_group_sizes[i] / prop.get_max_compute_units();
+         info.devices[i].hw_info = get_device_hw_info(&device);
++        // nsm from the LOCAL struct (not ggml_sycl_info()): we are inside ggml_sycl_init().
++        info.devices[i].nsm = prop.get_max_compute_units() / xve_engines_per_core(info.devices[i].hw_info.arch);
+ 
+         // Only check GPU devices; CPU devices use OpenCL and would otherwise
+         // disable Level Zero for the GPUs on systems without ONEAPI_DEVICE_SELECTOR set.
