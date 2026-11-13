@@ -2,15 +2,16 @@
 
 ## Decision
 
-Keep, as a promotion candidate pending Jon's OK. When a RAM slot parks a conversation, it now keeps a copy of the
-longest checkpoint that conversation starts with, and gives it back on return. The first edit with new text after
-a switch to another conversation and back drops from a 102 s full re-read to the 1.25 s checkpoint path. All 33
-answer hashes match the off arm.
+Promoted 2026-11-13 at Jon's request; see the [promotion record](promotion.md). When a RAM slot parks a
+conversation, it now keeps a copy of the longest checkpoint that conversation starts with, and gives it back on
+return. The first edit with new text after a switch to another conversation and back drops from a 102 s full
+re-read to the 1.25 s checkpoint path. All 33 answer hashes match the off arm. That needs an unchanged return
+first: an edit sent straight after the switch still re-reads, because a slot is only taken back when the new prompt
+contains its whole conversation ([promotion record](promotion.md#what-the-carry-does-not-cover)).
 
 A 30-minute soak on the 2026-11-12 request mix was clean: 96 cycles, every request type gave the same answer as
 the 11-12 soak on the live build, and no re-read beyond the first medium switch in either. Cost: requests that park
-or restore a slot are about 40–55 ms slower at the median, and each 115k slot is 1.90 GB instead of 1.74 GB. Not
-promoted; the live service was not changed.
+or restore a slot are about 40–55 ms slower at the median, and each 115k slot is 1.90 GB instead of 1.74 GB.
 
 ## Candidate
 
@@ -114,6 +115,7 @@ Both used the candidate with `STRATA_GLM_SLOT_CARRY_CKPT=1`, the live config and
 
 ## Next action
 
-Promotion needs Jon's OK: point the live GLM entry at this executable and add `STRATA_GLM_SLOT_CARRY_CKPT=1` to the
-live config. The 40–55 ms per slot switch could be trimmed by moving the checkpoint buffers instead of copying
-them where the model's copy is about to be overwritten anyway.
+Cover the edit sent straight after a switch: when no slot is a prefix of the prompt, take back the slot whose
+carried checkpoint the prompt starts with, restore that checkpoint and read from there. The 40–55 ms per slot
+switch could be trimmed by moving the checkpoint buffers instead of copying them where the model's copy is about to
+be overwritten anyway.
