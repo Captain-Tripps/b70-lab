@@ -143,8 +143,9 @@ tensor-split leaves empty slices on some cards; N-way summed uninitialized devic
 
 **Fix:** zero those slices before *any* allreduce path. Same FILL sequence the fallback already used.
 Patch: [`nway-allreduce/meta-zero-noncompute-before-allreduce.patch`](nway-allreduce/meta-zero-noncompute-before-allreduce.patch)
-(apply after the N-way sycl patch, or on a tree that already has N-way). Landed on the fork branch
-`proto/sycl-nway-allreduce`.
+(apply after the N-way sycl patch, or on a tree that already has N-way). Also on the fork branch
+[`Captain-Tripps/llama.cpp` `proto/sycl-nway-allreduce`](https://github.com/Captain-Tripps/llama.cpp/tree/proto/sycl-nway-allreduce),
+which carries other Windows patches too, so the patch is the cleaner way to test it.
 
 After the fix, Flash-Next 3-card N-way returned coherent `sum_list` Python, matching fallback. Dense
 perplexity arms from 2026-11-08 were not re-run; this is a correctness fix for empty MoE slices.
