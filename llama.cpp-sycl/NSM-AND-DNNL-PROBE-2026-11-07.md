@@ -72,11 +72,21 @@ there (0.0044) is far inside the error bar and comes from a different reduction 
 
 ## Follow-up: locked in (2026-11-12)
 
-Arch-aware `xve_engines_per_core` (BMG-G31 → 8, else 16) is in the Captain-Tripps fork and Zeus live
+Arch-aware `xve_engines_per_core` (BMG-G31 → 8, else 16) is in the fork and the live runtime
 `master-797de6-b70-r67c-pr30956-graph6-vcache-nsm8`. Patch:
-[`nsm-xe2-bmg-g31-from-32058.patch`](nsm-xe2-bmg-g31-from-32058.patch). Same-day Windows A/B against
-[llama.cpp#32058](https://github.com/ggml-org/llama.cpp/pull/32058): Qwen3.8-27B 1-card pp512 **+9.3%** vs
-stock `/16`; dense decode flat; fusion arms noisy.
+[`nsm-xe2-bmg-g31-from-32058.patch`](nsm-xe2-bmg-g31-from-32058.patch).
+
+Windows A/B against [llama.cpp#32058](https://github.com/ggml-org/llama.cpp/pull/32058), Qwen3.8-27B Q8_0, 1 card,
+fusion and graph off, 3 rounds with 60 s idle (2026-11-13):
+
+| buffers | pp512 stock / patch | delta | spread across rounds |
+|---|---:|---:|---:|
+| `-b 2048 -ub 512` | 1,036.52 / 1,037.26 | +0.74 t/s | 5.21 t/s |
+| `-b 512 -ub 512` | 1,035.68 / 1,038.33 | +2.65 t/s | 3.65 t/s |
+
+At short context the change is neutral; pp2048 and tg64 also move less than 1 t/s. A +9.3% pp512 posted on
+2026-11-12 came from a depressed stock baseline (947.9 vs 1,036 on the clean run) and is retracted. The
+deep-context decode gains above (2026-11-07) are what the change is for.
 
 ## Conclusions
 

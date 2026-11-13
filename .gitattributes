@@ -1,0 +1,3 @@
+# Patches must keep LF endings or `git apply` rejects them.
+*.patch text eol=lf
+*.diff text eol=lf
