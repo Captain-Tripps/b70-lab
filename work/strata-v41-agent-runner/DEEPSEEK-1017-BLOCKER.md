@@ -3,6 +3,22 @@
 > **This file replaces an earlier version that said "1017 cannot be tuned — the runtime does not
 > exist." That was WRONG.** It was based on probing the wrong binary. Kept as a correction record.
 
+> ## ⚠ Superseded in part — 2026-11-12
+>
+> A placement sweep re-measured this pack on the same build with the same flags. Three claims below no
+> longer hold. **Read `DEEPSEEK-1017-PLACEMENT-SWEEP-2026-11-12.md` first**, then treat this file as
+> history rather than current state.
+>
+> | Claim in this file | Correction |
+> |---|---|
+> | `pp32 0.33 / tg8 3.05` (§2) | **cold-start artifact** of `--no-warmup -r 1`. Warm, same flags: `0.65 / 3.92` |
+> | §4: fused HC pre reports `set to disabled` | **not reproducible on `de5122d`** — all 7 fused ops report `enabled` |
+> | §3: prefill is 9.2x slower than decode | still inverted, but **3.9x** — and not caused by the HC path |
+>
+> Two further corrections from that sweep: the pack's 103 GiB Engram is **never loaded** (the loader
+> skips it), and decode is **disk-idle** (~30 MB/s), so the "SSD-bound" reading of the throughput
+> ceiling is retired.
+
 -
 
 ## 1. What I got wrong, and why
@@ -42,6 +58,10 @@ model.
 | deepseek41 ?B IQ2_XXS - 2.0625 bpw | 128.74 GiB | 551.88 B | SYCL | 38 | 12 | tg8  | 3.05 ± 0.00 |
 ```
 
+> **2026-11-12 correction:** both rows above came from `--no-warmup -r 1`, which understates this
+> build by 1.5–3x. Same flags with warmup and `-r 3`: `pp32 0.65 / tg8 3.92`. Do not quote 0.33/3.05
+> as the baseline.
+
 Weight placement from the same run (`st10.log`):
 
 ```
@@ -52,6 +72,10 @@ SYCL0..3 total   = 122,312.4 MiB (~119.4 GB)  <- ~93% GPU-resident
 So: **it loads, it runs on the GPUs, ~93% of weights are resident.** The pack is not unrunnable.
 
 ## 3. The real finding: prompt processing is 9.2x SLOWER than token generation
+
+> **2026-11-12:** the inversion is real and survives warming, but the magnitude here is inflated by
+> the cold-start artifact — warm it is **3.9x**, not 9.2x. The mechanism proposed below is wrong; see
+> §4.
 
 ```
 pp32 = 0.33 t/s      (3.17 s per prompt token)
@@ -66,6 +90,21 @@ Consequence: 32 tokens took ~97 s. A 512-token prompt would take ~26 min. A 4,09
 take **~3.4 hours**. The pack cannot serve realistic prompts as-is.
 
 ## 4. Prime suspect, already in the log
+
+> **2026-11-12 — STOOD DOWN.** This suspect does not reproduce. On `de5122d` with this pack, all
+> seven fused ops probed by `resolve_fused_ops` (`src/llama-context.cpp:610`) report `enabled` —
+> Flash Attention, HC pre, HC comb, HC post, top-k mask — with **zero** `not supported there` and
+> **zero** `set to disabled` lines. The HC-fallback port proposed in §6 is therefore not the
+> highest-value work. Graph capture is **not** the replacement suspect: it was already tried on this
+> platform and lost. `TENSOR-SPLIT-DECODE.md` records stock `GGML_SYCL_ENABLE_GRAPH=1` fast-failing
+> with `0xC0000409` in `ze_intel_gpu64.dll` and running 6.3 vs 17.9 tok/s where it survives; the
+> per-subgraph cache that does work (+35%) is tensor-split only, and *"layer split stays for the 3-4
+> card MoE models"* because its launch time is already hidden behind GPU time. The GLM track rejected
+> the same lever outright (41.6 -> 36.75 tok/s, `STATUS.md`). Under `-sm layer` the four cards also
+> **do not aggregate bandwidth** - a token costs one full read at one card's bandwidth - which is the
+> honest reason a single 5090 can beat them. See `DEEPSEEK-1017-PLACEMENT-SWEEP-2026-11-12.md` §6 and
+> §6b. The live lead is prefill, not decode (§6c). The quoted warning below is retained only as a
+> record of what an earlier build/log reported.
 
 At load time:
 
