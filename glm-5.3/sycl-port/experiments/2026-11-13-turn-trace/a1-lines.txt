@@ -1,0 +1,146 @@
+8:[maya] sessions: slots parked in RAM (12.88 GB max) - nothing is written to disk, the states die with the run
+9:[maya] thinking level when a request names none: high
+89:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=141.0 gen_start=156.0 gen_written=172.0 gen_flushed=172.0 first_t=103453.0 t0=3157687.0
+92:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 1 kept, 1.74 GB
+94:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=47.0 gen_flushed=47.0 first_t=1109.0 t0=3262812.0
+97:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 2 kept, 3.49 GB
+99:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=47.0 gen_flushed=47.0 first_t=1125.0 t0=3265718.0
+102:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 3 kept, 5.23 GB
+104:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=47.0 gen_flushed=47.0 first_t=1094.0 t0=3268484.0
+107:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 4 kept, 6.98 GB
+109:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=32.0 gen_flushed=32.0 first_t=1125.0 t0=3271171.0
+112:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 5 kept, 8.72 GB
+114:[maya] trace n=115116 http=0.0 body=16.0 json=16.0 prepare_start=16.0 render_start=16.0 marked=16.0 rendered=16.0 prepared=16.0 gen_start=31.0 gen_written=47.0 gen_flushed=47.0 first_t=1125.0 t0=3274015.0
+117:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 6 kept, 10.46 GB
+124:[maya] trace n=7683 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=0.0 gen_written=0.0 gen_flushed=0.0 first_t=8219.0 t0=3276859.0
+127:[maya] sessions: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 7 kept, 10.72 GB
+128:[maya] sessions: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+129:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=15.0 gen_written=31.0 gen_flushed=31.0 first_t=312.0 t0=3286703.0
+132:[maya] trace n=115129 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=15.0 gen_written=31.0 gen_flushed=31.0 first_t=656.0 t0=3288625.0
+136:[maya] sessions: saved a 115128-token conversation (1.74 GB in RAM in 0.4 s); 8 kept, 12.47 GB
+137:[maya] sessions: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+138:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=16.0 rendered=16.0 prepared=16.0 gen_start=16.0 gen_written=31.0 gen_flushed=31.0 first_t=734.0 t0=3291109.0
+142:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+143:[maya] sessions: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+144:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=15.0 rendered=15.0 prepared=15.0 gen_start=31.0 gen_written=46.0 gen_flushed=46.0 first_t=953.0 t0=3293625.0
+148:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+149:[maya] sessions: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+150:[maya] trace n=115116 http=0.0 body=16.0 json=16.0 prepare_start=16.0 render_start=16.0 marked=16.0 rendered=16.0 prepared=32.0 gen_start=32.0 gen_written=47.0 gen_flushed=47.0 first_t=922.0 t0=3296218.0
+154:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+232:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=62.0 gen_flushed=62.0 first_t=101953.0 t0=3298734.0
+235:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+237:[maya] trace n=115116 http=0.0 body=16.0 json=16.0 prepare_start=16.0 render_start=16.0 marked=16.0 rendered=16.0 prepared=16.0 gen_start=32.0 gen_written=47.0 gen_flushed=47.0 first_t=1297.0 t0=3402296.0
+240:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+241:[maya] sessions: took back a 7682-token conversation from RAM (0.0 s); 1 new tokens to read
+242:[maya] trace n=7683 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=0.0 gen_written=0.0 gen_flushed=0.0 first_t=703.0 t0=3405328.0
+246:[maya] sessions: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 8 kept, 12.47 GB
+247:[maya] sessions: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+248:[maya] trace n=115116 http=0.0 body=0.0 json=16.0 prepare_start=16.0 render_start=16.0 marked=16.0 rendered=16.0 prepared=16.0 gen_start=16.0 gen_written=31.0 gen_flushed=31.0 first_t=344.0 t0=3407640.0
+251:[maya] trace n=115129 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=16.0 gen_written=32.0 gen_flushed=32.0 first_t=657.0 t0=3409593.0
+255:[maya] sessions: saved a 115128-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+256:[maya] sessions: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+257:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=32.0 gen_flushed=32.0 first_t=985.0 t0=3411843.0
+261:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+262:[maya] sessions: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+263:[maya] trace n=115116 http=0.0 body=16.0 json=16.0 prepare_start=16.0 render_start=16.0 marked=16.0 rendered=16.0 prepared=16.0 gen_start=31.0 gen_written=47.0 gen_flushed=47.0 first_t=844.0 t0=3414609.0
+267:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+268:[maya] sessions: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+269:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=16.0 gen_written=31.0 gen_flushed=31.0 first_t=875.0 t0=3417109.0
+273:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+351:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=16.0 gen_written=32.0 gen_flushed=32.0 first_t=102063.0 t0=3419593.0
+355:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+357:[maya] trace n=115116 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=0.0 gen_start=16.0 gen_written=31.0 gen_flushed=31.0 first_t=1219.0 t0=3523609.0
+360:[maya] sessions: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+361:[maya] sessions: took back a 7682-token conversation from RAM (0.0 s); 1 new tokens to read
+362:[maya] trace n=7683 http=0.0 body=0.0 json=15.0 prepare_start=15.0 render_start=15.0 marked=15.0 rendered=15.0 prepared=15.0 gen_start=15.0 gen_written=15.0 gen_flushed=15.0 first_t=687.0 t0=3526625.0
+366:[maya] sessions: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 8 kept, 12.47 GB
+367:[maya] sessions: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+368:[maya] trace n=115116 http=0.0 body=16.0 json=16.0 prepare_start=16.0 render_start=16.0 marked=16.0 rendered=16.0 prepared=16.0 gen_start=31.0 gen_written=47.0 gen_flushed=47.0 first_t=375.0 t0=3528937.0
+371:[maya] trace n=115129 http=0.0 body=0.0 json=0.0 prepare_start=0.0 render_start=0.0 marked=0.0 rendered=0.0 prepared=16.0 gen_start=16.0 gen_written=32.0 gen_flushed=32.0 first_t=641.0 t0=3530921.0
+==== engine
+79:glm slots: slots parked in RAM (12.88 GB max) - nothing is written to disk, the states die with the run
+719:glm vram: prompt 115116 tokens read in 103.2 s; VRAM free CUDA0 1.9 of 31.2, CUDA1 3.0 of 31.2, CUDA2 3.0 of 31.2, CUDA3 3.3 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+723:glm slots: save 115115 positions to RAM - sync 0 ms, copy 175 ms
+724:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 1 kept, 1.74 GB
+725:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+726:glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+729:glm slots: save 115115 positions to RAM - sync 0 ms, copy 177 ms
+730:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 2 kept, 3.49 GB
+731:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+732:glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+735:glm slots: save 115115 positions to RAM - sync 0 ms, copy 160 ms
+736:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 3 kept, 5.23 GB
+737:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+738:glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+741:glm slots: save 115115 positions to RAM - sync 0 ms, copy 168 ms
+742:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 4 kept, 6.98 GB
+743:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+744:glm vram: prompt 13 tokens read in 0.6 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+747:glm slots: save 115115 positions to RAM - sync 0 ms, copy 153 ms
+748:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 5 kept, 8.72 GB
+749:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+750:glm vram: prompt 13 tokens read in 0.6 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+753:glm slots: save 115115 positions to RAM - sync 0 ms, copy 150 ms
+754:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 6 kept, 10.46 GB
+796:glm vram: prompt 7683 tokens read in 7.8 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+799:glm slots: save 7682 positions to RAM - sync 0 ms, copy 25 ms
+800:glm slots: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 7 kept, 10.72 GB
+801:glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+802:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+805:glm vram: prompt 14 tokens read in 0.6 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+808:glm slots: save 115128 positions to RAM - sync 0 ms, copy 154 ms
+809:glm slots: saved a 115128-token conversation (1.74 GB in RAM in 0.4 s); 8 kept, 12.47 GB
+810:glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+811:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+814:glm slots: save 115115 positions to RAM - sync 0 ms, copy 191 ms
+815:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+816:glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+817:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+820:glm slots: save 115115 positions to RAM - sync 0 ms, copy 175 ms
+821:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+822:glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+823:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+826:glm slots: save 115115 positions to RAM - sync 0 ms, copy 153 ms
+827:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+1440:glm vram: prompt 115116 tokens read in 101.2 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1443:glm slots: save 115115 positions to RAM - sync 0 ms, copy 178 ms
+1444:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+1445:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+1446:glm vram: prompt 13 tokens read in 0.6 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1449:glm slots: save 115115 positions to RAM - sync 0 ms, copy 156 ms
+1450:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+1451:glm slots: took back a 7682-token conversation from RAM (0.0 s); 1 new tokens to read
+1452:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1455:glm slots: save 7682 positions to RAM - sync 0 ms, copy 29 ms
+1456:glm slots: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 8 kept, 12.47 GB
+1457:glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+1458:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1461:glm vram: prompt 14 tokens read in 0.6 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1464:glm slots: save 115128 positions to RAM - sync 0 ms, copy 150 ms
+1465:glm slots: saved a 115128-token conversation (1.74 GB in RAM in 0.6 s); 8 kept, 12.47 GB
+1466:glm slots: took back a 115115-token conversation from RAM (0.2 s); 1 new tokens to read
+1467:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1470:glm slots: save 115115 positions to RAM - sync 0 ms, copy 171 ms
+1471:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+1472:glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+1473:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1476:glm slots: save 115115 positions to RAM - sync 0 ms, copy 161 ms
+1477:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+1478:glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+1479:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+1482:glm slots: save 115115 positions to RAM - sync 0 ms, copy 156 ms
+1483:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+2096:glm vram: prompt 115116 tokens read in 101.4 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+2099:glm slots: save 115115 positions to RAM - sync 0 ms, copy 153 ms
+2100:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+2101:glm checkpoints: 115103 of the prompt's 115116 tokens from a checkpoint
+2102:glm vram: prompt 13 tokens read in 0.5 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+2105:glm slots: save 115115 positions to RAM - sync 0 ms, copy 179 ms
+2106:glm slots: saved a 115115-token conversation (1.74 GB in RAM in 0.5 s); 8 kept, 12.47 GB
+2107:glm slots: took back a 7682-token conversation from RAM (0.0 s); 1 new tokens to read
+2108:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+2111:glm slots: save 7682 positions to RAM - sync 0 ms, copy 27 ms
+2112:glm slots: saved a 7682-token conversation (0.26 GB in RAM in 0.1 s); 8 kept, 12.47 GB
+2113:glm slots: took back a 115115-token conversation from RAM (0.1 s); 1 new tokens to read
+2114:glm vram: prompt 1 tokens read in 0.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
+2117:glm vram: prompt 14 tokens read in 0.6 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 2.9 of 31.2 GB before, 1.5, 2.7, 2.7, 2.9 after
