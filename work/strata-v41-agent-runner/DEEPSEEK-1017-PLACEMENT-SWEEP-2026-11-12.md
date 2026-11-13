@@ -32,9 +32,9 @@ only one variable changed per arm.
 The two live defects are now separable:
 
 1. **Measurement contamination** — `--no-warmup -r 1` understates this build by 1.5–3x.
-2. **A real prefill deficit plus a decode deficit** that are *not* memory-hierarchy problems. Graph
-   capture is compiled in and off by default — and, critically, **structurally unavailable across 4
-   devices** (§6). That is the most likely reason a single 5090 beats four B70s here.
+2. **A real prefill deficit** (§6c) that is not a memory-hierarchy problem. Graph capture is not
+   available to llama.cpp's multi-device path (§6) — though Strata runs per-device graphs successfully
+   in production for Flash-Next (§6d), so the gap is architectural, not a missing flag.
 
 ## 2. Arms
 
@@ -44,7 +44,7 @@ The two live defects are now separable:
 | F | `GGML_SYCL_ENABLE_VMM=0` | 0.12 | 2.94 | VMM exonerated |
 | **G** | **warmup + `-r 3`**, otherwise = A | **0.65** | **3.92** | **the honest baseline** |
 | I | decode only, `-p 1 -n 8 -r 2`, warm, + disk counter | — | **3.26** | weights are resident |
-| J | `GGML_SYCL_ENABLE_GRAPH=1` | 0.64 | 3.96 | **lever inert** — graphs refused on multi-device (§6) |
+| J | `GGML_SYCL_ENABLE_GRAPH=1` | 0.64 | 3.96 | **lever inert** — refused on multi-device; graphs don't help layer split anyway (§6) |
 
 ### Warm-up is not optional
 
@@ -128,7 +128,7 @@ tensor 'token_embd.weight' (q5_K) (and 79 others) cannot be used with
 preferred buffer type SYCL_Host, using CPU instead
 ```
 
-## 6. Kernel launch overhead: the lever is structurally unavailable (arm J)
+## 6. Graph capture: refused on multi-device, and the wrong lever for layer split anyway (arm J)
 
 The arithmetic that motivated the arm:
 
@@ -171,26 +171,80 @@ static bool check_graph_compatibility(ggml_backend_sycl_context * ctx, ggml_cgra
     }
 ```
 
-`sycl_ex::command_graph` cannot span devices. **Therefore graph capture and multi-GPU splitting are
-mutually exclusive on this backend.** The 1017 cannot be a single-device run (128.75 GiB of weights,
-32 GiB per card), so it can never use graphs — every one of 31,936 nodes is submitted individually,
-every token, forever, on this hardware.
+`sycl_ex::command_graph` cannot span devices, so stock `GGML_SYCL_ENABLE_GRAPH=1` can never engage on a
+multi-device run. That is a real platform limitation worth recording.
 
-This is the sharpest form of the "Intel/Windows quirk" question. A single 5090 pays the launch
-overhead once per node on one device and can hide it behind CUDA graphs; a four-card `-sm layer` run
-pays it per node *plus* 38 device-boundary copies per token, and can hide neither.
+### But this repo already answered the question, and graphs are the wrong lever here
 
-### How to actually test the hypothesis
+The multi-device refusal is **not** an unexplored lead, and it is **not** the reason a single 5090
+outruns four B70s. `llama.cpp-sycl/TENSOR-SPLIT-DECODE.md` (Measurement 3, 2026-10-22) ran this:
 
-The 1017 cannot answer this, so don't spend card cycles trying. Use a model that fits **one** card and
-A/B `GGML_SYCL_ENABLE_GRAPH=0` vs `1` on it. If graphs give a large win there, the launch-overhead
-theory is confirmed and the 1017's ceiling is explained by §6's refusal rather than by its size. This
-is cheap and does not require the big pack.
+| Lever | Recorded result |
+|---|---|
+| Stock `GGML_SYCL_ENABLE_GRAPH=1` | **Not usable on this platform.** llama-bench fast-fails with `0xC0000409` inside `ze_intel_gpu64.dll` (silent without `-v`); where it survives it re-records every call and runs **6.3 tok/s vs 17.9 eager** on layer pp1 |
+| Per-subgraph executable graph cache (`GGML_SYCL_GRAPH_CACHE=1`) | Works: **+35-37%** at pp1, +27-33% at tg32 — but **only on tensor split** |
+| Layer split | *"gains nothing, as expected: its launch time was already hidden behind GPU time"* |
 
-### Corroborating asymmetry
+And the graph cache is deployed deliberately on 2-card **tensor** split for dense models
+(Mistral-24B, Qwen3.8-27B Q8/Q6), while the doc states plainly: *"Layer split stays for gpt-oss and
+the 3-4 card MoE models."* The 1017 is exactly that excluded case.
 
-`sched_reserve` compute buffers at the pp32 shape are wildly lopsided, suggesting a serial
-single-device prefill stage:
+Independent confirmation from the GLM track: SYCL graphs for the KDA layers in split / MTP decode
+(`fixups28`) were **rejected** at **41.6 → 36.75 tok/s** (`STATUS.md`) — replay is not ordered against
+later work on the v1 adapter + immediate command lists without a barrier, and the barrier costs more
+than the launches it saves.
+
+So arm J's null result was **predictable from existing evidence**, and my `9.6 us x 31,936` arithmetic
+was a coincidence: under `-sm layer` the per-node launches overlap GPU work on the other devices
+instead of serialising, so nodes-per-token does not multiply into wall time.
+
+Practical consequence: **do not spend card cycles on graphs for this pack** — on llama.cpp, stock mode
+either refuses (§6) or fast-fails, and the cache path is tensor-split-only.
+
+### 6d. Correction: we *do* run graphs in production — in Strata, per device
+
+The claim "graphs don't help here" is too broad, and the production configs say so. All four
+Flash-Next Strata configs (`strata-windows-port/configs/strata-{ep2-fp16-96k,ep2-int8-32k,ep2-jit,
+iq3s-200k1-pf8k}.json`) set:
+
+```json
+"STRATA_BATCH_MTP_PAIR_HEAD":  "1",
+"STRATA_BATCH_MTP_PAIR_GRAPH": "1"
+```
+
+That is a graph over the **MTP pair**, scoped **per device**. Because each graph is single-device, it
+never meets the `active_device_count > 1` refusal that blocks llama.cpp — which is why graphs are
+viable for a 2-card Strata run and not for a 4-card llama.cpp run.
+
+The two "rejected" results are narrower than they look:
+
+| Lever | Outcome |
+|---|---|
+| `STRATA_BATCH_MTP_PAIR_GRAPH=1` (Flash-Next, 2 cards) | **live in production** |
+| `STRATA_GLM_KDA_GRAPH` — GLM KDA layers in split/MTP decode (`fixups28`) | **rejected**: 41.6 -> 36.75 tok/s |
+| `GGML_SYCL_ENABLE_GRAPH=1` (llama.cpp, multi-device) | **refused** / fast-fails `0xC0000409` |
+
+So the accurate statement is: **per-device graphs work on this hardware and we use them; llama.cpp's
+multi-device graph path does not exist.** The 1017 runs only on llama.cpp (Strata has no
+`sycl/src/dsv41/`), so it cannot reach the design that works. That is an architectural gap, not a
+missing flag — and it is a much better answer to "how does a 5090 beat four B70s" than launch
+overhead ever was.
+
+### 6b. The real explanation for the 5090 comparison
+
+Straight from the same doc: *"with layer split the two cards run one after the other, so a token costs
+one full read of the weights at one card's bandwidth."*
+
+**Layer split does not aggregate bandwidth.** Four B70s under `-sm layer` deliver roughly *one* card's
+read bandwidth, plus 38 device-boundary copies per token. A single 5090 also has one card's bandwidth —
+but a faster memory system and zero boundary copies. "Four cards should be four times faster" is simply
+false under layer split, and that is the honest answer to "how does a 5090 beat four B70s here."
+
+### 6c. What the inversion actually points at
+
+The anomaly worth chasing is **prefill**, not decode. `pp32 0.65` against `tg8 3.92` means prefill is
+~6x *slower* than decode, where a healthy backend is 10-100x faster. And the compute-buffer asymmetry
+at the pp32 shape says the batched stage is running on essentially one device:
 
 ```
 SYCL0 956.69 MiB  |  SYCL1 60.29  |  SYCL2 45.97  |  SYCL3 45.88
@@ -252,9 +306,9 @@ an independent target: any fix that avoids the double pass cuts every arm's wall
 
 | Item | Status |
 |---|---|
-| Arm J — `GGML_SYCL_ENABLE_GRAPH=1` | **done, null** — lever refused on multi-device (§6) |
-| Single-device graph A/B (model that fits one card) | **not run — the only way to test §6** |
-| Arm K — `GRAPH=1` + `DEV2DEV_MEMCPY=1` | staged; effectively a DEV2DEV test now, the GRAPH half is a no-op |
+| Arm J — `GGML_SYCL_ENABLE_GRAPH=1` | **done, null** — refused on multi-device, and graphs don't help layer split (§6) |
+| Prefill device-parallelism (§6c) | **not run — the highest-value lead now**: why does the pp32 stage put 956 MiB of compute on SYCL0 and ~46 MiB on the others? |
+| Arm K — `GRAPH=1` + `DEV2DEV_MEMCPY=1` | staged; effectively a DEV2DEV test now, the GRAPH half is a known no-op |
 | Dose-response `-ngl 39` / `-ngl 40` | not run; tests whether the 3 CPU-resident layers bound decode |
 | Load read-amplification fix | not started (§7) |
 | IQ1_M (112.4 GiB) as a fits-properly alternative | not run |

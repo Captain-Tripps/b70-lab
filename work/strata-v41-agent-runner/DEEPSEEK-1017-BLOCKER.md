@@ -95,12 +95,16 @@ take **~3.4 hours**. The pack cannot serve realistic prompts as-is.
 > seven fused ops probed by `resolve_fused_ops` (`src/llama-context.cpp:610`) report `enabled` —
 > Flash Attention, HC pre, HC comb, HC post, top-k mask — with **zero** `not supported there` and
 > **zero** `set to disabled` lines. The HC-fallback port proposed in §6 is therefore not the
-> highest-value work. The surviving explanation is kernel-submission overhead, but note the sharper
-> version of it: graph capture is compiled in and off by default, **and refused outright when more than
-> one SYCL device is active** (`ggml-sycl.cpp:6860`, "A sycl_ex::command_graph object can only be
-> created for a single device"). Since this pack cannot fit one card, the 1017 can never use graphs on
-> this box. See `DEEPSEEK-1017-PLACEMENT-SWEEP-2026-11-12.md` §6. The quoted warning below is retained
-> only as a record of what an earlier build/log reported.
+> highest-value work. Graph capture is **not** the replacement suspect: it was already tried on this
+> platform and lost. `TENSOR-SPLIT-DECODE.md` records stock `GGML_SYCL_ENABLE_GRAPH=1` fast-failing
+> with `0xC0000409` in `ze_intel_gpu64.dll` and running 6.3 vs 17.9 tok/s where it survives; the
+> per-subgraph cache that does work (+35%) is tensor-split only, and *"layer split stays for the 3-4
+> card MoE models"* because its launch time is already hidden behind GPU time. The GLM track rejected
+> the same lever outright (41.6 -> 36.75 tok/s, `STATUS.md`). Under `-sm layer` the four cards also
+> **do not aggregate bandwidth** - a token costs one full read at one card's bandwidth - which is the
+> honest reason a single 5090 can beat them. See `DEEPSEEK-1017-PLACEMENT-SWEEP-2026-11-12.md` §6 and
+> §6b. The live lead is prefill, not decode (§6c). The quoted warning below is retained only as a
+> record of what an earlier build/log reported.
 
 At load time:
 
