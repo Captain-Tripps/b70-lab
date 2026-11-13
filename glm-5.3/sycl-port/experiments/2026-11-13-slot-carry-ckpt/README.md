@@ -116,6 +116,7 @@ Both used the candidate with `STRATA_GLM_SLOT_CARRY_CKPT=1`, the live config and
 ## Next action
 
 Cover the edit sent straight after a switch: when no slot is a prefix of the prompt, take back the slot whose
-carried checkpoint the prompt starts with, restore that checkpoint and read from there. The 40–55 ms per slot
+carried checkpoint the prompt starts with, restore that checkpoint and read from there. Screened as a candidate:
+[101.5 s to about 1 s](../2026-11-13-slot-ckpt-resume/). The 40–55 ms per slot
 switch could be trimmed by moving the checkpoint buffers instead of copying them where the model's copy is about to
 be overwritten anyway.
