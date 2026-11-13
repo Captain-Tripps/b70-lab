@@ -2,12 +2,11 @@
 
 ## Decision
 
-Keep, as a promotion candidate pending Jon's OK. With the [slot checkpoint carry](../2026-11-13-slot-carry-ckpt/)
+Promoted 2026-11-13 at Jon's request, without a soak; see the [promotion record](promotion.md). With the [slot checkpoint carry](../2026-11-13-slot-carry-ckpt/)
 live, an edit of the last message sent straight after switching back still read all 115k tokens again: a RAM slot
 is only taken back when the new prompt contains its whole conversation. This candidate takes back the slot whose
 carried checkpoint the prompt starts with instead, restores that checkpoint and reads only the rest. That edit
-drops from 101.5 s to about 1 s, and all 16 answer hashes match the carry-only arm. Not promoted; the live service
-was not changed.
+drops from 101.5 s to about 1 s, and all 16 answer hashes match the carry-only arm.
 
 ## Candidate
 
@@ -62,5 +61,5 @@ llama-swap first, with Jon's OK, after 11 idle minutes, and left unloaded afterw
 
 ## Next action
 
-Promotion needs Jon's OK: point the live GLM config at this executable and add `STRATA_GLM_SLOT_CKPT_RESUME=1`. A
-mixed soak with edits straight after switches would be the check before that, as for the carry.
+It went live without a soak. A mixed soak with edits straight after switches is still the open check; it needs the
+cards, so GLM unloaded.

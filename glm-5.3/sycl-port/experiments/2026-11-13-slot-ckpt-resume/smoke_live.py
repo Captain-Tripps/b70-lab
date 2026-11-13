@@ -1,0 +1,8 @@
+imporeq('health', [{'role': 'user', 'content': 'Reply with the single word READY.'}], 8)
+a1 = req('A-prime', messages(longtext, 'Give a short status for review 1.'))
+req('B-switch', messages(shorttext, 'Summarize this briefly.'))
+a2 = req('A-straight-edit', messages(longtext, 'Give a short status for review 2.'))
+req('B-switch-2', messages(shorttext, 'Summarize this briefly.'))
+a2b = req('A-return', messages(longtext, 'Give a short status for review 2.'))
+req('A-return-edit', messages(longtext, 'Give a short status for review 4.'))
+print('return matches straight edit:', a2 == a2b)
