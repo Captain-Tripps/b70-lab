@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-13
+- GLM-5.3 Maya SYCL: parked two leads on existing data, no new runs. L2/L5 DSA scorer: the whole 2k→100k MTP decode gap is 5.1%, under the 8% deep-workload gate. [DSA ceiling](glm-5.3/sycl-port/experiments/2026-11-13-dsa-ceiling/). L3 full prompt memo: ~36 ms of CPU preparation in a 0.909 s 115k follow-up, ceiling ~3.7%. [Prompt-prep ceiling](glm-5.3/sycl-port/experiments/2026-11-13-prompt-prep-ceiling/).
 - **Corrections.** Retracted the 2026-11-12 Windows numbers for [llama.cpp#32058](https://github.com/ggml-org/llama.cpp/pull/32058): the +9.3% nsm pp512 came from a depressed stock baseline, and the early "2-card" tables used `llama-bench -ts 1,1`, which runs two one-card configs (a real split is `-ts 1/1`). Clean rerun (3 rounds, 60 s idle): nsm neutral at short context; the patch's new fusions neutral vs stock with fusion on; graph on costs ~2.5% 1-card decode on both builds; fusion + graph crashes 1-card decode on both builds. [Discussion #32](https://github.com/Captain-Tripps/b70-lab/discussions/32).
 - Patch files converted to LF (CRLF made `git apply` reject `meta-zero-noncompute-before-allreduce.patch`); `.gitattributes` keeps `*.patch` / `*.diff` LF.
 
