@@ -53,7 +53,5 @@ conversation, an append, then repeated edits.
 
 ## Next action
 
-Carry the turn-start checkpoint with the slot. When `slot_put` parks a conversation, hand its prefix checkpoints
-(about 150 MB each in host RAM, per half) to the slot. `slot_take` gives them back. Count them against
-`STRATA_GLM_SLOT_RAM_GB`. Screen with this same workload. It passes only if the first new-text edit after a switch
-drops from 102 s to the ~1.2 s checkpoint path with matching answer hashes.
+Carry the turn-start checkpoint with the slot. Done the same day:
+[slot carrying its checkpoint](../2026-11-13-slot-carry-ckpt/), 102 s down to 1.25 s with matching answer hashes.

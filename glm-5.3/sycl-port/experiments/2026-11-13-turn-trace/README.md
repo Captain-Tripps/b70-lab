@@ -16,9 +16,10 @@ The server is not the cost. From the HTTP request to the token IDs written into 
   gone, and an edit that matches no whole slot has nothing to resume from.
 
 Two engine leads follow: faster or skipped slot saves (up to ~0.4 s of 0.9 s), and carrying the turn-start
-checkpoint with the slot (102 s down to ~1.2 s on the affected edits). A narrower fix, keeping checkpoints through
-the slot take-back itself, was screened and does not help:
-[slot take-back checkpoint screen](../2026-11-13-slot-keep-ckpts/). The live service was not changed.
+checkpoint with the slot. A narrower fix, keeping checkpoints through the slot take-back itself, was screened and
+does not help: [slot take-back checkpoint screen](../2026-11-13-slot-keep-ckpts/). Carrying the checkpoint with the
+slot does: 102 s down to 1.25 s, all answer hashes matching
+([slot carrying its checkpoint](../2026-11-13-slot-carry-ckpt/)). The live service was not changed.
 
 ## Setup
 
@@ -94,6 +95,6 @@ Two engine candidates, each to be screened against the promoted build with match
    1.1–1.3 s new-text edit.
 2. **Carry the turn-start checkpoint with the slot.** When a conversation is parked, keep its checkpoints that
    are a prefix of it (about 150 MB each in host RAM) with the slot, and give them back on take-back. Turns the
-   102 s re-read into the ~1.2 s checkpoint path. Needs a correctness check that the checkpoint's recurrent state at
-   115,103 combines correctly with the slot's caches below it. Keeping checkpoints through the take-back alone was
-   screened and does not help, because the switch has already dropped them.
+   102 s re-read into the ~1.2 s checkpoint path. Screened the same day: 1.25 s, all answer hashes matching
+   ([slot carrying its checkpoint](../2026-11-13-slot-carry-ckpt/)). Keeping checkpoints through the take-back
+   alone does not help, because the switch has already dropped them.
