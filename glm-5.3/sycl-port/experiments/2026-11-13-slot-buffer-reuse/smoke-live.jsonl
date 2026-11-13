@@ -1,0 +1,11 @@
+{"label": "health", "ttft_s": 50.148, "prompt_tokens": 20, "answer_sha256": "c2e3ac47f4a325469c1a2d5f117e463ec943c721986d5d9f09ac4540b7d80526"}
+{"label": "long-prime", "ttft_s": 102.337, "prompt_tokens": 115116, "answer_sha256": "fbd03b2d8e60945d399ab57d7a3841949d73f4748a62107905590ce10a8069f7"}
+{"label": "1:edit-1", "ttft_s": 1.177, "prompt_tokens": 115116, "answer_sha256": "8cefe5f68fcb988a3ba6b97cb0cd5d919d5a53d14d41cebc481a681813b32972"}
+{"label": "1:edit-2", "ttft_s": 1.189, "prompt_tokens": 115116, "answer_sha256": "10ec1c4d0b1b7fb0f62481c9d40f0a88a3be839a38460edeceffba4efdc60746"}
+{"label": "2:edit-1", "ttft_s": 0.856, "prompt_tokens": 115116, "answer_sha256": "8cefe5f68fcb988a3ba6b97cb0cd5d919d5a53d14d41cebc481a681813b32972"}
+{"label": "2:edit-2", "ttft_s": 0.549, "prompt_tokens": 115116, "answer_sha256": "10ec1c4d0b1b7fb0f62481c9d40f0a88a3be839a38460edeceffba4efdc60746"}
+{"label": "3:edit-1", "ttft_s": 0.544, "prompt_tokens": 115116, "answer_sha256": "8cefe5f68fcb988a3ba6b97cb0cd5d919d5a53d14d41cebc481a681813b32972"}
+{"label": "3:edit-2", "ttft_s": 0.555, "prompt_tokens": 115116, "answer_sha256": "10ec1c4d0b1b7fb0f62481c9d40f0a88a3be839a38460edeceffba4efdc60746"}
+{"label": "short-switch", "ttft_s": 7.985, "prompt_tokens": 7683, "answer_sha256": "194815e0a1dffdfb49df76883b801ea6cc18d1fd0a2fe750eec3896d7249dd87"}
+{"label": "long-return", "ttft_s": 0.43, "prompt_tokens": 115116, "answer_sha256": "10ec1c4d0b1b7fb0f62481c9d40f0a88a3be839a38460edeceffba4efdc60746"}
+{"label": "return-edit", "ttft_s": 0.562, "prompt_tokens": 115116, "answer_sha256": "8cefe5f68fcb988a3ba6b97cb0cd5d919d5a53d14d41cebc481a681813b32972"}
