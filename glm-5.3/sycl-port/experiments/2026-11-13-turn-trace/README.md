@@ -10,12 +10,15 @@ The server is not the cost. From the HTTP request to the token IDs written into 
   inside that save is 150–191 ms. The remaining 0.3–0.4 s is host-side.
 - An edit with new text spends the same 0.5 s on the save, then reads 13 tokens from the turn-start checkpoint
   in 0.5–0.6 s. First-token time 1.13–1.32 s.
-- **Cliff:** 2 of 6 new-text edits took 102 s, a full re-read of all 115,116 tokens. Both came right after a
-  request served by a slot take-back. That take-back drops every checkpoint, so the next edit that matches no
-  whole slot has nothing to resume from.
+- **Cliff:** 2 of 6 new-text edits took 102 s, a full re-read of all 115,116 tokens. Each was the first new-text
+  edit after a switch to another conversation and back. The switch reads from position 0 and drops every
+  checkpoint; the return comes from a RAM slot, and slots do not carry checkpoints. So the turn-start checkpoint is
+  gone, and an edit that matches no whole slot has nothing to resume from.
 
-Two engine leads follow: faster or skipped slot saves (up to ~0.4 s of 0.9 s), and keeping checkpoints across a
-slot take-back (102 s down to ~1.2 s on the affected edits). Neither is built. The live service was not changed.
+Two engine leads follow: faster or skipped slot saves (up to ~0.4 s of 0.9 s), and carrying the turn-start
+checkpoint with the slot (102 s down to ~1.2 s on the affected edits). A narrower fix, keeping checkpoints through
+the slot take-back itself, was screened and does not help:
+[slot take-back checkpoint screen](../2026-11-13-slot-keep-ckpts/). The live service was not changed.
 
 ## Setup
 
@@ -44,7 +47,7 @@ lines are in [`a1-lines.txt`](a1-lines.txt). Server marks use Python's monotonic
 | Repeated edit, served from a slot (cycles 2–3) | 6 | 0.743–0.997 s, median 0.911 | 31–47 ms | save 0.4–0.6 s, take back 0.1–0.2 s, 1 token |
 | Repeated edit, from the checkpoint (cycle 1) | 3 | 1.094–1.140 s | 47 ms | save 0.5 s, checkpoint at 115,103, 13 tokens in 0.5–0.6 s |
 | New-text edit, checkpoint present | 4 | 1.128–1.319 s | 31–47 ms | same as above |
-| New-text edit after a slot take-back | 2 | 101.96, 102.08 s | 32–62 ms | save 0.5–0.6 s, no checkpoint, 115,116 tokens in 101.2–101.4 s |
+| New-text edit after a switch and a slot return | 2 | 101.96, 102.08 s | 32–62 ms | save 0.5–0.6 s, no checkpoint, 115,116 tokens in 101.2–101.4 s |
 | Return to the long conversation | 3 | 0.338–0.386 s | 31–47 ms | save of the 7.7k 0.1 s, take back 0.1 s, 1 token |
 | Append, 13–14 new tokens | 3 | 0.661–0.665 s | 31–32 ms | no save, 14 tokens in 0.6 s |
 
@@ -65,18 +68,20 @@ output.
 3. **Repeated edits save the same state again.** From cycle 2 on, each repeated edit saves a 115,115-token
    conversation that an existing slot already holds token for token. It replaces the equal slot (the count stays
    at 8) after a full save.
-4. **The cliff.** After `slot_take` succeeds, `prep_prompt` runs `ckpt_drop_past(0)` ("another conversation's
-   state now"), dropping the turn-start checkpoint even though the restored conversation shares its first
-   115,103 tokens. A slot can only be resumed whole, because the recurrent layers' state exists only at its
-   end. So a new-text edit after a slot take-back matches no slot and no checkpoint, and reads 115k again. Cycle 1's
-   new-text edits followed checkpoint-served edits and did not hit it. The re-read made a new checkpoint, so the
-   second new-text edit in each later cycle took 1.24–1.32 s.
+4. **The cliff.** A checkpoint holds only the recurrent-layer state and the open indexer pool at its position; the
+   attention caches below it stay in place on the cards. The 7.7k switch reads from position 0, so `prep_prompt`
+   runs `model.reset(); ckpt_drop_past(0)`, which is correct: the switch overwrites those caches. The return to the
+   115k conversation restores them from a RAM slot, but slots store no checkpoints, so the 115,103 checkpoint does
+   not come back. A slot can only be resumed whole, because the recurrent state exists only at its end. So the next
+   new-text edit matches no slot and no checkpoint, and reads 115k again. Cycle 1's new-text edits came before any
+   switch and did not hit it. The re-read made a new checkpoint, so the second new-text edit in each later cycle
+   took 1.24–1.32 s.
 
 ## Limits
 
 - One run, one synthetic document, short changed final questions. The ranges above are within that run.
 - The 2026-11-12 mixed soak that produced the 0.909 s median only repeated identical edits, so it could not show
-  the cliff. How often live traffic does a slot return followed by an edit of the last message is unknown.
+  the cliff. How often live traffic switches conversations, returns, and then edits the last message is unknown.
 - The host-side share of the save is inferred from the logged total minus the timed copy.
 - Server marks are quantized to 15.6 ms.
 
@@ -87,7 +92,8 @@ Two engine candidates, each to be screened against the promoted build with match
 1. **Slot save cost.** Skip the save when a slot already holds exactly these tokens, and reuse buffers instead of
    allocating and zero-filling a new 1.74 GB one. Ceiling about 0.4 s of a 0.91 s repeated edit and of a
    1.1–1.3 s new-text edit.
-2. **Checkpoints across a slot take-back.** Keep the checkpoints whose tokens are a prefix of the restored
-   conversation, or store them with the slot, instead of dropping all of them. Turns the 102 s re-read into the
-   ~1.2 s checkpoint path. Needs a correctness check that the checkpoint's recurrent state at 115,103 combines
-   correctly with the slot's KV below it.
+2. **Carry the turn-start checkpoint with the slot.** When a conversation is parked, keep its checkpoints that
+   are a prefix of it (about 150 MB each in host RAM) with the slot, and give them back on take-back. Turns the
+   102 s re-read into the ~1.2 s checkpoint path. Needs a correctness check that the checkpoint's recurrent state at
+   115,103 combines correctly with the slot's caches below it. Keeping checkpoints through the take-back alone was
+   screened and does not help, because the switch has already dropped them.
