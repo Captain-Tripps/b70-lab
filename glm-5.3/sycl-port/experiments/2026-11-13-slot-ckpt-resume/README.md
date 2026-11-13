@@ -2,7 +2,8 @@
 
 ## Decision
 
-Promoted 2026-11-13 at Jon's request, without a soak; see the [promotion record](promotion.md). With the [slot checkpoint carry](../2026-11-13-slot-carry-ckpt/)
+Promoted 2026-11-13 at Jon's request, without a soak; see the [promotion record](promotion.md). A 30-minute
+[soak](#soak) on the live build afterwards was clean. With the [slot checkpoint carry](../2026-11-13-slot-carry-ckpt/)
 live, an edit of the last message sent straight after switching back still read all 115k tokens again: a RAM slot
 is only taken back when the new prompt contains its whole conversation. This candidate takes back the slot whose
 carried checkpoint the prompt starts with instead, restores that checkpoint and reads only the rest. That edit
@@ -52,14 +53,45 @@ llama-swap first, with Jon's OK, after 11 idle minutes, and left unloaded afterw
   tokens to read. The off arm logged none.
 - **Slots and RAM:** both arms ended with 7 slots at 11.64 GB; minimum free physical memory 81.5 GiB off, 81.6 on.
 
+## Soak
+
+The live build, live config and live server tree unchanged, port 9080, 30 minutes, 14:03–14:32 CST
+([`soak_resume.py`](soak_resume.py), [`soak-requests.jsonl`](soak-requests.jsonl)). The 2026-11-12 mix plus, each
+cycle, an edit of the 115k conversation's last message with new text straight after the 7.7k switch. GLM was
+unloaded for it with Jon's OK and reloaded afterwards. Compared with the
+[carry control soak](../2026-11-13-slot-carry-ckpt/#soaks), which had no straight edits.
+
+| Request, median first token | Carry control (96 cycles) | Live resume build (49 cycles) |
+|---|---:|---:|
+| Straight edit after a switch | — | 1.026 s (0.93–1.12, n = 49) |
+| Repeated edit 2 / 3 | 0.957 / 0.959 s | 0.957 / 0.941 s |
+| Append | 0.864 s | 0.860 s |
+| Return to 115k | 0.456 s | 0.960 s |
+| 32k switch | 0.787 s | 28.78 s |
+| Extra conversations 0 / 1 | 0.726 / 0.224 s | 7.40 / 6.53 s |
+| Cancel / retry | 1.466 / 0.053 s | 1.082 / 0.053 s |
+
+- All 49 straight edits used the new path: 61 `for its checkpoint` take-backs, no full re-read.
+- All 12 request types shared with the control soak gave the same answer as there, and one hash each throughout.
+- No engine error or crash, no byte-cap evictions, minimum free RAM 79.7 GiB.
+- The return is slower because it now follows the straight edit, so the engine parks that edit first, as for a
+  repeated edit.
+- The 32k switch and the extras read again every time. Each straight edit has new text, so every cycle parks one
+  more distinct conversation against `STRATA_GLM_SLOTS=8` and the least recently used are dropped by count, as in
+  the [first carry soak](../2026-11-13-slot-carry-ckpt/#soaks). That comes from the workload: the same edits on a
+  build without the resume path park the same conversations, after a full re-read each.
+- Zeus dropped off the network twice during the run, at about 14:10 and 14:29. The soak ran through both with no
+  gap between requests; the System log shows only a DNS timeout at 14:11, no adapter, driver or power event.
+
 ## Limits
 
-- Three samples per arm on one 115k conversation, one short conversation. No soak.
+- The A/B screen is three samples per arm on one 115k conversation, one short conversation.
 - Not covered: disk slots, images, the several-conversation scheduler (checkpoints are off there).
 - The prompt must start with the carried checkpoint: the turn start of the parked conversation. Editing an older
   message, before that checkpoint, still reads from the slot's longest whole prefix or from token 0.
 
 ## Next action
 
-It went live without a soak. A mixed soak with edits straight after switches is still the open check; it needs the
-cards, so GLM unloaded.
+It went live without a soak; the 30-minute soak above, run afterwards on the live build, was clean. Workloads with
+more distinct long conversations than `STRATA_GLM_SLOTS` drop slots by count; that limit, not this path, is the next
+thing a heavy multi-conversation workload hits.
