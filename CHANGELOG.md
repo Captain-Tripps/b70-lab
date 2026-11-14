@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-14
+- **GLM-5.3 decode +3.5%: aligned-load Q6_K mat-vec, live.** The dense one-column mat-vec reads each lane's weights as aligned 32-bit words (210-byte blocks are 0-3 bytes off) and takes two rows a warp: 8-14% faster per kernel, decode on code 52.2-52.9 -> 54.5-54.6 tok/s, output bit-exact. Two traps on the way: pack tensors at odd offsets, and FMA contraction under the engine's `-fp-model=precise`. [Aligned Q6_K](glm-5.3/sycl-port/experiments/2026-11-14-q6k-aligned-gemv/).
 - **GLM-5.3 decode profile.** Every expert is VRAM-resident and decode is already a two-stage spec pipeline (CUDA0+1 / CUDA2+3); a step is the tail stage plus the MTP draft in series, and each card idles ~50%. VTune per-kernel time: routed experts ~27% of decode kernel time, dense GEMV ~55%; expert kernels at ~52% of bandwidth, dense at ~69%. A host-staged cross-card hop costs 19 us at 64 KB. Expert parallelism rejected; new decode leads L7-L11 ranked. Nothing changed live. [Decode profile](glm-5.3/sycl-port/experiments/2026-11-14-decode-profile/).
 
 ## 2026-11-13

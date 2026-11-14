@@ -1,0 +1,40 @@
+q6bench.exe on one Arc Pro B70 (driver 32.0.101.9175), icpx -fsycl -O3, sub-group 32, 256-thread work-groups.
+Median of 200 launches (kernel event start -> end), weights rotated through >= 512 MB of copies (cold in L2).
+GB/s = weight bytes / time.  bit-exact = outputs equal to V0 bit for bit (all variants were, in this build).
+
+V0  production mv_kernel_t<14> (one row a warp, get_int_b2 16-bit loads)
+V1  engine's cc-6.0 kernel, R = 2 (aligned words + shuffles, activation in SLM)
+V2  same, R = 4
+V3  SoA repack (ql | qh | scales | d arrays), production's per-lane calls
+V4  V3 + activation in SLM
+V5  V3, 2 rows a warp
+V6  V4, 2 rows a warp
+V7  AoS layout unchanged, aligned 32-bit loads + funnel shift, 1 row a warp
+V8  V7, 2 rows a warp            <- taken (layout unchanged)
+V9  V7, 4 rows a warp
+V10 V3, 4 rows a warp
+V11 V8 with 4 warps a work-group
+
+Run 1                         V0      V1      V2      V3      V4      V5      V6     (us)
+kda qkv 24576x4096  82.6 MB  172.7   355.4   348.9   153.3   147.4   145.8   147.5
+kda one 8192x4096   27.5 MB   59.9   120.8   119.4    54.9    55.8    55.4    59.1
+attn_out 4096x16384 55.1 MB  109.6   295.1   265.1   106.7   131.8    97.3   112.7
+q_b 16384x1536      20.6 MB   52.7    95.1    95.2    45.4    42.7    41.4    42.5
+shexp gu 4096x4096  13.8 MB   31.4    61.8    68.2    29.2    29.6    26.9    28.5
+shexp dn 4096x2048   6.9 MB   18.6    33.1    36.2    17.1    17.0    15.4    16.6
+q_a+kv_a 2048x4096   6.9 MB   17.1    35.5    49.0    15.8    15.8    15.1    15.3
+ffn 12288x4096      41.3 MB   88.2   179.6   229.1    79.5    79.0    78.9    79.1
+head 154880x4096   520.4 MB 1033.2  2227.5  2150.3   916.1   873.8   875.4   877.0
+
+Run 2                         V0      V5      V6      V7      V8      V9     V10     V11   (us)
+kda qkv 24576x4096           172.6   146.1   147.4   167.1   150.7   157.4   171.0   150.1
+kda one 8192x4096             59.9    55.3    59.1    58.5    53.0    55.3    63.6    52.9
+attn_out 4096x16384          109.7    97.4   113.2   110.6    99.8   127.9   164.9    99.8
+q_b 16384x1536                52.7    41.7    42.5    50.6    45.2    45.5    46.5    45.1
+shexp gu 4096x4096            31.4    27.0    28.5    30.7    27.9    34.7    37.7    27.9
+shexp dn 4096x2048            18.5    15.5    16.5    17.7    15.9    18.8    20.1    16.0
+q_a+kv_a 2048x4096            17.2    15.2    15.4    16.5    17.7    31.0    32.7    17.8
+ffn 12288x4096                88.0    79.0    79.2    85.6    77.6    89.5    91.8    77.4
+head 154880x4096            1033.3   873.1   876.9  1161.2   969.4   946.6   997.5   964.4
+
+Best GB/s: V0 392-504, V5 443-596, V8 389-552.

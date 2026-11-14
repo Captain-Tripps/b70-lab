@@ -1,0 +1,21 @@
+CLI greedy decode, spec path, live engine env (split 14,25,36, --prefill 1536, STRATA_GLM_CKPT_EVERY=65536),
+STRATA_GLM_SPEC_PROF=1, the 200-token code input from the decode profile, 1500 new tokens.  Tokens compared with
+live1 (the "T <id>" lines of the output).
+
+run    exe                  decode tok/s  ms/tok  acceptance  CUDA0 device ms/token  tokens
+live1  live                 52.76         18.95   96.9%       9.89                   (reference)
+live2  live                 52.84         18.93   96.9%       9.85                   == live1
+live3  live                 52.25         19.14   96.9%       9.96                   == live1
+live4  live                 52.89         18.91   96.9%       9.85                   == live1
+cand5  mv_q6_al_kernel      54.63         18.31   96.9%       9.49                   == live1
+cand6  mv_q6_al_kernel      54.54         18.33   96.9%       9.49                   == live1
+
+Spec step, ms (live4 / cand5): wait tail token 9.21 / 8.49, draft 2.23 / 2.17, enqueue tail 7.29 / 7.47.
+
+Earlier candidates, not bit-exact (output diverged at token 52; acceptance 83.8%, 45.6-48.7 tok/s):
+- cand1/2: aligned load assumed a block is 0 or 2 bytes off a 4-byte boundary.  Some pack tensors sit at odd
+  offsets.  Fixed with a shift by 8 * (address & 3).
+- cand3/4: still diverged.  The engine builds with -fp-model=precise, which fuses a multiply-add only inside one
+  expression.  `s += d * sumf` in one expression became an FMA; production adds dot_q6_K's returned product
+  unfused.  Fixed by computing the product in its own statement.  The bench build (default fp model) fused both
+  forms alike, so it could not see this.
