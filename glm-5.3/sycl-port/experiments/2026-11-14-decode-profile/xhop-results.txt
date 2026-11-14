@@ -1,0 +1,19 @@
+xhop.exe on 4x Arc Pro B70, driver 32.0.101.9175, Level Zero, peer access closed (host-staged copies), median of 400 iterations after 50 warm-up
+gpus 4
+empty kernel + wait (card 0): 8.5 us
+bytes    4096 | one hop A->host->B 15.2 us | 4-card scatter+gather 73.7 us
+bytes   16384 | one hop A->host->B 15.4 us | 4-card scatter+gather 76.8 us
+bytes   65536 | one hop A->host->B 19.1 us | 4-card scatter+gather 81.5 us
+bytes  262144 | one hop A->host->B 61.2 us | 4-card scatter+gather 147.2 us
+pair 0->1 64KB 18.5 us
+pair 0->2 64KB 18.5 us
+pair 0->3 64KB 18.5 us
+pair 1->0 64KB 18.5 us
+pair 1->2 64KB 18.4 us
+pair 1->3 64KB 19.5 us
+pair 2->0 64KB 18.5 us
+pair 2->1 64KB 18.4 us
+pair 2->3 64KB 19.7 us
+pair 3->0 64KB 19.6 us
+pair 3->1 64KB 18.0 us
+pair 3->2 64KB 18.1 us

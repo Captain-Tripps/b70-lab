@@ -1,0 +1,39 @@
+        GPU Adapter  GPU Engine           GPU Time  GPU Time, % of Elapsed time(%)
+        -----------  -------------------  --------  ------------------------------
+        GPU 0        Compute                4.423s                            7.8%
+        GPU 0        Blitter                5.218s                            9.3%
+        GPU 0        Display and Overlay    0.504s                            0.9%
+        GPU 2        Compute                3.044s                            5.4%
+        GPU 2        Blitter                4.072s                            7.2%
+        GPU 2        Display and Overlay    0.517s                            0.9%
+        GPU 1        Compute                4.890s                            8.7%
+        GPU 1        Blitter                4.090s                            7.3%
+        GPU 1        Display and Overlay    0.511s                            0.9%
+        GPU 3        Compute                3.861s                            6.8%
+        GPU 3        Render and GPGPU       0.000s                            0.0%
+        GPU 3        Blitter                4.374s                            7.8%
+        GPU 3        Display and Overlay    0.311s                            0.6%
+
+        Top Hotspots when GPU was idle
+
+        GPU Adapter  GPU Engine           GPU Time  GPU Time, % of Elapsed time(%)
+        -----------  -------------------  --------  ------------------------------
+        GPU 0        Compute               16.827s                           21.7%
+        GPU 0        Blitter                7.163s                            9.2%
+        GPU 0        Display and Overlay    0.523s                            0.7%
+        GPU 2        Compute               12.268s                           15.8%
+        GPU 2        Blitter                3.976s                            5.1%
+        GPU 2        Display and Overlay    0.510s                            0.7%
+        GPU 1        Compute               17.016s                           21.9%
+        GPU 1        Blitter                4.008s                            5.2%
+        GPU 1        Display and Overlay    0.520s                            0.7%
+        GPU 3        Compute               15.871s                           20.4%
+        GPU 3        Render and GPGPU       0.000s                            0.0%
+        GPU 3        Blitter                6.203s                            8.0%
+        GPU 3        Display and Overlay    0.305s                            0.4%
+
+        Top Hotspots when GPU was idle
+Elapsed Time: 56.373s
+Host Task                                   Task Time  % of Elapsed Time(%)  Task Count
+Elapsed Time: 77.628s
+Host Task                                   Task Time  % of Elapsed Time(%)  Task Count

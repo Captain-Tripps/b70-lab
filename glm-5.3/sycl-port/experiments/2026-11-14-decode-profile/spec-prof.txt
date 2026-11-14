@@ -1,0 +1,9 @@
+glm spec: CUDA1 the head's recurrent-state backup (34 MB) before the expert pool
+glm spec: CUDA0 the head's recurrent-state backup (47 MB) before the expert pool
+glm spec: tail/head enqueue on two threads
+glm spec prof (1498 steps, ms/step): wait tail token 9.36 | draft 2.22 | redo 0.18 | enqueue tail 7.15 | enqueue head 0.00 | emit 0.00
+glm spec prof CUDA0 (1547 calls, ms/call): sync 1.092 | boundary 0.073 | embed 0.077 | enqueue layers 5.464 | DEVICE token 9.86 ms, gap before 8.45 ms
+glm spec prof CUDA2 (1499 calls, ms/call): sync 0.087 | boundary 0.017 | embed 0.000 | enqueue layers 0.000 | DEVICE token 0.00 ms, gap before 0.00 ms
+glm stat: decode 18.91 ms/tok (52.89 tok/s) | vram hit 100.00% | ram fetches 0.00/tok | disk 0.00 reads/tok in 0.00 waits/tok, 0.00 ms/tok | promotions 0.00/tok | cpu lane 0.00/tok in 0.00 ms/tok | prompt 11.9 ms/tok | vram 12384/13061 ram 0/198
+glm spec: 1451 of 1498 drafts accepted (96.9%)
+glm spec: 1498 speculative positions, 96.9% accepted
