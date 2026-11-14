@@ -1,0 +1,8 @@
+glm prefill: CUDA0 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA1 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA2 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA3 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: 8917 tokens in 9591.5 ms (1.08 ms/token, 930 tok/s), 12 chunks of 768 tokens | CUDA0 7330 ms, CUDA1 7269 ms (hop in 30 ms), CUDA2 6824 ms (hop in 39 ms), CUDA3 5513 ms (hop in 38 ms)
+glm vram: prompt 8918 tokens read in 9.7 s; VRAM free CUDA0 1.9 of 31.2, CUDA1 3.0 of 31.2, CUDA2 3.0 of 31.2, CUDA3 3.4 of 31.2 GB before, 1.5, 2.7, 2.7, 3.1 after
+[maya] done: 0 tokens in 35 s (0.0 tok/s) (error, cancel=False)[maya] the engine stopped unexpectedly (exit code 3221225477). The usual cause is running out of RAM: Linux then ends the biggest program (check: sudo dmesg | grep -i -E 'killed process|out of memory'); Windows slows down instead. Close other programs or use a smaller model (Q2_0 / IQ2_XS). The next request starts the engine again. Its log: <run dir>\c0\engine.log
+[maya] done: 0 tokens in 35 s (0.0 tok/s) (error, cancel=False)
