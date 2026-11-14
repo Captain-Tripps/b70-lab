@@ -2,7 +2,8 @@
 
 ## Decision
 
-Promoted 2026-11-13 at Jon's request, without a soak; see [Promotion](#promotion). A 115k RAM slot save spent
+Promoted 2026-11-13 at Jon's request, without a soak; see [Promotion](#promotion). A 30-minute [soak](#soak) on the
+live build afterwards was clean. A 115k RAM slot save spent
 about 300 ms allocating and zero-filling a fresh 1.74 GB host buffer and about 100 ms freeing a dropped one, around
 a 180 ms copy from the cards. Reusing up to three dropped buffers (`STRATA_GLM_SLOT_REUSE=3`) cut the median 115k
 save from 569 ms to 199 ms. Over cycles 2–4 of the screen, total first-token time fell from 18.4 s to 13.5 s, and
@@ -88,13 +89,40 @@ and the first read's answer matches the screen's.
 still has the promotion hash and the backup its hash, copy the backup over the active config, start GLM through the
 proxy and confirm it runs `rt-glm-ckptresume-20261113\generate.exe`.
 
+## Soak
+
+The live build, live config and live server tree unchanged, port 9080, 30 minutes, 20:10-20:40 CST
+([`soak_reuse.py`](soak_reuse.py), [`soak-requests.jsonl`](soak-requests.jsonl)): the
+[checkpoint resume soak](../2026-11-13-slot-ckpt-resume/#soak)'s mix, with a check that the live config has
+`STRATA_GLM_SLOT_REUSE=3`. Set `MAYA_WORK` to the engine checkout and `PROXY_URL` to the proxy. GLM was unloaded for
+it with Jon's OK. Driver 32.0.101.8976.
+
+| Request, median first token | Resume soak (49 cycles) | Live reuse build (52 cycles) |
+|---|---:|---:|
+| Repeated edit 1 / 2 / 3 | - / 0.957 / 0.941 s | 0.557 / 0.558 / 0.555 s |
+| Straight edit after a switch | 1.026 s | 0.973 s |
+| Return to 115k | 0.960 s | 0.562 s |
+| 7.7k switch | - | 0.333 s |
+| Append | 0.860 s | 0.863 s |
+| 32k switch | 28.78 s | 28.32 s |
+| Extra conversations 0 / 1 | 7.40 / 6.53 s | 7.00 / 6.48 s |
+| Cancel / retry | 1.082 / 0.053 s | 1.081 / 0.053 s |
+
+- 428 requests. Every request type gave one answer throughout, and all 11 types shared with the resume soak gave the
+  same answer as there.
+- No engine error or crash, minimum free RAM 78.1 GiB. 64 `for its checkpoint` take-backs: every straight edit used
+  the resume path.
+- The 32k switch and the extra conversations still read again every time: each cycle parks another distinct
+  conversation against `STRATA_GLM_SLOTS=8`, as in the resume soak. That is the slot count, not this change.
+
 ## Limits
 
-- Three samples per cell, one 115k and one 7.7k conversation. No soak yet.
+- Three samples per cell in the screen, one 115k and one 7.7k conversation.
 - Up to ~5.7 GB of spare buffers can sit outside the 12 GB slot cap.
 - The 160–200 ms copy from the cards is untouched: it runs card after card, into pageable memory.
 
 ## Next action
 
-A 30-minute soak of the live build. After that, the remaining save cost is the copy: overlapping the four cards'
-copies, or pinned host buffers, could take part of the ~180 ms.
+The soak was clean. The remaining save cost is the copy: overlapping the four cards' copies, or pinned host buffers,
+could take part of the ~180 ms. Workloads with more distinct long conversations than `STRATA_GLM_SLOTS` hit the slot
+count first; RAM has room for more (78 GiB free at the soak's low point).

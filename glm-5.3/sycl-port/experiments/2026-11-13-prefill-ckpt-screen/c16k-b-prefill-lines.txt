@@ -1,0 +1,18 @@
+glm prefill: CUDA0 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA1 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA2 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: CUDA3 cuBLAS warm-up: sgemm 0, gemm f16 0, sync no error
+glm prefill: 8917 tokens in 9615.0 ms (1.08 ms/token, 927 tok/s), 12 chunks of 768 tokens | CUDA0 7358 ms, CUDA1 7287 ms (hop in 30 ms), CUDA2 6803 ms (hop in 39 ms), CUDA3 5558 ms (hop in 36 ms)
+glm vram: prompt 8918 tokens read in 9.8 s; VRAM free CUDA0 1.9 of 31.2, CUDA1 3.0 of 31.2, CUDA2 3.0 of 31.2, CUDA3 3.4 of 31.2 GB before, 1.5, 2.7, 2.7, 3.1 after
+glm prefill: 16384 tokens in 14000.6 ms (0.85 ms/token, 1170 tok/s), 22 chunks of 768 tokens | CUDA0 12351 ms, CUDA1 12310 ms (hop in 79 ms), CUDA2 11265 ms (hop in 82 ms), CUDA3 8970 ms (hop in 54 ms)
+glm prefill: 16384 tokens in 14389.4 ms (0.88 ms/token, 1139 tok/s), 22 chunks of 768 tokens | CUDA0 12631 ms, CUDA1 12714 ms (hop in 84 ms), CUDA2 11675 ms (hop in 83 ms), CUDA3 9155 ms (hop in 54 ms)
+glm prefill: 13049 tokens in 11873.0 ms (0.91 ms/token, 1099 tok/s), 17 chunks of 768 tokens | CUDA0 10068 ms, CUDA1 10152 ms (hop in 67 ms), CUDA2 9360 ms (hop in 66 ms), CUDA3 7319 ms (hop in 45 ms)
+glm vram: prompt 45818 tokens read in 40.4 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 3.1 of 31.2 GB before, 1.5, 2.7, 2.7, 3.1 after
+glm prefill: 65536 tokens in 53241.8 ms (0.81 ms/token, 1231 tok/s), 86 chunks of 768 tokens | CUDA0 50600 ms, CUDA1 51037 ms (hop in 358 ms), CUDA2 46791 ms (hop in 354 ms), CUDA3 36466 ms (hop in 215 ms)
+glm prefill: 16384 tokens in 15131.4 ms (0.92 ms/token, 1083 tok/s), 22 chunks of 768 tokens | CUDA0 13316 ms, CUDA1 13404 ms (hop in 86 ms), CUDA2 12335 ms (hop in 84 ms), CUDA3 9612 ms (hop in 55 ms)
+glm prefill: 16384 tokens in 15422.6 ms (0.94 ms/token, 1062 tok/s), 22 chunks of 768 tokens | CUDA0 13559 ms, CUDA1 13662 ms (hop in 83 ms), CUDA2 12591 ms (hop in 82 ms), CUDA3 9731 ms (hop in 53 ms)
+glm prefill: 16384 tokens in 15617.4 ms (0.95 ms/token, 1049 tok/s), 22 chunks of 768 tokens | CUDA0 13725 ms, CUDA1 13832 ms (hop in 85 ms), CUDA2 12701 ms (hop in 83 ms), CUDA3 9869 ms (hop in 55 ms)
+glm prefill: 419 tokens in 1806.0 ms (4.31 ms/token, 232 tok/s), 1 chunk of 448 tokens | CUDA0 499 ms, CUDA1 477 ms (hop in 1 ms), CUDA2 448 ms (hop in 1 ms), CUDA3 367 ms (hop in 1 ms)
+glm vram: prompt 115108 tokens read in 101.5 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 3.1 of 31.2 GB before, 1.5, 2.7, 2.7, 3.1 after
+glm vram: prompt 32 tokens read in 1.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 3.1 of 31.2 GB before, 1.5, 2.7, 2.7, 3.1 after
+glm vram: prompt 32 tokens read in 1.0 s; VRAM free CUDA0 1.5 of 31.2, CUDA1 2.7 of 31.2, CUDA2 2.7 of 31.2, CUDA3 3.1 of 31.2 GB before, 1.5, 2.7, 2.7, 3.1 after
