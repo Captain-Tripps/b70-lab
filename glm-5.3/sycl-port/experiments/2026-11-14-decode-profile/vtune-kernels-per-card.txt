@@ -1,0 +1,52 @@
+== card bdf 0:3:0.0: kernels 9.63 s, copies/fills 0.31 s (per token: 9.63 / 0.31 ms)
+     5.126 s     59000 calls     86.9 us/call  glmf::mv#9
+     1.287 s     11000 calls    117.0 us/call  glmf::moe_gate_up#1
+     1.033 s     11000 calls     93.9 us/call  glmf::moe_down#1
+     0.595 s      3000 calls    198.5 us/call  glmf::mla_split_attend#1
+     0.535 s     28000 calls     19.1 us/call  glmf::hc#1
+     0.306 s     12000 calls     25.5 us/call  zeCommandListAppendMemoryCopy
+     0.217 s     25000 calls      8.7 us/call  glmf::mv#13
+     0.212 s     11000 calls     19.2 us/call  glmf::moe_route#1
+     0.168 s     11000 calls     15.3 us/call  strata::kernels::glmf::(anonymous namespace)::kda_rec_split(
+     0.147 s     11000 calls     13.4 us/call  glmf::kda_prep#1
+     0.117 s      3000 calls     38.9 us/call  glmf::mla#2
+     0.099 s      3000 calls     33.1 us/call  glmf::mla#1
+== card bdf 0:131:0.0: kernels 8.06 s, copies/fills 0.08 s (per token: 8.06 / 0.08 ms)
+     3.536 s     47000 calls     75.2 us/call  glmf::mv#9
+     1.315 s     11000 calls    119.5 us/call  glmf::moe_gate_up#1
+     1.182 s     11000 calls    107.5 us/call  glmf::moe_down#1
+     0.617 s      3000 calls    205.6 us/call  glmf::mla_split_attend#1
+     0.443 s     22000 calls     20.2 us/call  glmf::hc#1
+     0.217 s     11000 calls     19.7 us/call  glmf::moe_route#1
+     0.194 s     22000 calls      8.8 us/call  glmf::mv#13
+     0.126 s      8000 calls     15.8 us/call  strata::kernels::glmf::(anonymous namespace)::kda_rec_split(
+     0.114 s      3000 calls     38.0 us/call  glmf::mla#2
+     0.113 s      8000 calls     14.1 us/call  glmf::kda_prep#1
+     0.101 s      3000 calls     33.6 us/call  glmf::mla#1
+     0.081 s      8000 calls     10.1 us/call  zeCommandListAppendMemoryCopy
+== card bdf 0:135:0.0: kernels 7.82 s, copies/fills -0.32 s (per token: 7.82 / -0.32 ms)
+     3.422 s     47000 calls     72.8 us/call  glmf::mv#9
+     1.292 s     11000 calls    117.4 us/call  glmf::moe_gate_up#1
+     1.147 s     11000 calls    104.3 us/call  glmf::moe_down#1
+     0.597 s      3000 calls    199.2 us/call  glmf::mla_split_attend#1
+     0.421 s     22000 calls     19.2 us/call  glmf::hc#1
+     0.211 s     11000 calls     19.1 us/call  glmf::moe_route#1
+     0.188 s     22000 calls      8.6 us/call  glmf::mv#13
+     0.123 s      8000 calls     15.4 us/call  strata::kernels::glmf::(anonymous namespace)::kda_rec_split(
+     0.115 s      3000 calls     38.5 us/call  glmf::mla#2
+     0.109 s      8000 calls     13.7 us/call  glmf::kda_prep#1
+     0.100 s      3000 calls     33.5 us/call  glmf::mla#1
+     0.059 s      3000 calls     19.6 us/call  glmf::mla_split_attend#3
+== card bdf 0:195:0.0: kernels 9.37 s, copies/fills -0.12 s (per token: 9.37 / -0.12 ms)
+     5.084 s     46000 calls    110.5 us/call  glmf::mv#9
+     1.476 s     10000 calls    147.6 us/call  glmf::moe_gate_up#1
+     0.914 s     10000 calls     91.4 us/call  glmf::moe_down#1
+     0.596 s      3000 calls    198.6 us/call  glmf::mla_split_attend#1
+     0.347 s     18000 calls     19.3 us/call  glmf::hc#1
+     0.189 s     10000 calls     18.9 us/call  glmf::moe_route#1
+     0.169 s     20000 calls      8.5 us/call  glmf::mv#13
+     0.114 s      3000 calls     38.0 us/call  glmf::mla#2
+     0.108 s      7000 calls     15.4 us/call  strata::kernels::glmf::(anonymous namespace)::kda_rec_split(
+     0.101 s      3000 calls     33.7 us/call  glmf::mla#1
+     0.096 s      7000 calls     13.7 us/call  glmf::kda_prep#1
+     0.059 s      3000 calls     19.5 us/call  glmf::mla_split_attend#3
