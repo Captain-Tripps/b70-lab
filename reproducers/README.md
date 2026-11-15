@@ -57,6 +57,29 @@ Observations:
 
 Files: `l0_mt_submit.cpp`, run logs `run1.txt` ... `run5-driver-8976.txt`, `stacks-repro-utf8.txt`.
 
+## Parked next step: a newer Level Zero loader under the v2 adapter
+
+Not run yet. On Linux, @92es reports
+([B70 Collaborate, 2026-11-14](https://github.com/Captain-Tripps/b70-lab/discussions/3#discussioncomment-19623607))
+that the v2 adapter now runs his 2- and 4-buffer exchange after building the Level Zero loader 1.35.0 and the Unified
+Runtime from source, the runtime linked against that loader. His finding: the Unified Runtime binds to the loader it
+was built against, so installing a newer loader alone is not enough there.
+
+The Windows test machine has loader 1.33.1 (shipped with driver 32.0.101.9175) and the oneAPI 2026.0 Unified Runtime.
+Two v2 problems are open here: the cross-device `ext_oneapi_submit_barrier` abort
+([oneapi-src/level-zero#556](https://github.com/oneapi-src/level-zero/issues/556)) and the deadlock above.
+
+Test, cheapest first:
+
+1. The official loader 1.35.0 (or newer) Windows build placed next to the test executables, nothing system-wide.
+   Re-run `l0-deadlock` and the standalone barrier exchange test
+   ([tensor-split notes](../llama.cpp-sycl/TENSOR-SPLIT-DECODE.md)) on the v2 adapter.
+2. Only if 1 changes nothing: build the Unified Runtime against that loader, as on Linux.
+
+What it could buy: the barrier exchange for llama.cpp `-sm tensor` on the v2 adapter (the related two-staging-slot
+change measured +1-2%), and dropping the GLM port's forced v1 adapter (its v1/v2 A/B showed no speed difference). So
+this is mainly a bug check for #556; little speed is expected.
+
 ## ep-probe: can two B70s share memory on Windows?
 
 `ep-probe/ep_probe.cpp` tests three ways for two Arc cards in one process to share memory under Windows Level Zero:
