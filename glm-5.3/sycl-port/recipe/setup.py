@@ -128,6 +128,11 @@ if not mark.exists():
 step('4/8 static ggml (llama.cpp 3cf0325)')
 gb = W / 'ggml-build'
 if not (gb / 'src' / 'ggml-cpu.lib').exists():
+    # ggml/CMakeLists.txt at 3cf0325 configures ggml.pc.in (pkg-config), which the tree does not have; the libraries
+    # do not use it, so a placeholder is enough (the live build had the same one)
+    pc = W / 'llama.cpp-3cf0325' / 'ggml' / 'ggml.pc.in'
+    if not pc.exists():
+        pc.write_text('# placeholder (spike)\n')
     run(['cmake', '-S', W / 'llama.cpp-3cf0325' / 'ggml', '-B', gb, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
          '-DCMAKE_C_COMPILER=cl', '-DCMAKE_CXX_COMPILER=cl', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_STATIC=ON',
          '-DGGML_OPENMP=OFF', '-DGGML_BACKEND_DL=OFF', '-DGGML_BUILD_TESTS=OFF', '-DGGML_BUILD_EXAMPLES=OFF',
