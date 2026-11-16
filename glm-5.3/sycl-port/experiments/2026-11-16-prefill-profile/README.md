@@ -10,7 +10,7 @@ to work on. On a 115k read, on the two cards that set the pace:
 |---|---:|---:|---|
 | Grouped expert products (ESIMD kernel, packing, row gathers) | 45.6% | 47.8% | tile-shape sweep inside the ESIMD kernel |
 | Attention (`maya_attn_xmx`) | 17.2% | 18.3% | already XMX; no lead yet |
-| Dense projections: Q6_K dequantized to f16 per chunk, then oneMKL f16 GEMM | 11.5% | 8.0% | **run them through the ESIMD kernel, which has a Q6_K loader** |
+| Dense projections: Q6_K dequantized to f16 per chunk, then oneMKL f16 GEMM | 11.5% | 8.0% | tried as L13: rejected, 27% slower ([dense ESIMD](../2026-11-16-dense-esimd/)) |
 | DSA indexer (`dsa_score` + `dsa_select`) | 10.1% | 10.9% | L5: port [llama.cpp#31313](https://github.com/ggml-org/llama.cpp/pull/31313) |
 | KDA recurrence | 4.4% | 2.8% | |
 
@@ -21,6 +21,8 @@ Ranked by likely gain:
    L12 already has a Q6_K loader and is built into the live engine; a dense product is a grouped product with one
    group. Removing the dequant alone is 5.4% of card 0's time; the GEMM itself may get faster too. Estimate: -4 to
    -8% on cold reads. Quality can be checked the same way as L12 (mode 2 is bit-exact against the joint path).
+   **Tried the same day and rejected:** the kernel dequantizes the weight again every 64 tokens, so chunks ran 27%
+   slower ([dense ESIMD](../2026-11-16-dense-esimd/)). The indexer is now the next lead.
 2. **The indexer (L5, prefill half).** 3% of a 32k read but 10-11% of a 115k read: it scores every earlier key, so
    it grows with depth (3.8 ms a call over the 32k read, 11.2 ms over the 115k). A 2x faster indexer is about -5% on
    115k and -1.5% on 32k.
