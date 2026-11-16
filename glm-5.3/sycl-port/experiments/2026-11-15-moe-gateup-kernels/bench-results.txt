@@ -1,0 +1,288 @@
+===== gu2_card0.txt
+device: Intel(R) Arc(TM) Pro B70 Graphics
+pci: 0000:03:00.0
+live replica vs CPU reference: max |err| / max |ref| = 2.03e-04 OK
+u16   t1 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16g  t2 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+split t3 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c4   bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t3 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+
+arm                med1 us   med2 us     GB/s  vs live
+live  t0 r2 c1      127.29    126.77    338.5   1.000x
+u16   t1 r2 c1      150.94    150.52    285.3   0.843x
+u16g  t2 r2 c1      160.83    161.04    267.2   0.789x
+split t3 r2 c1      130.94    130.73    328.6   0.971x
+live  t0 r4 c1      127.19    126.46    339.0   1.002x
+u16   t1 r4 c1      145.73    145.94    294.8   0.871x
+live  t0 r2 c2      125.94    126.35    340.8   1.007x
+u16   t1 r2 c2      149.27    149.48    287.8   0.850x
+u16   t1 r2 c4      148.96    149.06    288.5   0.852x
+AL    t0 r2         134.79    134.58    319.2   0.943x
+AL    t1 r2         165.42    165.31    260.0   0.768x
+AL    t3 r2         134.69    134.69    319.2   0.943x
+AL    t0 r4         132.60    132.60    324.2   0.958x
+AL    t1 r4         159.27    159.38    269.9   0.797x
+ALF   t0 r2         132.29    132.50    324.8   0.959x
+ALF   t1 r2         162.08    161.98    265.4   0.784x
+ALF   t0 r4         129.90    129.79    331.1   0.978x
+ALF   t1 r4         156.77    156.88    274.2   0.810x
+DIAG nolookup       119.79    119.48    359.4   1.062x
+DIAG peak-read       82.08     81.46    525.8   1.553x
+===== gu2_card1.txt
+device: Intel(R) Arc(TM) Pro B70 Graphics
+pci: 0000:83:00.0
+live replica vs CPU reference: max |err| / max |ref| = 2.03e-04 OK
+u16   t1 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16g  t2 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+split t3 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c4   bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t3 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+
+arm                med1 us   med2 us     GB/s  vs live
+live  t0 r2 c1      128.23    135.73    325.8   1.000x
+u16   t1 r2 c1      151.88    163.75    272.5   0.836x
+u16g  t2 r2 c1      160.42    174.17    257.0   0.789x
+split t3 r2 c1      130.31    139.69    318.5   0.978x
+live  t0 r4 c1      126.15    134.27    330.2   1.014x
+u16   t1 r4 c1      145.10    157.71    284.0   0.872x
+live  t0 r2 c2      125.94    134.69    329.9   1.013x
+u16   t1 r2 c2      148.65    162.81    276.1   0.847x
+u16   t1 r2 c4      148.44    162.40    276.7   0.849x
+AL    t0 r2         141.04    146.15    299.4   0.919x
+AL    t1 r2         179.27    181.77    238.2   0.731x
+AL    t3 r2         145.62    146.56    294.3   0.903x
+AL    t0 r4         144.06    143.12    299.4   0.919x
+AL    t1 r4         175.31    174.27    246.0   0.755x
+ALF   t0 r2         144.06    142.29    300.3   0.922x
+ALF   t1 r2         177.92    172.29    245.5   0.754x
+ALF   t0 r4         140.00    131.56    316.7   0.972x
+ALF   t1 r4         172.08    156.25    261.9   0.804x
+DIAG nolookup       127.92    119.38    347.7   1.067x
+DIAG peak-read       82.08     81.77    524.8   1.611x
+===== gu2_card2.txt
+device: Intel(R) Arc(TM) Pro B70 Graphics
+pci: 0000:87:00.0
+live replica vs CPU reference: max |err| / max |ref| = 2.03e-04 OK
+u16   t1 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16g  t2 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+split t3 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c4   bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t3 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+
+arm                med1 us   med2 us     GB/s  vs live
+live  t0 r2 c1      127.40    126.04    339.3   1.000x
+u16   t1 r2 c1      150.62    149.38    286.6   0.845x
+u16g  t2 r2 c1      160.31    159.90    268.6   0.791x
+split t3 r2 c1      130.62    129.90    330.1   0.973x
+live  t0 r4 c1      126.35    126.15    340.6   1.004x
+u16   t1 r4 c1      145.42    145.21    295.9   0.872x
+live  t0 r2 c2      125.83    125.94    341.6   1.007x
+u16   t1 r2 c2      148.75    148.75    289.1   0.852x
+u16   t1 r2 c4      148.44    148.44    289.7   0.854x
+AL    t0 r2         134.27    134.38    320.1   0.943x
+AL    t1 r2         164.69    164.69    261.1   0.769x
+AL    t3 r2         134.27    134.27    320.2   0.944x
+AL    t0 r4         132.29    132.29    325.0   0.958x
+AL    t1 r4         158.85    158.65    270.8   0.798x
+ALF   t0 r2         131.98    132.08    325.7   0.960x
+ALF   t1 r2         161.67    161.67    266.0   0.784x
+ALF   t0 r4         129.38    129.58    332.1   0.979x
+ALF   t1 r4         156.15    156.25    275.3   0.811x
+DIAG nolookup       119.48    119.17    360.3   1.062x
+DIAG peak-read       81.88     81.46    526.5   1.552x
+===== gu2_card3.txt
+device: Intel(R) Arc(TM) Pro B70 Graphics
+pci: 0000:c3:00.0
+live replica vs CPU reference: max |err| / max |ref| = 2.03e-04 OK
+u16   t1 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16g  t2 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+split t3 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c4   bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t3 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+
+arm                med1 us   med2 us     GB/s  vs live
+live  t0 r2 c1      127.39    129.17    335.2   1.000x
+u16   t1 r2 c1      150.62    153.54    282.7   0.843x
+u16g  t2 r2 c1      160.42    164.27    264.8   0.790x
+split t3 r2 c1      130.83    132.60    326.4   0.974x
+live  t0 r4 c1      127.29    128.96    335.6   1.001x
+u16   t1 r4 c1      145.52    148.54    292.4   0.872x
+live  t0 r2 c2      125.94    128.65    337.8   1.008x
+u16   t1 r2 c2      148.23    153.54    285.0   0.850x
+u16   t1 r2 c4      147.81    153.12    285.7   0.853x
+AL    t0 r2         133.96    138.23    315.9   0.943x
+AL    t1 r2         164.06    171.04    256.6   0.766x
+AL    t3 r2         133.85    138.44    315.8   0.942x
+AL    t0 r4         131.46    135.00    322.7   0.963x
+AL    t1 r4         158.23    162.29    268.3   0.800x
+ALF   t0 r2         131.88    131.98    325.9   0.972x
+ALF   t1 r2         161.15    160.94    267.0   0.797x
+ALF   t0 r4         128.54    128.54    334.5   0.998x
+ALF   t1 r4         156.35    155.52    275.7   0.823x
+DIAG nolookup       120.62    118.65    359.4   1.072x
+DIAG peak-read       81.67     81.35    527.5   1.574x
+===== rpl_card2.txt
+device: Intel(R) Arc(TM) Pro B70 Graphics
+pci: 0000:87:00.0
+live replica vs CPU reference: max |err| / max |ref| = 2.03e-04 OK
+u16   t1 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16g  t2 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+split t3 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c4   bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t3 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+RPL sg16 ks1     vs live: max |diff| / max |ref| = 1.87e-07 (7732 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg16 ks2     vs live: max |diff| / max |ref| = 1.24e-07 (8823 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg16 ks4     vs live: max |diff| / max |ref| = 1.24e-07 (8948 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg32 ks1     vs live: max |diff| / max |ref| = 1.87e-07 (7732 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg32 ks2     vs live: max |diff| / max |ref| = 1.24e-07 (8823 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg32 ks4     vs live: max |diff| / max |ref| = 1.24e-07 (8948 of 32768 identical); vs CPU ref 2.03e-04 OK
+
+arm                med1 us   med2 us     GB/s  vs live
+live  t0 r2 c1      129.17    126.46    336.4   1.000x
+u16   t1 r2 c1      152.71    149.69    284.4   0.845x
+u16g  t2 r2 c1      160.73    159.79    268.3   0.798x
+split t3 r2 c1      130.73    130.00    329.8   0.980x
+live  t0 r4 c1      127.61    126.98    337.8   1.004x
+u16   t1 r4 c1      145.73    145.10    295.7   0.879x
+live  t0 r2 c2      126.04    125.94    341.3   1.014x
+u16   t1 r2 c2      149.17    148.96    288.4   0.857x
+u16   t1 r2 c4      148.75    148.85    288.9   0.859x
+AL    t0 r2         134.58    134.48    319.6   0.950x
+AL    t1 r2         164.79    164.90    260.8   0.775x
+AL    t3 r2         134.58    134.58    319.5   0.950x
+AL    t0 r4         132.50    132.60    324.4   0.964x
+AL    t1 r4         159.17    159.38    270.0   0.802x
+ALF   t0 r2         132.50    132.60    324.4   0.964x
+ALF   t1 r2         162.08    162.29    265.1   0.788x
+ALF   t0 r4         129.79    130.21    330.7   0.983x
+ALF   t1 r4         156.35    156.67    274.7   0.817x
+RPL sg16 ks1        303.23    304.27    141.6   0.421x
+RPL sg16 ks2        412.60    411.98    104.3   0.310x
+RPL sg16 ks4        343.12    343.23    125.3   0.372x
+RPL sg32 ks1        482.71    481.98     89.1   0.265x
+RPL sg32 ks2        636.15    628.33     68.0   0.202x
+RPL sg32 ks4        849.48    848.85     50.6   0.151x
+DIAG nolookup       119.89    119.58    359.1   1.067x
+DIAG peak-read       81.98     81.88    524.8   1.560x
+===== imm_card2.txt
+device: Intel(R) Arc(TM) Pro B70 Graphics
+pci: 0000:87:00.0
+live replica vs CPU reference: max |err| / max |ref| = 2.03e-04 OK
+u16   t1 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16g  t2 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+split t3 r2 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r4 c1   bit-exact vs live: yes (0 of 16384 differ)
+live  t0 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c2   bit-exact vs live: yes (0 of 16384 differ)
+u16   t1 r2 c4   bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t3 r2      bit-exact vs live: yes (0 of 16384 differ)
+AL    t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+AL    t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r2      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t0 r4      bit-exact vs live: yes (0 of 16384 differ)
+ALF   t1 r4      bit-exact vs live: yes (0 of 16384 differ)
+IMM   t0 r2      bit-exact vs live: NO (12266 of 16384 differ)
+IMM   t0 r4      bit-exact vs live: NO (12266 of 16384 differ)
+IMM   t3 r2      bit-exact vs live: NO (12266 of 16384 differ)
+RPL sg16 ks1     vs live: max |diff| / max |ref| = 1.87e-07 (7732 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg16 ks2     vs live: max |diff| / max |ref| = 1.24e-07 (8823 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg16 ks4     vs live: max |diff| / max |ref| = 1.24e-07 (8948 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg32 ks1     vs live: max |diff| / max |ref| = 1.87e-07 (7732 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg32 ks2     vs live: max |diff| / max |ref| = 1.24e-07 (8823 of 32768 identical); vs CPU ref 2.03e-04 OK
+RPL sg32 ks4     vs live: max |diff| / max |ref| = 1.24e-07 (8948 of 32768 identical); vs CPU ref 2.03e-04 OK
+
+arm                med1 us   med2 us     GB/s  vs live
+live  t0 r2 c1      127.50    126.46    338.6   1.000x
+u16   t1 r2 c1      150.42    149.48    286.7   0.847x
+u16g  t2 r2 c1      160.21    159.69    268.8   0.794x
+split t3 r2 c1      130.42    129.90    330.3   0.976x
+live  t0 r4 c1      126.56    126.15    340.3   1.005x
+u16   t1 r4 c1      145.31    144.90    296.3   0.875x
+live  t0 r2 c2      125.31    125.31    343.1   1.013x
+u16   t1 r2 c2      148.23    148.33    290.0   0.856x
+u16   t1 r2 c4      148.02    148.12    290.4   0.858x
+AL    t0 r2         134.06    134.17    320.6   0.947x
+AL    t1 r2         164.38    164.48    261.5   0.772x
+AL    t3 r2         133.85    133.85    321.2   0.949x
+AL    t0 r4         131.77    131.88    326.2   0.963x
+AL    t1 r4         158.44    158.44    271.4   0.801x
+ALF   t0 r2         131.77    131.98    326.0   0.963x
+ALF   t1 r2         161.35    161.46    266.4   0.787x
+ALF   t0 r4         128.85    128.65    334.0   0.986x
+ALF   t1 r4         155.73    155.73    276.1   0.815x
+IMM   t0 r2         126.04    125.94    341.3   1.008x  NOT EXACT
+IMM   t0 r4         123.65    123.54    347.9   1.027x  NOT EXACT
+IMM   t3 r2         128.12    128.33    335.3   0.990x  NOT EXACT
+RPL sg16 ks1        303.65    305.11    141.3   0.417x
+RPL sg16 ks2        425.21    424.27    101.2   0.299x
+RPL sg16 ks4        357.71    357.40    120.3   0.355x
+RPL sg32 ks1        518.12    511.56     83.5   0.247x
+RPL sg32 ks2        659.69    661.04     65.1   0.192x
+RPL sg32 ks4        845.10    843.85     50.9   0.150x
+DIAG nolookup       119.17    118.96    361.1   1.066x
+DIAG peak-read       81.88     81.46    526.5   1.555x
