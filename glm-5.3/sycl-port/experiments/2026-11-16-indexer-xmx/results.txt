@@ -1,0 +1,26 @@
+long32k-c0 EXIT 0 wall 66 s prefill_ms 24033.4
+long32k-c1 EXIT 0 wall 62 s prefill_ms 20031.7
+code-c0 EXIT 0 wall 49 s prefill_ms 6946.7
+code-c1 EXIT 0 wall 50 s prefill_ms 6981.8
+long115k-c0 EXIT 0 wall 105 s prefill_ms 61904.1
+long115k-c1 EXIT 0 wall 101 s prefill_ms 58653.7
+long115k-c1b EXIT 0 wall 100 s prefill_ms 33822.9 + 26730.1
+long115k-c0b EXIT 0 wall 105 s prefill_ms 34922.9 + 29095.2
+long32k-c1b EXIT 0 wall 58 s prefill_ms 18089.1
+long32k-c0b EXIT 0 wall 58 s prefill_ms 18444.9
+long32k (N=32768)
+code (N=8192)
+long115k (N=115072)
+L5_RUN_DONE
+long32k-k0 EXIT 0 wall 77 s prefill_ms 18016.4
+long32k-k1 EXIT 0 wall 77 s prefill_ms 17860.0
+long115k-k0 EXIT 0 wall 122 s prefill_ms 61559.5
+long115k-k1 EXIT 0 wall 119 s prefill_ms 58327.6
+long32k (N=32768)
+  k0: NLL=1.0851 NLL_first_half=0.6969 NLL_second_half=1.4718 true_top1=392/511 top1_vs_live=512/512 max|dlogit|=0.000 same_bytes_as_k0=True
+  k1: NLL=1.0826 NLL_first_half=0.6805 NLL_second_half=1.4831 true_top1=389/511 top1_vs_live=490/512 max|dlogit|=9.929 same_bytes_as_k0=False
+code (N=8192)
+long115k (N=115072)
+  k0: NLL=0.5699 NLL_first_half=0.8655 NLL_second_half=0.2755 true_top1=430/511 top1_vs_live=512/512 max|dlogit|=0.000 same_bytes_as_k0=True
+  k1: NLL=0.5738 NLL_first_half=0.8796 NLL_second_half=0.2692 true_top1=432/511 top1_vs_live=499/512 max|dlogit|=10.121 same_bytes_as_k0=False
+L5_KL_DONE

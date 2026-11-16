@@ -1,5 +1,5 @@
 {
-  "exe": "<work>\\rt-live\\generate.exe",
+  "exe": "<work>\\rt-glm-esimd-iq2s-dsaxmx-tile64-20261116\\generate.exe",
   "args": [
     "--glm-pack",
     "<work>\\glm-m\\pack",
@@ -8,9 +8,9 @@
     "--expert-cache",
     "auto",
     "--prefill",
-    "768",
+    "1536",
     "--layer-split",
-    "13,24,35"
+    "14,25,36"
   ],
   "cwd": "<work>\\maya",
   "tokenizer": "<work>\\glm-m\\pack\\tokenizer",
@@ -23,7 +23,15 @@
     "STRATA_GLM_RAM_GB": "40",
     "ZES_ENABLE_SYSMAN": "1",
     "STRATA_GLM_RESIDENT_SKIP": "1",
-    "STRATA_GLM_RESERVE_MB": "400"
+    "STRATA_GLM_RESERVE_MB": "400",
+    "STRATA_GLM_SLOT_RAM_GB": "12",
+    "STRATA_GLM_SLOTS": "8",
+    "STRATA_GLM_SLOT_KEEP_BRANCH": "1",
+    "STRATA_GLM_SLOT_CARRY_CKPT": "1",
+    "STRATA_GLM_SLOT_CKPT_RESUME": "1",
+    "STRATA_GLM_SLOT_REUSE": "3",
+    "STRATA_GLM_CKPT_EVERY": "65536",
+    "STRATA_GLM_DSA_XMX": "1"
   },
   "lib_dirs": [
     "<work>\\rt-live",

@@ -1,0 +1,26 @@
+code-warm EXIT 0 wall 49 s prefill_ms 7028.7 logits 2365C206D1FAA63F
+long115k-p1536-r1 EXIT 0 wall 95 s prefill_ms 53121.2 logits 60FC983BB61484E0
+long115k-p2048-r1 EXIT 0 wall 91 s prefill_ms 49647.5 logits 459FA89B6BFD3C3E
+long115k-p3072-r1 EXIT 0 wall 203 s prefill_ms 161540.6 logits 9EC78A800F09DF9C
+long115k-p4096-r1 EXIT 0 wall 199 s prefill_ms 156650.5 logits F81318D4D226E48E
+long115k-p4096-r2 EXIT 0 wall 451 s prefill_ms 391202.2 logits 9BB6DA2A7102BFCB
+long115k-p3072-r2 EXIT 0 wall 205 s prefill_ms 162402.7 logits 79A6EC547EA1B053
+long115k-p2048-r2 EXIT 0 wall 91 s prefill_ms 49948.6 logits 8781F4C0CE76F5E1
+long115k-p1536-r2 EXIT 0 wall 98 s prefill_ms 56595.2 logits 60FC983BB61484E0
+long32k-p1536-r1 EXIT 0 wall 58 s prefill_ms 17514.7 logits 96E9624D6138CAAA
+long32k-p2048-r1 EXIT 0 wall 58 s prefill_ms 17466.5 logits C9EB7A93CCABCC7A
+long32k-p3072-r1 EXIT 0 wall 95 s prefill_ms 53624.3 logits 0E25A6DA7AB5199A
+long32k-p4096-r1 EXIT 0 wall 97 s prefill_ms 55131.4 logits B3C6C279D6ECABA6
+long32k-p4096-r2 EXIT 0 wall 97 s prefill_ms 55008.1 logits 4EE39F348AA37FEF
+long32k-p3072-r2 EXIT 0 wall 95 s prefill_ms 53960.4 logits 57A9ACEBCBA5A0F0
+long32k-p2048-r2 EXIT 0 wall 58 s prefill_ms 17231.0 logits 509E1D118C0895B7
+long32k-p1536-r2 EXIT 0 wall 59 s prefill_ms 17682.6 logits 96E9624D6138CAAA
+code-p1536-r1 EXIT 0 wall 48 s prefill_ms 6818.4 logits 2365C206D1FAA63F
+code-p2048-r1 EXIT 0 wall 48 s prefill_ms 6610.5 logits A71E75FB25238803
+code-p3072-r1 EXIT 0 wall 63 s prefill_ms 21517.8 logits 972ACB20249C3128
+code-p4096-r1 EXIT 0 wall 66 s prefill_ms 24508.4 logits B0C1CB55DF487475
+code-p4096-r2 EXIT 0 wall 66 s prefill_ms 24370.7 logits E9AC60EA90C51552
+code-p3072-r2 EXIT -1073740791 wall 60 s prefill_ms  logits none
+code-p2048-r2 EXIT 0 wall 49 s prefill_ms 6874.4 logits A71E75FB25238803
+code-p1536-r2 EXIT 0 wall 48 s prefill_ms 6994.1 logits 2365C206D1FAA63F
+CHUNK_RUN_DONE

@@ -8,7 +8,9 @@ resident in VRAM, 128k context.
 - Base: Project Maya v1.1.44 @ `5d20b0e8` (MIT), converted with SYCLomatic (daily build 2026-09-28 for the two files
   dpct 2025.1 crashed on), built with icpx 2026.0 (JIT, `-fsycl`), oneMKL for the dense GEMMs, and the llama.cpp
   SYCL fork's grouped XMX GEMM for the prompt path's experts.
-- Status (2026-11-01): **live** (served through llama-swap every day since 2026-11-01).
+- Status (2026-11-16): **live** (served through llama-swap every day since 2026-11-01). The live engine config,
+  redacted, is [`configs/glm-maya-sycl-128k.json`](configs/glm-maya-sycl-128k.json); what changed since the first
+  build is under [Live changes since 2026-11-12](#live-changes-since-2026-11-12).
 - Work: 2026-10-31 to 2026-11-01, 36 numbered fix rounds (`tools/maya_fixups*.py`), prepared with AI assistance.
 
 ## Next optimization work
@@ -32,6 +34,25 @@ The first [16-row tile screen](experiments/2026-11-10-bn16-screen/) increased oc
 rejected at screening.
 The [64-row screen](experiments/2026-11-10-bn64-screen/) made fewer tiles but was also slower, with more padding.
 The [48-row screen](experiments/2026-11-10-bn48-screen/) showed no established speedup in its small sample.
+
+From 2026-11-12 on, every screen, measurement and promotion is logged as a dated update at the top of
+[LEADS-2026-11-09.md](LEADS-2026-11-09.md), newest first, with a link to its experiment folder.
+
+### Live changes since 2026-11-12
+
+Each passed a mixed server soak before it went live.
+
+| Date | Change | Effect | Record |
+|---|---|---|---|
+| 2026-11-13 | `--prefill 1536` + `STRATA_GLM_CKPT_EVERY=65536` | cold 45.8k / 115k read 42.0 / 103.7 -> 32.4 / 82.2 s | [1536 chunks](experiments/2026-11-13-prefill-chunk-1536/) |
+| 2026-11-14 | Aligned-load Q6_K mat-vec | +3.5% decode on code, bit-exact | [Q6_K GEMV](experiments/2026-11-14-q6k-aligned-gemv/) |
+| 2026-11-16 | ESIMD grouped expert GEMM (llama.cpp#31428) + IQ2_S loader (L12) | cold 45.8k / 115k -22% | [ESIMD GEMM](experiments/2026-11-15-esimd-grouped-gemm/) |
+| 2026-11-16 | XMX prompt indexer, `STRATA_GLM_DSA_XMX=1` (L5) | cold 115k -5.3% | [XMX indexer](experiments/2026-11-16-indexer-xmx/) |
+| 2026-11-16 | 64-wide ESIMD tiles (L14) | cold 115k -9.3%, logits byte for byte | [tile sweep](experiments/2026-11-16-esimd-tile-sweep/) |
+
+Now (CLI, cold, speculation off): 8k code 6.6 s, 32k 16.7 s, 115k 53.2-54.0 s; cold 45.8k through the proxy 21.5 s.
+Rejected the same week: dense projections on the ESIMD kernel (L13), tail skip (L15), 2048+ prompt chunks and the
+hand-off copy (L16) ([chunk sweep and profile](experiments/2026-11-16-chunk-sweep-and-profile/)).
 
 ## Result
 

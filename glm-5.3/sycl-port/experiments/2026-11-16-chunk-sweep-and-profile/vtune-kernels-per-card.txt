@@ -1,0 +1,226 @@
+Top kernels a card, VTune gpu-offload, one CLI prompt read each (speculation off, --prefill 1536).
+Card order is the layer split: split 14,25,36: the first card holds layers 0-13, the last card layers 36 and up.
+
+## 115k, L12 build (morning profile)
+== card bdf 0:3:0.0: kernels 57.78 s, copies/fills 5.97 s
+    24.107 s  41.7%     1672 calls    14418.1 us/call  grouped_gemm_esimd_kernel
+     9.796 s  17.0%      450 calls    21768.5 us/call  glmb::maya_attn_xmx#1
+     5.944 s  10.3%     7026 calls      846.0 us/call  zeCommandListAppendMemoryCopy
+     4.650 s   8.0%      444 calls    10473.8 us/call  glmb::dsa_score#1
+     3.477 s   6.0%    10985 calls      316.5 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     3.153 s   5.5%    14058 calls      224.3 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     2.004 s   3.5%     1650 calls     1214.7 us/call  glmb::kda_rec_split#3
+     1.363 s   2.4%     1672 calls      815.0 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.880 s   1.5%     2204 calls      399.4 us/call  glmb::hc_update#1
+     0.829 s   1.4%     1650 calls      502.2 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.807 s   1.4%      450 calls     1792.5 us/call  glmb::dsa_select#1
+     0.655 s   1.1%     2128 calls      307.7 us/call  glmb::hc_finish#1
+== card bdf 0:131:0.0: kernels 57.72 s, copies/fills 4.67 s
+    25.560 s  44.3%     1672 calls    15286.8 us/call  grouped_gemm_esimd_kernel
+    10.544 s  18.3%      450 calls    23430.4 us/call  glmb::maya_attn_xmx#1
+     5.111 s   8.9%      444 calls    11511.9 us/call  glmb::dsa_score#1
+     4.643 s   8.0%     6865 calls      676.3 us/call  zeCommandListAppendMemoryCopy
+     2.410 s   4.2%     6737 calls      357.7 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     2.219 s   3.8%     9558 calls      232.1 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.604 s   2.8%     1200 calls     1336.7 us/call  glmb::kda_rec_split#3
+     1.433 s   2.5%     1672 calls      857.3 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.893 s   1.5%      154 calls     5798.6 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.854 s   1.5%     1650 calls      517.5 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.805 s   1.4%      450 calls     1789.7 us/call  glmb::dsa_select#1
+     0.695 s   1.2%     1748 calls      397.3 us/call  glmb::hc_update#1
+== card bdf 0:135:0.0: kernels 53.53 s, copies/fills 4.88 s
+    23.394 s  43.7%     1672 calls    13991.4 us/call  grouped_gemm_esimd_kernel
+     9.928 s  18.5%      450 calls    22061.9 us/call  glmb::maya_attn_xmx#1
+     4.860 s   9.1%     6865 calls      707.9 us/call  zeCommandListAppendMemoryCopy
+     4.621 s   8.6%      444 calls    10408.3 us/call  glmb::dsa_score#1
+     2.170 s   4.1%     6737 calls      322.1 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     2.023 s   3.8%     9558 calls      211.7 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.466 s   2.7%     1200 calls     1222.0 us/call  glmb::kda_rec_split#3
+     1.360 s   2.5%     1672 calls      813.4 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.908 s   1.7%      154 calls     5894.4 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.832 s   1.6%     1650 calls      504.0 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.814 s   1.5%      450 calls     1808.3 us/call  glmb::dsa_select#1
+     0.691 s   1.3%     1748 calls      395.3 us/call  glmb::hc_update#1
+== card bdf 0:195:0.0: kernels 40.51 s, copies/fills 5.22 s
+    18.870 s  46.6%     1368 calls    13794.0 us/call  grouped_gemm_esimd_kernel
+     6.420 s  15.9%      300 calls    21401.2 us/call  glmb::maya_attn_xmx#1
+     5.193 s  12.8%     6451 calls      805.0 us/call  zeCommandListAppendMemoryCopy
+     2.930 s   7.2%      296 calls     9897.1 us/call  glmb::dsa_score#1
+     1.875 s   4.6%     5688 calls      329.6 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     1.681 s   4.2%     7904 calls      212.7 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.269 s   3.1%     1050 calls     1209.0 us/call  glmb::kda_rec_split#3
+     1.095 s   2.7%     1368 calls      800.5 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.675 s   1.7%     1350 calls      499.9 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.570 s   1.4%     1444 calls      394.7 us/call  glmb::hc_update#1
+     0.511 s   1.3%      300 calls     1703.7 us/call  glmb::dsa_select#1
+     0.413 s   1.0%     1368 calls      301.8 us/call  glmb::hc_finish#1
+
+## 115k, live build (L5 + L14)
+== card bdf 0:3:0.0: kernels 52.67 s, copies/fills 5.93 s
+    18.362 s  34.9%     1672 calls    10982.2 us/call  grouped_gemm_esimd_kernel
+     9.610 s  18.2%      450 calls    21356.4 us/call  glmb::maya_attn_xmx#1
+     5.904 s  11.2%     7026 calls      840.3 us/call  zeCommandListAppendMemoryCopy
+     4.633 s   8.8%       77 calls    60172.7 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     3.412 s   6.5%    10985 calls      310.6 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     3.071 s   5.8%    14058 calls      218.4 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.948 s   3.7%     1650 calls     1180.5 us/call  glmb::kda_rec_split#3
+     1.501 s   2.8%      444 calls     3380.3 us/call  glmb::dsa_xmx#1
+     1.444 s   2.7%     1672 calls      863.6 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.880 s   1.7%     2204 calls      399.2 us/call  glmb::hc_update#1
+     0.823 s   1.6%     1650 calls      498.9 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.774 s   1.5%      450 calls     1720.9 us/call  glmb::dsa_select#1
+== card bdf 0:131:0.0: kernels 54.74 s, copies/fills 4.49 s
+    20.711 s  37.8%     1672 calls    12386.8 us/call  grouped_gemm_esimd_kernel
+     9.953 s  18.2%      450 calls    22118.8 us/call  glmb::maya_attn_xmx#1
+     6.652 s  12.2%      154 calls    43196.2 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     4.469 s   8.2%     6865 calls      651.0 us/call  zeCommandListAppendMemoryCopy
+     2.478 s   4.5%     6737 calls      367.8 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     2.196 s   4.0%     9558 calls      229.8 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.680 s   3.1%      444 calls     3783.5 us/call  glmb::dsa_xmx#1
+     1.597 s   2.9%     1200 calls     1330.6 us/call  glmb::kda_rec_split#3
+     1.566 s   2.9%     1672 calls      936.8 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.850 s   1.6%     1650 calls      515.0 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.800 s   1.5%      450 calls     1778.8 us/call  glmb::dsa_select#1
+     0.691 s   1.3%     1748 calls      395.4 us/call  glmb::hc_update#1
+== card bdf 0:135:0.0: kernels 50.98 s, copies/fills 4.43 s
+    18.704 s  36.7%     1672 calls    11186.6 us/call  grouped_gemm_esimd_kernel
+     9.652 s  18.9%      450 calls    21448.2 us/call  glmb::maya_attn_xmx#1
+     6.564 s  12.9%      154 calls    42624.7 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     4.409 s   8.6%     6865 calls      642.3 us/call  zeCommandListAppendMemoryCopy
+     2.147 s   4.2%     6737 calls      318.7 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     1.975 s   3.9%     9558 calls      206.7 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.490 s   2.9%      444 calls     3356.2 us/call  glmb::dsa_xmx#1
+     1.467 s   2.9%     1672 calls      877.6 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     1.431 s   2.8%     1200 calls     1192.3 us/call  glmb::kda_rec_split#3
+     0.827 s   1.6%     1650 calls      501.0 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.778 s   1.5%      450 calls     1729.2 us/call  glmb::dsa_select#1
+     0.688 s   1.4%     1748 calls      393.7 us/call  glmb::hc_update#1
+== card bdf 0:195:0.0: kernels 35.31 s, copies/fills 5.27 s
+    15.507 s  43.9%     1368 calls    11335.5 us/call  grouped_gemm_esimd_kernel
+     6.450 s  18.3%      300 calls    21498.8 us/call  glmb::maya_attn_xmx#1
+     5.270 s  14.9%     6451 calls      817.0 us/call  zeCommandListAppendMemoryCopy
+     1.871 s   5.3%     5688 calls      328.9 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     1.678 s   4.8%     7904 calls      212.3 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     1.267 s   3.6%     1050 calls     1206.8 us/call  glmb::kda_rec_split#3
+     1.205 s   3.4%     1368 calls      880.6 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.994 s   2.8%      296 calls     3359.3 us/call  glmb::dsa_xmx#1
+     0.675 s   1.9%     1350 calls      499.6 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.569 s   1.6%     1444 calls      394.4 us/call  glmb::hc_update#1
+     0.512 s   1.4%      300 calls     1706.8 us/call  glmb::dsa_select#1
+     0.412 s   1.2%     1368 calls      301.5 us/call  glmb::hc_finish#1
+
+## 32k, L12 build
+== card bdf 0:3:0.0: kernels 15.30 s, copies/fills 6.15 s
+     6.888 s  45.0%      484 calls    14232.1 us/call  grouped_gemm_esimd_kernel
+     6.130 s  40.1%     4579 calls     1338.7 us/call  zeCommandListAppendMemoryCopy
+     2.688 s  17.6%      129 calls    20839.9 us/call  glmb::maya_attn_xmx#1
+     0.986 s   6.4%     3160 calls      312.0 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.901 s   5.9%     4037 calls      223.2 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.568 s   3.7%      473 calls     1200.6 us/call  glmb::kda_rec_split#3
+     0.388 s   2.5%      484 calls      800.8 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.376 s   2.5%      123 calls     3057.3 us/call  glmb::dsa_score#1
+     0.250 s   1.6%      638 calls      392.4 us/call  glmb::hc_update#1
+     0.233 s   1.5%      462 calls      504.8 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.186 s   1.2%      616 calls      301.4 us/call  glmb::hc_finish#1
+     0.153 s   1.0%      998 calls      153.7 us/call  sgemm_nocopy_tn_16x8_2x4x4
+     0.150 s   1.0%      473 calls      317.7 us/call  glmb::kda_rec_split#1
+== card bdf 0:131:0.0: kernels 15.22 s, copies/fills 4.76 s
+     7.299 s  47.9%      484 calls    15080.7 us/call  grouped_gemm_esimd_kernel
+     4.735 s  31.1%     4475 calls     1058.1 us/call  zeCommandListAppendMemoryCopy
+     2.937 s  19.3%      129 calls    22764.6 us/call  glmb::maya_attn_xmx#1
+     0.684 s   4.5%     1936 calls      353.1 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.636 s   4.2%     2747 calls      231.4 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.455 s   3.0%      344 calls     1324.1 us/call  glmb::kda_rec_split#3
+     0.416 s   2.7%      123 calls     3379.1 us/call  glmb::dsa_score#1
+     0.408 s   2.7%      484 calls      842.5 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.240 s   1.6%      462 calls      519.8 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.232 s   1.5%       46 calls     5048.5 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.197 s   1.3%      506 calls      390.1 us/call  glmb::hc_update#1
+     0.148 s   1.0%      484 calls      306.8 us/call  glmb::hc_finish#1
+     0.142 s   0.9%      242 calls      584.7 us/call  glmb::swiglu_rows#1
+== card bdf 0:135:0.0: kernels 14.24 s, copies/fills 4.85 s
+     6.784 s  47.6%      484 calls    14016.9 us/call  grouped_gemm_esimd_kernel
+     4.827 s  33.9%     4475 calls     1078.7 us/call  zeCommandListAppendMemoryCopy
+     2.736 s  19.2%      129 calls    21209.6 us/call  glmb::maya_attn_xmx#1
+     0.614 s   4.3%     1936 calls      317.1 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.582 s   4.1%     2747 calls      212.0 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.418 s   2.9%      344 calls     1214.2 us/call  glmb::kda_rec_split#3
+     0.389 s   2.7%      484 calls      803.1 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.379 s   2.7%      123 calls     3079.0 us/call  glmb::dsa_score#1
+     0.259 s   1.8%       46 calls     5641.1 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.234 s   1.6%      462 calls      507.3 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.197 s   1.4%      506 calls      388.5 us/call  glmb::hc_update#1
+     0.147 s   1.0%      484 calls      302.8 us/call  glmb::hc_finish#1
+     0.139 s   1.0%      242 calls      575.9 us/call  glmb::swiglu_rows#1
+== card bdf 0:195:0.0: kernels 10.91 s, copies/fills 5.28 s
+     5.463 s  50.1%      396 calls    13794.4 us/call  grouped_gemm_esimd_kernel
+     5.259 s  48.2%     4440 calls     1184.4 us/call  zeCommandListAppendMemoryCopy
+     1.760 s  16.1%       86 calls    20462.5 us/call  glmb::maya_attn_xmx#1
+     0.531 s   4.9%     1636 calls      324.8 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.483 s   4.4%     2272 calls      212.7 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.362 s   3.3%      301 calls     1201.2 us/call  glmb::kda_rec_split#3
+     0.313 s   2.9%      396 calls      790.1 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.237 s   2.2%       82 calls     2895.9 us/call  glmb::dsa_score#1
+     0.190 s   1.7%      378 calls      502.2 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.162 s   1.5%      418 calls      388.0 us/call  glmb::hc_update#1
+     0.128 s   1.2%       23 calls     5554.7 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.117 s   1.1%      396 calls      296.6 us/call  glmb::hc_finish#1
+     0.113 s   1.0%      198 calls      568.3 us/call  glmb::swiglu_rows#1
+
+## 32k, live build (L5 + L14)
+== card bdf 0:3:0.0: kernels 14.67 s, copies/fills 5.61 s
+     5.588 s  38.1%     4579 calls     1220.4 us/call  zeCommandListAppendMemoryCopy
+     5.304 s  36.1%      484 calls    10959.2 us/call  grouped_gemm_esimd_kernel
+     2.621 s  17.9%      129 calls    20320.4 us/call  glmb::maya_attn_xmx#1
+     1.426 s   9.7%       23 calls    62018.8 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.972 s   6.6%     3160 calls      307.6 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.880 s   6.0%     4037 calls      218.0 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.554 s   3.8%      473 calls     1170.8 us/call  glmb::kda_rec_split#3
+     0.412 s   2.8%      484 calls      852.2 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.250 s   1.7%      638 calls      392.0 us/call  glmb::hc_update#1
+     0.231 s   1.6%      462 calls      500.9 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.184 s   1.3%      616 calls      298.3 us/call  glmb::hc_finish#1
+     0.155 s   1.1%      998 calls      154.8 us/call  sgemm_nocopy_tn_16x8_2x4x4
+     0.149 s   1.0%      473 calls      314.9 us/call  glmb::kda_rec_split#1
+== card bdf 0:131:0.0: kernels 15.06 s, copies/fills 4.43 s
+     5.962 s  39.6%      484 calls    12319.0 us/call  grouped_gemm_esimd_kernel
+     4.411 s  29.3%     4475 calls      985.8 us/call  zeCommandListAppendMemoryCopy
+     2.767 s  18.4%      129 calls    21452.1 us/call  glmb::maya_attn_xmx#1
+     1.790 s  11.9%       46 calls    38914.3 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.708 s   4.7%     1936 calls      365.5 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.629 s   4.2%     2747 calls      229.0 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.454 s   3.0%      344 calls     1319.9 us/call  glmb::kda_rec_split#3
+     0.447 s   3.0%      484 calls      924.1 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.239 s   1.6%      462 calls      517.5 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.196 s   1.3%      506 calls      388.2 us/call  glmb::hc_update#1
+     0.157 s   1.0%      123 calls     1278.4 us/call  glmb::dsa_xmx#1
+     0.148 s   1.0%      484 calls      306.4 us/call  glmb::hc_finish#1
+     0.140 s   0.9%      242 calls      577.3 us/call  glmb::swiglu_rows#1
+== card bdf 0:135:0.0: kernels 13.92 s, copies/fills 4.51 s
+     5.410 s  38.9%      484 calls    11176.8 us/call  grouped_gemm_esimd_kernel
+     4.490 s  32.3%     4475 calls     1003.4 us/call  zeCommandListAppendMemoryCopy
+     2.625 s  18.9%      129 calls    20350.1 us/call  glmb::maya_attn_xmx#1
+     1.708 s  12.3%       46 calls    37133.1 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.607 s   4.4%     1936 calls      313.4 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.564 s   4.1%     2747 calls      205.5 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.419 s   3.0%      484 calls      865.2 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.404 s   2.9%      344 calls     1175.4 us/call  glmb::kda_rec_split#3
+     0.233 s   1.7%      462 calls      503.7 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.196 s   1.4%      506 calls      387.1 us/call  glmb::hc_update#1
+     0.145 s   1.0%      484 calls      298.9 us/call  glmb::hc_finish#1
+     0.140 s   1.0%      123 calls     1137.8 us/call  glmb::dsa_xmx#1
+     0.137 s   1.0%      242 calls      565.4 us/call  glmb::swiglu_rows#1
+== card bdf 0:195:0.0: kernels 9.81 s, copies/fills 5.12 s
+     5.118 s  52.2%     4440 calls     1152.6 us/call  zeCommandListAppendMemoryCopy
+     4.499 s  45.9%      396 calls    11361.5 us/call  grouped_gemm_esimd_kernel
+     1.755 s  17.9%       86 calls    20401.4 us/call  glmb::maya_attn_xmx#1
+     0.531 s   5.4%     1636 calls      324.5 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.481 s   4.9%     2272 calls      211.8 us/call  strata::kernels::dequant_f16(int, void const*, long long, long long, long long, unsig
+     0.360 s   3.7%      301 calls     1196.5 us/call  glmb::kda_rec_split#3
+     0.344 s   3.5%      396 calls      869.5 us/call  grouped_gemm_pack_b(void, float const*, fg_combo::tsb*, ggml_sycl_grouped_gemm_tile c
+     0.190 s   1.9%      378 calls      502.3 us/call  strata::prefill::mmq::quantize(float const*, int const*, void*, int, long long, long 
+     0.162 s   1.7%      418 calls      387.3 us/call  glmb::hc_update#1
+     0.117 s   1.2%      396 calls      296.2 us/call  glmb::hc_finish#1
+     0.112 s   1.1%      198 calls      567.6 us/call  glmb::swiglu_rows#1
+     0.107 s   1.1%       23 calls     4636.0 us/call  maya_kcopy(sycl::_V1::queue*, void*, void const*, unsigned long long)::{lambda(sycl::
+     0.102 s   1.0%      687 calls      149.0 us/call  sgemm_nocopy_tn_16x8_2x4x4
