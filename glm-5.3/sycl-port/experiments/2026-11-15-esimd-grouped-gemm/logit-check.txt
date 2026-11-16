@@ -1,0 +1,10 @@
+long32k (N=32768)
+  live: NLL=0.9877 true_top1=53/63 top1_vs_live=64/64 max|dlogit|=0.000 same_bytes=True
+  esimd: NLL=0.9855 true_top1=54/63 top1_vs_live=60/64 max|dlogit|=5.478 same_bytes=False
+  joint: NLL=0.9877 true_top1=53/63 top1_vs_live=64/64 max|dlogit|=0.000 same_bytes=True
+  live2: NLL=0.9877 true_top1=53/63 top1_vs_live=64/64 max|dlogit|=0.000 same_bytes=True
+code (N=8192)
+  live: NLL=0.0001 true_top1=63/63 top1_vs_live=64/64 max|dlogit|=0.000 same_bytes=True
+  esimd: NLL=0.0001 true_top1=63/63 top1_vs_live=64/64 max|dlogit|=9.041 same_bytes=False
+  joint: NLL=0.0001 true_top1=63/63 top1_vs_live=64/64 max|dlogit|=0.000 same_bytes=True
+  live2: NLL=0.0001 true_top1=63/63 top1_vs_live=64/64 max|dlogit|=0.000 same_bytes=True
