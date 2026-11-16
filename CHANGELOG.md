@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-15
+- **GLM-5.3 expert gate/up kernel (L7): no in-place win.** Twenty bit-exact variants of the IQ2_S `moe_gate_up` kernel (16-bit code grid, split grid, 4+4 rows, aligned loads, per-lane bases) land at 0.77-1.03x of the live 126.7 us; the read floor is 81.7 us. The B70 ISA shows ~1,105 instructions a loop step for 32 `dp4a`, mostly 64-bit address packing and emulated multiplies, and the issue time matches the measurement. `dpct::dp4a` already compiles to native `dp4a`. A first row-per-lane rewrite spilled and ran 2.4-6x slower. All four cards run the kernel in 127-132 us alone, so card 3's slower in-engine time is an engine effect. Nothing changed live. [Gate/up kernels](glm-5.3/sycl-port/experiments/2026-11-15-moe-gateup-kernels/).
+
 ## 2026-11-14
 - **GLM-5.3 decode +3.5%: aligned-load Q6_K mat-vec, live.** The dense one-column mat-vec reads each lane's weights as aligned 32-bit words (210-byte blocks are 0-3 bytes off) and takes two rows a warp: 8-14% faster per kernel, decode on code 52.2-52.9 -> 54.5-54.6 tok/s, output bit-exact. Two traps on the way: pack tensors at odd offsets, and FMA contraction under the engine's `-fp-model=precise`. [Aligned Q6_K](glm-5.3/sycl-port/experiments/2026-11-14-q6k-aligned-gemv/).
 - **GLM-5.3 decode profile.** Every expert is VRAM-resident and decode is already a two-stage spec pipeline (CUDA0+1 / CUDA2+3); a step is the tail stage plus the MTP draft in series, and each card idles ~50%. VTune per-kernel time: routed experts ~27% of decode kernel time, dense GEMV ~55%; expert kernels at ~52% of bandwidth, dense at ~69%. A host-staged cross-card hop costs 19 us at 64 KB. Expert parallelism rejected; new decode leads L7-L11 ranked. Nothing changed live. [Decode profile](glm-5.3/sycl-port/experiments/2026-11-14-decode-profile/).
