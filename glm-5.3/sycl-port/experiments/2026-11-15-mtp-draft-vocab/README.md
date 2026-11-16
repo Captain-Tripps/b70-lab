@@ -2,10 +2,12 @@
 
 ## Decision
 
-Built, not measured on the GPUs yet. Lead L8: shorten the MTP draft that sits in series with the tail stage every
-decode step. The candidate engine takes the draft vocabulary from a list of token ids ranked by frequency instead of
-by id. On held-out prose / code a 49k-row list misses 0.4 / 5.9 tokens per 1,000 at half the live head's reads,
-where the 32k id cut tried on 2026-11-01 missed 86 / 82. Expected gain is small (~+1.5-2% decode). Nothing changed on the live server. The decode A/B needs the GPUs (GLM unloaded), so it waits for a quiet window.
+Rejected (measured 2026-11-15). Lead L8: shorten the MTP draft that the decode profile showed in series with the tail
+stage. The candidate engine takes the draft vocabulary from a list of token ids ranked by frequency instead of by id.
+It works as built: the draft drops 2.20 -> 1.77-1.85 ms a step, acceptance and greedy output are unchanged. Decode speed
+does not move (code 54.58 -> 54.50-54.61 tok/s, prose 45.00 -> 44.88-44.97), because the step waits on the tail
+stage longer by the same amount. The draft is not on the critical path the way the profile read suggested. Nothing
+changed on the live server.
 
 ## Why the draft head
 
@@ -70,15 +72,34 @@ code. Both sit under the 3% keep threshold unless the A/B beats the estimate. Me
 separate candidate folder (the patch also turns that file's CRLF line ends into LF; no effect on the build). Result:
 1 file compiled, 0 errors; linked, 0 unresolved; candidate `generate.exe` `166c2842...`.
 
-## A/B plan (not run)
+## A/B (2026-11-15)
 
-- Arms: live exe; candidate with no list (must match live); candidate + top 40k; candidate + top 49k (run 2 lists). Same session,
-  A / B / B / A, `spec_ab.ps1` as for [aligned Q6_K](../2026-11-14-q6k-aligned-gemv/), code and prose prompts
-  separately, thinking off, 768 tokens, actual output counts and acceptance recorded.
-- Checks: the engine log line for the vocabulary actually loaded; CUDA3 still "complete: every expert" (the gathered
-  rows take ~106 MB more VRAM there); greedy output identical to live (the verify decides every token, so output must
-  not change; only speed and acceptance can).
-- Prompts: book-style prose and code separately; the miss-rate fallback protects other scripts, not rarer English.
+Same session, GLM unloaded, CLI greedy decode on the live engine settings with `STRATA_GLM_SPEC_PROF=1`, 1,500 new tokens
+from a 200-token prompt, thinking off. Two prompts: code (the decode-profile prompt) and prose (the opening of a
+locally generated book chapter). Order per prompt: live, 49k, 40k, candidate with no list, 40k, 49k, live.
+
+| Arm | Code tok/s | Code accepted | Prose tok/s | Prose accepted | Draft ms a step (code / prose) |
+|---|---:|---:|---:|---:|---:|
+| Live exe, run 1 | 54.58 | 96.9% | 45.01 | 75.2% | 2.21 / 2.20 |
+| Candidate + top 49k, run 1 | 54.61 | 96.9% | 44.90 | 75.2% | 1.84 / 1.85 |
+| Candidate + top 40k, run 1 | 54.53 | 96.9% | 44.88 | 75.1% | 1.78 / 1.78 |
+| Candidate, no list | 54.56 | 96.9% | 45.05 | 75.2% | 2.21 / 2.18 |
+| Candidate + top 40k, run 2 | 54.59 | 96.9% | 44.95 | 75.1% | 1.77 / 1.76 |
+| Candidate + top 49k, run 2 | 54.50 | 96.9% | 44.97 | 75.2% | 1.85 / 1.83 |
+| Live exe, run 2 | 54.62 | 96.9% | 44.99 | 75.2% | 2.19 / 2.21 |
+
+Checks, all passed:
+
+- All 14 runs give the same 1,500 tokens as live run 1 on their prompt.
+- The engine log names the list it loaded: 49,312 ids (106 in place + 49,206 gathered, 158 of 496 MB a draft) and
+  41,120 ids (95 + 41,025).
+- CUDA3 still holds every expert in VRAM ("complete: every expert") with the gathered rows.
+- With no list, the candidate matches live (54.56 / 45.05 tok/s, draft 2.21 / 2.18 ms).
+
+Why it does not pay: per step (ms), the draft saves 0.36-0.44 ms, and the wait for the tail token plus the tail
+enqueue grow by about as much (code live 7.94-8.33 wait + 7.62-7.97 enqueue, lists 8.25-8.73 + 7.55-8.06; prose
+similar). The tail stage sets the step time; the draft overlaps it rather than adding to it. So shortening the draft
+further (a smaller list, a lower-bit head) would not help either. The decode levers left are the tail stage itself.
 
 ## Setup
 
