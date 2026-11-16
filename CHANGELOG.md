@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-16
+- **GLM-5.3 prompt read -22%, live: the ESIMD grouped expert GEMM of llama.cpp#31428 plus an IQ2_S format for it.** Promoted in two steps, each after a clean 30-minute soak. Step 1, the PR's kernel for the IQ3_XXS down product: cold 45.8k 31.2 -> 28.0 s. Step 2, an IQ2_S loader written here for gate/up (grid kept as 2-bit levels, 2 KB of shared memory): 28.0 -> 24.3 s; 115k 81.3 -> 63.7 s overall. Decode unchanged. In the kernel's bit-exact mode the new format gives the old build's logits byte for byte; the default mode shifts them about as much as the 1536-chunk change did. [ESIMD grouped GEMM](glm-5.3/sycl-port/experiments/2026-11-15-esimd-grouped-gemm/).
+
 ## 2026-11-15
 - **GLM-5.3 prompt read -10% with the ESIMD grouped expert GEMM of llama.cpp#31428 (candidate, not live).** The PR's kernel dequantizes in registers for the matrix units, with no shared-memory staging. In the engine it covers the IQ3_XXS down product: cold 45.8k 31.2 -> 28.0 s, 115k 81.3 -> 73.1 s, decode unchanged, logits within the 1536-chunk change's shift. Gate/up (IQ2_S) needs a new loader. [ESIMD grouped GEMM](glm-5.3/sycl-port/experiments/2026-11-15-esimd-grouped-gemm/).
 - **GLM-5.3 MTP draft vocabulary by token frequency: rejected.** The A/B ran: the 40k / 49k lists cut the draft 2.20 -> ~1.8 ms a step with the same acceptance and the same output, but decode does not move (code 54.6, prose 45.0 tok/s on every arm) because the step waits on the tail stage instead. The draft is not on the critical path. [Draft vocab](glm-5.3/sycl-port/experiments/2026-11-15-mtp-draft-vocab/#ab-2026-11-15).

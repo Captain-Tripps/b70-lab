@@ -7,13 +7,14 @@ Live executable, live config and live server tree, port 9079 (never the live 906
 import ctypes, hashlib, json, os, pathlib, re, subprocess, sys, threading, time, urllib.request
 
 work = pathlib.Path(os.environ['MAYA_WORK'])   # the engine checkout
-root = work / 'experiments' / 'claude-glm-l12-20261115' / 'screen'
+root = work / 'experiments' / 'claude-glm-l12-20261115' / os.environ.get('SCREEN_DIR', 'screen')
 arm, which, esimd = sys.argv[1], sys.argv[2], sys.argv[3]
-CAND = work / 'experiments' / 'claude-glm-l12-20261115' / 'tree' / 'link' / 'generate.exe'
-CAND_SHA = '7112581dd32857efc52d2504fc6607ce68194dbc368820f391960d436ecbdf5a'
+# cand = the ESIMD build, cand2 = it plus the IQ2_S format; SCREEN_DIR picks the output folder, LIVE_SHA the live exe
+CANDS = {'cand': ('tree', '7112581dd32857efc52d2504fc6607ce68194dbc368820f391960d436ecbdf5a'),
+         'cand2': ('tree2', os.environ.get('CAND2_SHA', ''))}
 run = root / arm
 run.mkdir(parents=True, exist_ok=False)
-LIVE_EXE = '2c21539a8f57558cabdedb155140ff1e856a6ab4594ffbc15608b934b910b25a'
+LIVE_EXE = os.environ.get('LIVE_SHA', '2c21539a8f57558cabdedb155140ff1e856a6ab4594ffbc15608b934b910b25a')
 LIVE_SERVER = '76185526a58aa06193233b0d9d0f8b7282e6ce888b31004be9cad6dc3140971f'
 PROXY = os.environ.get('PROXY_URL', 'http://127.0.0.1:8080')   # the llama-swap proxy
 base = 'http://127.0.0.1:9079'
@@ -27,10 +28,11 @@ cfg = json.loads((work / 'configs' / 'glm-maya-sycl-128k.json').read_text(encodi
 if sha(cfg['exe']) != LIVE_EXE or sha(work / 'maya' / 'serve' / 'server.py') != LIVE_SERVER:
     sys.exit('live config or server is not the expected one')
 cfg['log'] = str(run / 'engine.log')
-if which == 'cand':
-    if sha(CAND) != CAND_SHA:
+if which in CANDS:
+    exe = work / 'experiments' / 'claude-glm-l12-20261115' / CANDS[which][0] / 'link' / 'generate.exe'
+    if sha(exe) != CANDS[which][1]:
         sys.exit('candidate is not the expected build')
-    cfg['exe'] = str(CAND)
+    cfg['exe'] = str(exe)
 if esimd != 'default':
     cfg['env']['GGML_SYCL_MMID_ESIMD'] = esimd
 (run / 'config.json').write_text(json.dumps(cfg, indent=2), encoding='utf8')

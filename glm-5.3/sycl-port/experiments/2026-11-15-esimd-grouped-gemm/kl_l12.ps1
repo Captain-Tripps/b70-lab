@@ -1,8 +1,8 @@
-param([Parameter(Mandatory=$true)][string]$Case, [Parameter(Mandatory=$true)][string]$Exe, [string]$Esimd = '', [Parameter(Mandatory=$true)][string]$Tag)
+param([string]$Sub = "kl", [Parameter(Mandatory=$true)][string]$Case, [Parameter(Mandatory=$true)][string]$Exe, [string]$Esimd = '', [Parameter(Mandatory=$true)][string]$Tag)
 # Teacher-forced logit dump (64 positions, speculation off) with the live engine env and live prompt args
 $ErrorActionPreference='Stop'
 $Work='<work>'
-$dir="$Work\experiments\claude-glm-l12-20261115\kl"
+$dir="$Work\experiments\claude-glm-l12-20261115\$Sub"
 New-Item -ItemType Directory -Force $dir | Out-Null
 $val="$Work\experiments\codex-sub768-validation-20261110"
 $in=if ($Case -eq 'long32k') {"$Work\long32k.txt"} else {"$val\$Case.txt"}
