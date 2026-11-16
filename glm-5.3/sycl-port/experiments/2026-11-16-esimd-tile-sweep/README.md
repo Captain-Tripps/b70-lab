@@ -2,12 +2,12 @@
 
 ## Decision
 
-Measured, candidate, not live. Making the ESIMD grouped expert kernel's tiles 64 columns wide instead of 32 cuts a cold
-115k read by 9.3% (58.71 -> 53.24 s), a 32k read by 8.4% and an 8k code read by 5.6%. The logits are byte for byte
-the live build's on all three inputs. 48-wide tiles gain a little less. Skipping the empty column blocks of a tile
-(L15) costs more than it saves, and 16 rows a thread is slower at every width. Before promotion: a soak through the
-server, because speculative decoding's verify batches also go through this kernel with only a few rows an expert,
-and a 64-wide tile does twice the multiplies there. Promotion waits for Jon.
+Live since 2026-11-16, after a clean 30-minute soak. Making the ESIMD grouped expert kernel's tiles 64 columns wide
+instead of 32 cuts a cold 115k read by 9.3% (58.71 -> 53.24 s), a 32k read by 8.4% and an 8k code read by 5.6%. The
+logits are byte for byte the live build's on all three inputs. 48-wide tiles gain a little less. Skipping the empty
+column blocks of a tile (L15) costs more than it saves, and 16 rows a thread is slower at every width. Decode with
+speculation is unchanged in the soak. The engine config now runs the 64-wide build
+([soak and promotion](#soak-and-promotion)).
 
 ## Why the tile width
 
@@ -68,11 +68,42 @@ The tail skip loses to the plain 64-wide tile on both inputs: the per-block bran
 costs more than the dpas it saves when most tiles are mostly full. 16 rows a thread doubles the threads and the
 packed-B loads per weight row and is slower everywhere.
 
+## Soak and promotion
+
+[`soak_l14.py`](soak_l14.py) is the [L12 soak](../2026-11-15-esimd-grouped-gemm/) on the live config (L5 indexer
+switch on) with only the executable changed to `tile-m32-n64` (`f27bcbf3...`): port 9080, the 2026-11-12 mixed
+request mix plus a long-conversation edit each cycle, 30 minutes. Raw rows: [`soak-requests.jsonl`](soak-requests.jsonl).
+Compared with the [L5 soak](../2026-11-16-indexer-xmx/#soak-and-promotion) earlier the same day:
+
+| Request | n | First token, L5 soak | First token, L14 soak | Decode, L5 / L14 |
+|---|---:|---:|---:|---:|
+| Cold 115k prime | 1 | 61.44 s | 55.96 s | 37.4 / 37.4 tok/s |
+| Medium 31k switch | 22 | 17.35 s | 15.78 s | 43.2 / 43.1 tok/s |
+| Extra | 34 | 5.13 s | 4.76 s | 41.6 / 41.5 tok/s |
+| Long edits (115k, cached) | 204 | 0.553 s | 0.543 s | 41.2 / 41.1 tok/s |
+| Long return | 68 | 0.532 s | 0.537 s | 41.3 / 41.2 tok/s |
+| Append | 68 | 0.666 s | 0.733 s | 40.7 / 40.6 tok/s |
+| Short 7.7k switch | 68 | 0.329 s | 0.320 s | 44.4 / 44.3 tok/s |
+| Straight edit (new text each cycle) | 68 | 0.943 s | 0.945 s | 38.1 / 38.0 tok/s |
+| Cancel / retry | 13 / 13 | 1.042 / 0.052 s | 1.039 / 0.053 s | - / 46.5 / 46.3 tok/s |
+
+Decode is median tokens per second after the first token, over 64-token answers. 559 requests over 68 cycles, no
+errors in the server log, free RAM never below 73.7 GiB, and every request type with repeated input gave the same
+answers as in the L5 soak. Decode, which also runs speculation's verify batches through this kernel, moves by at most
+0.3%. Append's first token is 0.07 s slower (it reads 75 new tokens, one partly filled 64-wide tile an expert); the
+other cached follow-ups are unchanged.
+
+Promotion ([`promote_l14.py`](promote_l14.py)): the candidate copied to its own runtime folder and the config's `exe`
+pointed at it, the L5 switch left on, the old config kept as a backup beside it. The proxy reloaded GLM on the first
+request (it answered 19 x 21 = 399) and the engine process runs the new executable. Two cold 45.8k reads through the
+proxy: 27.78 s (first read after load) and 21.46 s, against 23.70 s on L5.
+
+Rollback: restore the backup config and reload GLM.
+
 ## Next
 
-A 30-minute soak of 32 x 64 (`tile-m32-n64`, `f27bcbf3...`) through the server, as for L12 and L5, to check decode
-with speculation and the cached follow-ups; then a config change (the executable only, no new switch). Both need
-Jon's OK.
+Grouped expert products are still the largest share of a long read. Raising the prompt chunk past 1536 would give each
+expert more rows a tile; it was last tuned before L12.
 
 ## Setup
 
