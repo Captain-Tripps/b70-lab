@@ -1,4 +1,4 @@
-# Prompt chunk re-sweep and profile of the live build - 2026-11-16
+# Prompt chunk re-sweep, profile of the live build and hand-off copy (L16) - 2026-11-16
 
 ## Decision
 
@@ -11,9 +11,10 @@ Keep `--prefill 1536`. Nothing changed live.
 - 3072 and 4096 produce wrong output, not just slow output: 3x slower, true-token loss on 115k 0.23 -> 1.34 / 3.92,
   top-1 matching live on about half the rows, and one 8k run crashed out of device resources.
 
-The profile of the live build (L5 indexer + L14 tiles) points to a new lead: the card-to-card hand-off copy
-(`maya_kcopy`) on the sending cards now takes 37-62 ms a call, against about 5-6 ms on the L12 build this morning. On
-a 115k read that is 4.6-6.7 s of each sending card's 51-55 s of kernel time ([Next](#next)).
+The profile of the live build (L5 indexer + L14 tiles) showed the card-to-card hand-off copy (`maya_kcopy`) on the
+sending cards at 37-62 ms a call, against about 5-6 ms on the L12 build this morning. Timed on the host (L16,
+[below](#hand-off-copy-l16)) the copy takes 18-21 ms out and 6-9 ms in, about 1.4 s a card on a 115k read (under 3%);
+VTune's per-call figure overstates it. A 16-byte-a-work-item copy is slower. Rejected; nothing changed live.
 
 ## Chunk sweep
 
@@ -65,18 +66,43 @@ Grouped expert products are now 35-44% of a card's kernel time (were 42-47%), at
 9-13% on the three sending cards. The 32k capture shows the same: the copy is about 5 ms a call on L12 and on the last
 card (which only receives), and 37-62 ms a call on the cards that send.
 
+## Hand-off copy (L16)
+
+In the pipelined prompt read each part copies a chunk's four residual streams (1536 x 4 x 4096 floats, 101 MB) into
+one of its two pinned host slots, and the next part copies them in. Both copies are a one-word-a-work-item kernel
+(`maya_kcopy`) on purpose: on B70 / Windows / Level Zero a USM host-device memcpy queued behind a running kernel blocks
+every other host copy in the context until that kernel ends. The sending thread waits on its queue after the copy.
+
+[`patch_hop.py`](patch_hop.py) routes the two copies through one helper with two switches, default unchanged:
+`STRATA_GLM_HOP_TIME=1` drains the queue, copies, drains again and logs the copy's host-measured time;
+`STRATA_GLM_HOP_VEC=1` copies 16 bytes a work-item. [`build_hop.py`](build_hop.py) builds it on the live tree (only
+`glm_prefill.dp.cpp` recompiled). [`ab_hop.ps1`](ab_hop.ps1) / [`gen_hoprun.py`](gen_hoprun.py): live, probe, probe with
+each switch, mirrored. Raw lines: [`hop-results.txt`](hop-results.txt). Every run's logits match live byte for byte.
+
+| Read | Live | Probe, switches off | Hop timing on | 16-byte copy | Both |
+|---|---:|---:|---:|---:|---:|
+| 115k | 53.74 / 54.04 s | 53.97 / 54.06 s | 54.01 s | 55.03 / 55.14 s | 55.06 s |
+| 32k | 16.77 / 16.73 s | 16.85 / 16.80 s | 16.82 s | 17.07 / 17.07 s | 16.95 s |
+
+Host-measured copy, 115k read (75 chunks; the 32k read is the same per chunk):
+
+| Part | Out (to host) median | In (from host) median | Out, 16-byte copy |
+|---|---:|---:|---:|
+| 0 | 18.1 ms (5.6 GB/s) | - | 32.2 ms |
+| 1 | 18.7 ms | 8.8 ms (11.5 GB/s) | 34.4 ms |
+| 2 | 21.0 ms | 8.7 ms | 27.7 ms |
+| 3 | - | 5.7 ms (17.7 GB/s) | - |
+
+So a sending card spends 1.3-1.6 s copying out and 0.5-0.6 s copying in over a 54 s read, and fencing the queue
+around every copy costs nothing measurable: the copy is not the 40-60 ms VTune reports. The kernel span VTune
+records covers more than the copy's own work. At best a copy as fast as the inbound one would save about 0.8 s a
+card, 1-2%, not worth a change to a path built around a driver hazard. Wider stores make the outbound writes slower.
+
 ## Next
 
-Find out why the sending side of the hand-off copy went from ~5 ms to ~40-60 ms, and whether it is on the critical path.
-It copies a chunk's hidden state into a host buffer for the next card. Two readings fit:
-
-- the copy kernel now overlaps the card's compute (or the expert staging traffic) and VTune counts the shared time, in
-  which case it costs little; or
-- device-to-host writes got slower since the L12 build, in which case restoring ~5 ms a call would save about 4-6 s a
-  card on a 115k read, perhaps 5-9% of wall time.
-
-A timed read with the hand-off on its own queue fenced, or with host timestamps around it, tells the two apart. The
-2048 determinism bug is a separate lead, worth fixing only if larger chunks are wanted later.
+Prompt-read work is near the end of what is cheap. What is left on the profile is the grouped expert products (35-44%
+of a card) and attention (18-19%), each a kernel project. The 2048-chunk determinism bug is worth fixing only if larger
+chunks are wanted later.
 
 ## Setup
 

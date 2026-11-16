@@ -1,0 +1,18 @@
+code-warm EXIT 0 wall 48 s prefill_ms 6622.5 logits 2365C206D1FAA63F
+long115k-live-r1 EXIT 0 wall 95 s prefill_ms 53743.7 logits 60FC983BB61484E0
+long115k-probe-r1 EXIT 0 wall 95 s prefill_ms 53967.6 logits 60FC983BB61484E0
+long115k-vec-r1 EXIT 0 wall 96 s prefill_ms 55032.9 logits 60FC983BB61484E0
+long115k-time EXIT 0 wall 95 s prefill_ms 54010.4 logits 60FC983BB61484E0
+long115k-timevec EXIT 0 wall 96 s prefill_ms 55058.0 logits 60FC983BB61484E0
+long115k-vec-r2 EXIT 0 wall 96 s prefill_ms 55135.2 logits 60FC983BB61484E0
+long115k-probe-r2 EXIT 0 wall 95 s prefill_ms 54056.7 logits 60FC983BB61484E0
+long115k-live-r2 EXIT 0 wall 95 s prefill_ms 54037.4 logits 60FC983BB61484E0
+long32k-live-r1 EXIT 0 wall 58 s prefill_ms 16774.9 logits 96E9624D6138CAAA
+long32k-probe-r1 EXIT 0 wall 58 s prefill_ms 16845.2 logits 96E9624D6138CAAA
+long32k-vec-r1 EXIT 0 wall 58 s prefill_ms 17067.8 logits 96E9624D6138CAAA
+long32k-time EXIT 0 wall 57 s prefill_ms 16816.6 logits 96E9624D6138CAAA
+long32k-timevec EXIT 0 wall 58 s prefill_ms 16952.9 logits 96E9624D6138CAAA
+long32k-vec-r2 EXIT 0 wall 58 s prefill_ms 17073.3 logits 96E9624D6138CAAA
+long32k-probe-r2 EXIT 0 wall 57 s prefill_ms 16804.3 logits 96E9624D6138CAAA
+long32k-live-r2 EXIT 0 wall 57 s prefill_ms 16730.8 logits 96E9624D6138CAAA
+HOP_RUN_DONE
