@@ -1,0 +1,15 @@
+roundtrip ok: True (29 tokens)
+vocab 154880, control/user-defined 36, extras 447
+prose: train 2172 files 8,181,863 tokens; test 583 files 2,247,712 tokens; distinct train ids 26,533
+code: train 4147 files 15,032,902 tokens; test 1049 files 4,057,259 tokens; distinct train ids 50,446
+
+vocabulary                            rows MB/draft     prose miss/1k      code miss/1k
+live auto (ids<98304 + extras)       98741      316              0.28              0.45
+id prefix 32768 + extras             33205      106             85.52             81.75
+top 16384 by frequency + extras      16544       53             25.42             62.44
+top 24576 by frequency + extras      24736       79              9.29             33.44
+top 32768 by frequency + extras      32928      106              3.22             18.43
+top 40960 by frequency + extras      41120      132              1.12             10.19
+top 49152 by frequency + extras      49312      158              0.40              5.85
+
+top 32768: 330 ids >= 98304, 19219 below 32768
