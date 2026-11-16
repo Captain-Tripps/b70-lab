@@ -1,0 +1,14 @@
+roundtrip ok: True (29 tokens)
+vocab 154880, special/added 36, digit-only 411
+train 3629 files 20,281,632 tokens; test 896 files 3,551,657 tokens; distinct train ids 44,757
+vocabulary                            rows MB/draft  test coverage  misses per 1k
+live auto (ids<98304 + extras)       98741      316        99.962%           0.38
+id prefix 32768 + extras             33205      106        93.216%          67.84
+top 8192 by frequency + extras        8404       27        95.170%          48.30
+top 16384 by frequency + extras      16544       53        98.145%          18.55
+top 24576 by frequency + extras      24736       79        99.219%           7.81
+top 32768 by frequency + extras      32928      106        99.646%           3.54
+top 40960 by frequency + extras      41120      132        99.811%           1.89
+top 49152 by frequency + extras      44917      144        99.857%           1.43
+top 16384: 294 ids >= 98304, 11424 below 32768, longest covered id prefix 94
+top 32768: 384 ids >= 98304, 18301 below 32768, longest covered id prefix 95
