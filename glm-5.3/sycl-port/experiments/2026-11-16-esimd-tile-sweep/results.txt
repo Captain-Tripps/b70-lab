@@ -1,0 +1,36 @@
+# round 1 (first run of each build includes its ESIMD JIT compile)
+long115k-live EXIT 0 wall 100 s prefill_ms 58555.2 logits 60FC983BB61484E0
+long115k-m32n64 EXIT 0 wall 99 s prefill_ms 57838.8 logits 60FC983BB61484E0
+long115k-m16n64 EXIT 0 wall 101 s prefill_ms 58612.1 logits 60FC983BB61484E0
+long115k-m32n48 EXIT 0 wall 99 s prefill_ms 57716.6 logits 60FC983BB61484E0
+long115k-m16n32 EXIT 0 wall 105 s prefill_ms 63316.9 logits 60FC983BB61484E0
+long115k-m32n64s EXIT 0 wall 100 s prefill_ms 59561.7 logits 60FC983BB61484E0
+long115k-m16n64s EXIT 0 wall 100 s prefill_ms 58747.4 logits 60FC983BB61484E0
+long115k-liveb EXIT 0 wall 100 s prefill_ms 58708.9 logits 60FC983BB61484E0
+long32k-live EXIT 0 wall 59 s prefill_ms 18157.9 logits 96E9624D6138CAAA
+long32k-m32n64 EXIT 0 wall 57 s prefill_ms 16600.0 logits 96E9624D6138CAAA
+long32k-m16n64 EXIT 0 wall 58 s prefill_ms 17332.9 logits 96E9624D6138CAAA
+long32k-m32n48 EXIT 0 wall 58 s prefill_ms 16870.4 logits 96E9624D6138CAAA
+long32k-m16n32 EXIT 0 wall 60 s prefill_ms 19102.8 logits 96E9624D6138CAAA
+long32k-m32n64s EXIT 0 wall 58 s prefill_ms 17039.0 logits 96E9624D6138CAAA
+long32k-m16n64s EXIT 0 wall 58 s prefill_ms 17341.8 logits 96E9624D6138CAAA
+long32k-liveb EXIT 0 wall 59 s prefill_ms 18085.7 logits 96E9624D6138CAAA
+# round 2 (pairs interleaved, kernels cached)
+long115k-m32n64-r2 EXIT 0 wall 94 s prefill_ms 53216.3 logits 60FC983BB61484E0
+long115k-live-r2 EXIT 0 wall 100 s prefill_ms 58675.4 logits 60FC983BB61484E0
+long115k-m32n48-r2 EXIT 0 wall 96 s prefill_ms 54488.2 logits 60FC983BB61484E0
+long115k-m32n48-r3 EXIT 0 wall 95 s prefill_ms 54530.5 logits 60FC983BB61484E0
+long115k-live-r3 EXIT 0 wall 100 s prefill_ms 58746.4 logits 60FC983BB61484E0
+long115k-m32n64-r3 EXIT 0 wall 94 s prefill_ms 53265.9 logits 60FC983BB61484E0
+long32k-m32n64-r2 EXIT 0 wall 57 s prefill_ms 16606.0 logits 96E9624D6138CAAA
+long32k-live-r2 EXIT 0 wall 59 s prefill_ms 18125.9 logits 96E9624D6138CAAA
+long32k-m32n48-r2 EXIT 0 wall 58 s prefill_ms 16913.5 logits 96E9624D6138CAAA
+long32k-m32n48-r3 EXIT 0 wall 58 s prefill_ms 16892.7 logits 96E9624D6138CAAA
+long32k-live-r3 EXIT 0 wall 59 s prefill_ms 18108.3 logits 96E9624D6138CAAA
+long32k-m32n64-r3 EXIT 0 wall 57 s prefill_ms 16582.3 logits 96E9624D6138CAAA
+code-m32n64-r2 EXIT 0 wall 48 s prefill_ms 6579.1 logits 2365C206D1FAA63F
+code-live-r2 EXIT 0 wall 47 s prefill_ms 6975.1 logits 2365C206D1FAA63F
+code-m32n48-r2 EXIT 0 wall 47 s prefill_ms 6705.2 logits 2365C206D1FAA63F
+code-m32n48-r3 EXIT 0 wall 48 s prefill_ms 6608.0 logits 2365C206D1FAA63F
+code-live-r3 EXIT 0 wall 48 s prefill_ms 7005.1 logits 2365C206D1FAA63F
+code-m32n64-r3 EXIT 0 wall 48 s prefill_ms 6619.8 logits 2365C206D1FAA63F
