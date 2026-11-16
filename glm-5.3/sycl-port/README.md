@@ -13,6 +13,10 @@ resident in VRAM, 128k context.
   build is under [Live changes since 2026-11-12](#live-changes-since-2026-11-12).
 - Work: 2026-10-31 to 2026-11-01, 36 numbered fix rounds (`tools/maya_fixups*.py`), prepared with AI assistance.
 
+**Building it yourself:** [`recipe/RECIPE.md`](recipe/RECIPE.md) - one script (`recipe/setup.cmd`) from an empty
+folder to a served engine, plus what is tuned to this machine. Run from empty on 2026-11-16; logits byte for byte the
+same as the live engine.
+
 ## Next optimization work
 
 [Agent handoff and ranked leads — 2026-11-09](LEADS-2026-11-09.md) and
