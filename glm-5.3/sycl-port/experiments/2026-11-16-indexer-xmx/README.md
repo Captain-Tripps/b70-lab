@@ -2,12 +2,13 @@
 
 ## Decision
 
-Measured, candidate, not live. An XMX version of the GLM indexer score, after the lightning indexer of
-[llama.cpp#31313](https://github.com/ggml-org/llama.cpp/pull/31313), cuts a cold 115k read by 5.3% (three pairs:
--5.3, -5.4, -5.2%), a 32k read by 1-2%, and leaves an 8k read flat. Decode does not use it. Quality, over 511
+Live since 2026-11-16, after a clean 30-minute soak. An XMX version of the GLM indexer score, after the lightning
+indexer of [llama.cpp#31313](https://github.com/ggml-org/llama.cpp/pull/31313), cuts a cold 115k read by 5.3% (three
+pairs: -5.3, -5.4, -5.2%), a 32k read by 1-2%, and leaves an 8k read flat. Decode does not use it. Quality, over 511
 teacher-forced positions: true-token loss 1.0851 -> 1.0826 on the 32k input and 0.5699 -> 0.5738 on the 115k, top
 token as before at 490 and 499 of 512 positions. The shifts go both ways and are the size of the L12 change already
-live. Promoting it would change the live engine, so it waits for Jon (and a soak).
+live. The engine config now runs the candidate executable with `STRATA_GLM_DSA_XMX=1`
+([soak and promotion](#soak-and-promotion)).
 
 The [prompt-read profile](../2026-11-16-prefill-profile/) put the indexer at 10-11% of the busiest cards' time on a
 115k read and 3% on a 32k read; the gain matches that share with the score kernel about twice as fast.
@@ -78,10 +79,39 @@ at this sample size, not a trend. The 64-position 32k number was one of those sw
 97.5%) is in the range of the L12 steps (60 and 62 of 64, 93.8% and 96.9%). The f16 operands change which pooled keys
 make the top 2048 near the cut, and that is the whole effect.
 
+## Soak and promotion
+
+[`soak_l5.py`](soak_l5.py) is the [L12 soak](../2026-11-15-esimd-grouped-gemm/) with one change: the copied engine
+config also sets `STRATA_GLM_DSA_XMX=1`. Same live config and server, candidate executable `f72801f6...`, port 9080,
+the 2026-11-12 mixed request mix plus a long-conversation edit each cycle, 30 minutes. Raw rows:
+[`soak-requests.jsonl`](soak-requests.jsonl).
+
+| Request | n | Median first token, L12 soak | Median first token, L5 soak | Distinct answers |
+|---|---:|---:|---:|---:|
+| Cold 115k prime | 1 | 65.07 s | 61.44 s | 1 |
+| Medium 31k switch | 22 | 17.66 s | 17.35 s | 1 |
+| Long edits (115k, cached) | 198 | 0.548 s | 0.553 s | 3 (one per edit text) |
+| Long return | 66 | 0.548 s | 0.532 s | 1 |
+| Append | 66 | 0.683 s | 0.666 s | 1 |
+| Short 7.7k switch | 66 | 0.327 s | 0.329 s | 1 |
+| Straight edit (new text each cycle) | 66 | 0.942 s | 0.943 s | 65 |
+| Extra | 32 | 5.140 s | 5.132 s | 2 |
+| Cancel / retry | 13 / 13 | 1.056 / 0.053 s | 1.042 / 0.053 s | 1 / 1 |
+
+543 requests over 66 cycles, every non-cancelled request returned its 64 tokens (the straight edits stop early on
+some new texts, as in the L12 soak), each repeated request gave one answer throughout, no errors in the server log,
+free RAM never below 73.5 GiB. Cached follow-ups are unchanged: they read only a few new tokens.
+
+Promotion ([`promote_l5.py`](promote_l5.py)): the candidate copied to its own runtime folder, the config's `exe`
+pointed at it and `STRATA_GLM_DSA_XMX=1` added to its environment, the old config kept as a backup beside it. The
+proxy reloaded GLM on the first request (it answered 19 x 21 = 399) and the engine process runs the new executable.
+Two cold 45.8k reads through the proxy: 30.56 s (first read after load) and 23.70 s, against 24.3 s on L12.
+
+Rollback: restore the backup config and reload GLM.
+
 ## Next
 
-A soak on the candidate with the switch on, as for L12, then a config change (the candidate executable plus
-`STRATA_GLM_DSA_XMX=1` in the engine environment). Both need Jon's OK.
+The ESIMD tile-shape sweep for the grouped expert products (still 46-48% of the busiest cards' read time).
 
 ## Setup
 
