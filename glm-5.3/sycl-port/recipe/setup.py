@@ -128,10 +128,9 @@ if not mark.exists():
 step('4/8 static ggml (llama.cpp 3cf0325)')
 gb = W / 'ggml-build'
 if not (gb / 'src' / 'ggml-cpu.lib').exists():
-    run(['cmake', '-S', W / 'llama.cpp-3cf0325', '-B', gb, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+    run(['cmake', '-S', W / 'llama.cpp-3cf0325' / 'ggml', '-B', gb, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
          '-DCMAKE_C_COMPILER=cl', '-DCMAKE_CXX_COMPILER=cl', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_STATIC=ON',
          '-DGGML_OPENMP=OFF', '-DGGML_BACKEND_DL=OFF', '-DGGML_BUILD_TESTS=OFF', '-DGGML_BUILD_EXAMPLES=OFF',
-         '-DLLAMA_BUILD_TESTS=OFF', '-DLLAMA_BUILD_EXAMPLES=OFF', '-DLLAMA_BUILD_SERVER=OFF', '-DLLAMA_CURL=OFF',
          '-DGGML_NATIVE=OFF', '-DGGML_AVX=ON', '-DGGML_AVX2=ON', '-DGGML_FMA=ON', '-DGGML_F16C=ON', '-DGGML_BMI2=ON',
          '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL'])
     run(['cmake', '--build', gb, '--target', 'ggml-base', 'ggml-cpu'])
