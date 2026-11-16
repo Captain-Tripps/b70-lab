@@ -4,6 +4,7 @@ Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topi
 changed and when.
 
 ## 2026-11-16
+- **GLM-5.3 prompt read re-profiled on the L12 build.** On a 115k read the grouped expert products are still 46-48% of the busiest cards' kernel time; attention 17-18%; the DSA indexer 10-11% (it grows with depth: 3% at 32k); the dense projections 8-12%, of which re-dequantizing Q6_K weights to f16 every chunk is about half. Card 3 runs 28% short of cards 0/1 during reads, but moving work to it would slow decode. Nothing changed live. [Prefill profile](glm-5.3/sycl-port/experiments/2026-11-16-prefill-profile/).
 - **GLM-5.3 prompt read -22%, live: the ESIMD grouped expert GEMM of llama.cpp#31428 plus an IQ2_S format for it.** Promoted in two steps, each after a clean 30-minute soak. Step 1, the PR's kernel for the IQ3_XXS down product: cold 45.8k 31.2 -> 28.0 s. Step 2, an IQ2_S loader written here for gate/up (grid kept as 2-bit levels, 2 KB of shared memory): 28.0 -> 24.3 s; 115k 81.3 -> 63.7 s overall. Decode unchanged. In the kernel's bit-exact mode the new format gives the old build's logits byte for byte; the default mode shifts them about as much as the 1536-chunk change did. [ESIMD grouped GEMM](glm-5.3/sycl-port/experiments/2026-11-15-esimd-grouped-gemm/).
 
 ## 2026-11-15

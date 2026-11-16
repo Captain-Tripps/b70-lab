@@ -1,0 +1,144 @@
+# 32k minus 8k (24,576 more prompt tokens)
+== card bdf 0:3:0.0: kernels 11.20 s, copies/fills 0.35 s 
+     3.541 s       176 calls  20120.4 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     2.100 s        93 calls  22582.4 us/call  glmb::maya_attn_xmx#1
+     0.983 s       112 calls   8776.6 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     0.796 s      2661 calls    299.2 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.669 s        64 calls  10458.1 us/call  grouped_gemm_esimd_kernel<block_iq3_s, 
+     0.655 s      2915 calls    224.8 us/call  strata::kernels::dequant_f16
+     0.429 s       341 calls   1259.4 us/call  glmb::kda_rec_split#3
+     0.353 s        93 calls   3799.5 us/call  glmb::dsa_score#1
+     0.349 s       720 calls    484.7 us/call  zeCommandListAppendMemoryCopy
+     0.292 s       352 calls    829.9 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.189 s       464 calls    406.3 us/call  glmb::hc_update#1
+     0.183 s       352 calls    519.9 us/call  strata::prefill::mmq::quantize
+     0.139 s       448 calls    309.9 us/call  glmb::hc_finish#1
+     0.113 s       341 calls    331.8 us/call  glmb::kda_rec_split#1
+     0.111 s      4875 calls     22.7 us/call  sgemm_nocopy_tn_32x16_2x4x4
+     0.105 s       176 calls    597.3 us/call  glmb::swiglu_rows#1
+== card bdf 0:131:0.0: kernels 11.53 s, copies/fills 0.16 s 
+     3.822 s       176 calls  21715.3 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     2.287 s        93 calls  24590.7 us/call  glmb::maya_attn_xmx#1
+     1.627 s       176 calls   9245.7 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     0.544 s      1617 calls    336.2 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.459 s      1985 calls    231.4 us/call  strata::kernels::dequant_f16
+     0.390 s        93 calls   4189.7 us/call  glmb::dsa_score#1
+     0.342 s       248 calls   1380.6 us/call  glmb::kda_rec_split#3
+     0.306 s       352 calls    869.9 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.188 s       352 calls    535.0 us/call  strata::prefill::mmq::quantize
+     0.181 s        32 calls   5662.8 us/call  maya_kcopy
+     0.163 s       704 calls    231.6 us/call  zeCommandListAppendMemoryCopy
+     0.149 s       368 calls    404.0 us/call  glmb::hc_update#1
+     0.114 s      4785 calls     23.9 us/call  sgemm_nocopy_tn_32x16_2x4x4
+     0.111 s       352 calls    314.9 us/call  glmb::hc_finish#1
+     0.106 s       176 calls    604.4 us/call  glmb::swiglu_rows#1
+     0.101 s        93 calls   1085.3 us/call  glmb::dsa_select#1
+== card bdf 0:135:0.0: kernels 10.78 s, copies/fills 0.29 s 
+     3.530 s       176 calls  20058.0 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     2.125 s        93 calls  22848.5 us/call  glmb::maya_attn_xmx#1
+     1.526 s       176 calls   8669.1 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     0.494 s      1617 calls    305.3 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.421 s      1985 calls    212.3 us/call  strata::kernels::dequant_f16
+     0.355 s        93 calls   3814.6 us/call  glmb::dsa_score#1
+     0.314 s       248 calls   1267.8 us/call  glmb::kda_rec_split#3
+     0.292 s       352 calls    829.0 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.291 s       704 calls    413.9 us/call  zeCommandListAppendMemoryCopy
+     0.207 s        32 calls   6473.9 us/call  maya_kcopy
+     0.184 s       352 calls    521.7 us/call  strata::prefill::mmq::quantize
+     0.148 s       368 calls    402.2 us/call  glmb::hc_update#1
+     0.110 s       352 calls    312.3 us/call  glmb::hc_finish#1
+     0.106 s      4785 calls     22.1 us/call  sgemm_nocopy_tn_32x16_2x4x4
+     0.105 s       176 calls    594.5 us/call  glmb::swiglu_rows#1
+     0.099 s        93 calls   1062.3 us/call  glmb::dsa_select#1
+== card bdf 0:195:0.0: kernels 8.13 s, copies/fills -0.06 s 
+     2.738 s       144 calls  19012.9 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     1.349 s        62 calls  21763.2 us/call  glmb::maya_attn_xmx#1
+     0.645 s        80 calls   8058.9 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     0.621 s        64 calls   9707.1 us/call  grouped_gemm_esimd_kernel<block_iq3_s, 
+     0.427 s      1370 calls    311.8 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     0.347 s      1642 calls    211.3 us/call  strata::kernels::dequant_f16
+     0.271 s       217 calls   1246.8 us/call  glmb::kda_rec_split#3
+     0.233 s       288 calls    809.7 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.221 s        62 calls   3568.1 us/call  glmb::dsa_score#1
+     0.148 s       288 calls    515.5 us/call  strata::prefill::mmq::quantize
+     0.122 s       304 calls    401.6 us/call  glmb::hc_update#1
+     0.102 s        16 calls   6357.1 us/call  maya_kcopy
+     0.087 s       288 calls    301.7 us/call  glmb::hc_finish#1
+     0.084 s       144 calls    583.2 us/call  glmb::swiglu_rows#1
+     0.079 s      3275 calls     24.2 us/call  sgemm_nocopy_tn_32x16_2x4x4
+     0.072 s       217 calls    331.4 us/call  glmb::kda_rec_split#1
+
+# 115k minus 8k (106,881 more prompt tokens)
+== card bdf 0:3:0.0: kernels 53.68 s, copies/fills 0.16 s 
+    15.299 s       770 calls  19868.5 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     9.208 s       414 calls  22240.7 us/call  glmb::maya_attn_xmx#1
+     4.628 s       414 calls  11178.0 us/call  glmb::dsa_score#1
+     4.234 s       490 calls   8641.8 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     3.287 s     10486 calls    313.5 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     2.907 s     12936 calls    224.8 us/call  strata::kernels::dequant_f16
+     2.879 s       280 calls  10282.2 us/call  grouped_gemm_esimd_kernel<block_iq3_s, 
+     1.866 s      1518 calls   1229.2 us/call  glmb::kda_rec_split#3
+     1.267 s      1540 calls    822.9 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.819 s      2030 calls    403.2 us/call  glmb::hc_update#1
+     0.792 s       414 calls   1912.7 us/call  glmb::dsa_select#1
+     0.778 s      1540 calls    505.5 us/call  strata::prefill::mmq::quantize
+     0.608 s      1960 calls    310.2 us/call  glmb::hc_finish#1
+     0.491 s      1518 calls    323.4 us/call  glmb::kda_rec_split#1
+     0.479 s      2757 calls    173.9 us/call  sgemm_nocopy_tn_16x8_2x4x4
+     0.456 s       770 calls    592.5 us/call  glmb::swiglu_rows#1
+== card bdf 0:131:0.0: kernels 54.03 s, copies/fills 0.07 s 
+    16.641 s       770 calls  21612.0 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     9.894 s       414 calls  23898.5 us/call  glmb::maya_attn_xmx#1
+     7.068 s       770 calls   9179.7 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     5.085 s       414 calls  12283.3 us/call  glmb::dsa_score#1
+     2.270 s      6418 calls    353.7 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     2.042 s      8796 calls    232.2 us/call  strata::kernels::dequant_f16
+     1.491 s      1104 calls   1350.5 us/call  glmb::kda_rec_split#3
+     1.332 s      1540 calls    864.8 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.842 s       140 calls   6014.1 us/call  maya_kcopy
+     0.802 s      1540 calls    520.8 us/call  strata::prefill::mmq::quantize
+     0.789 s       414 calls   1905.1 us/call  glmb::dsa_select#1
+     0.646 s      1610 calls    401.1 us/call  glmb::hc_update#1
+     0.485 s      1540 calls    314.7 us/call  glmb::hc_finish#1
+     0.462 s       770 calls    600.5 us/call  glmb::swiglu_rows#1
+     0.419 s     16551 calls     25.3 us/call  sgemm_nocopy_tn_32x16_2x4x4
+     0.384 s      2160 calls    177.8 us/call  sgemm_nocopy_tn_16x8_2x4x4
+== card bdf 0:135:0.0: kernels 50.07 s, copies/fills 0.32 s 
+    15.141 s       770 calls  19663.9 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     9.317 s       414 calls  22504.2 us/call  glmb::maya_attn_xmx#1
+     6.524 s       770 calls   8473.0 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     4.597 s       414 calls  11104.6 us/call  glmb::dsa_score#1
+     2.050 s      6418 calls    319.4 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     1.862 s      8796 calls    211.7 us/call  strata::kernels::dequant_f16
+     1.363 s      1104 calls   1234.7 us/call  glmb::kda_rec_split#3
+     1.263 s      1540 calls    820.2 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.855 s       140 calls   6110.1 us/call  maya_kcopy
+     0.798 s       414 calls   1926.6 us/call  glmb::dsa_select#1
+     0.781 s      1540 calls    507.1 us/call  strata::prefill::mmq::quantize
+     0.643 s      1610 calls    399.1 us/call  glmb::hc_update#1
+     0.477 s      1540 calls    310.0 us/call  glmb::hc_finish#1
+     0.453 s       770 calls    588.1 us/call  glmb::swiglu_rows#1
+     0.387 s     16551 calls     23.4 us/call  sgemm_nocopy_tn_32x16_2x4x4
+     0.379 s      2160 calls    175.6 us/call  sgemm_nocopy_tn_16x8_2x4x4
+== card bdf 0:195:0.0: kernels 37.73 s, copies/fills -0.12 s 
+    11.904 s       630 calls  18894.8 us/call  grouped_gemm_esimd_kernel<block_iq2_s, 
+     6.010 s       276 calls  21775.0 us/call  glmb::maya_attn_xmx#1
+     2.913 s       276 calls  10555.4 us/call  glmb::dsa_score#1
+     2.809 s       350 calls   8026.2 us/call  grouped_gemm_esimd_kernel<block_iq3_xxs, 
+     2.698 s       280 calls   9637.5 us/call  grouped_gemm_esimd_kernel<block_iq3_s, 
+     1.771 s      5422 calls    326.6 us/call  gemm_f16f16f32_nocopy_tn_32x64_8x4
+     1.545 s      7274 calls    212.4 us/call  strata::kernels::dequant_f16
+     1.178 s       966 calls   1219.9 us/call  glmb::kda_rec_split#3
+     1.015 s      1260 calls    805.9 us/call  grouped_gemm_pack_b<fg_combo<sycl::_V1::detail::half_impl::half, sycl:
+     0.633 s      1260 calls    502.7 us/call  strata::prefill::mmq::quantize
+     0.530 s      1330 calls    398.3 us/call  glmb::hc_update#1
+     0.500 s       276 calls   1812.4 us/call  glmb::dsa_select#1
+     0.382 s      1260 calls    303.4 us/call  glmb::hc_finish#1
+     0.366 s       630 calls    580.4 us/call  glmb::swiglu_rows#1
+     0.363 s        70 calls   5191.0 us/call  maya_kcopy
+     0.318 s      1903 calls    167.2 us/call  sgemm_nocopy_tn_16x8_2x4x4
+#PREFILL
+glm prefill: 65536 tokens in 34762.4 ms (0.53 ms/token, 1885 tok/s), 43 chunks of 1536 tokens | CUDA0 32147 ms, CUDA1 31705 ms (hop in 277 ms), CUDA2 29280 ms (hop in 292 ms), CUDA3 23083 ms (hop in 221 ms)
+glm prefill: 49535 tokens in 29051.9 ms (0.59 ms/token, 1705 tok/s), 33 chunks of 1536 tokens | CUDA0 26408 ms, CUDA1 26093 ms (hop in 158 ms), CUDA2 24121 ms (hop in 148 ms), CUDA3 18704 ms (hop in 153 ms)
+glm prefill: 32767 tokens in 18349.8 ms (0.56 ms/token, 1786 tok/s), 22 chunks of 1536 tokens | CUDA0 15996 ms, CUDA1 15720 ms (hop in 144 ms), CUDA2 14512 ms (hop in 155 ms), CUDA3 11540 ms (hop in 118 ms)
+glm prefill: 8191 tokens in 7016.7 ms (0.86 ms/token, 1167 tok/s), 6 chunks of 1408 tokens | CUDA0 4485 ms, CUDA1 4340 ms (hop in 32 ms), CUDA2 4043 ms (hop in 34 ms), CUDA3 3397 ms (hop in 30 ms)
