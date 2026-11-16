@@ -187,8 +187,8 @@ pack = gm / 'pack'
 venv = W / 'venv'; py = venv / 'Scripts' / 'python.exe'
 if not py.exists():
     run([sys.executable, '-m', 'venv', venv])
-    run([py, '-m', 'pip', 'install', '-q', 'numpy', 'jinja2', 'tokenizers'])
-if not (pack / 'index.txt').exists():
+    run([py, '-m', 'pip', 'install', '-q', 'numpy', 'regex', 'jinja2', 'tokenizers'])
+if not ((pack / 'tokenizer' / 'tokenizer.json').exists() and (pack / 'native_experts.txt').exists()):
     run([py, W / 'maya' / 'tools' / 'iq_pack.py', '--gguf', gm / list(SHARDS)[0], '--out', pack, '--compat-bf16'],
         cwd=W / 'maya', env=dict(os.environ, STRATA_GGUF_PY=str(W / 'llama.cpp-3cf0325' / 'gguf-py')))
 print('  ' + str(pack))
