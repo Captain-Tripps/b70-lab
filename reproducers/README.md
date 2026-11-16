@@ -59,11 +59,12 @@ Files: `l0_mt_submit.cpp`, run logs `run1.txt` ... `run5-driver-8976.txt`, `stac
 
 ## Parked next step: a newer Level Zero loader under the v2 adapter
 
-Not run yet. On Linux, @92es reports
+On Linux, @92es reports
 ([B70 Collaborate, 2026-11-14](https://github.com/Captain-Tripps/b70-lab/discussions/3#discussioncomment-19623607))
-that the v2 adapter now runs his 2- and 4-buffer exchange after building the Level Zero loader 1.35.0 and the Unified
-Runtime from source, the runtime linked against that loader. His finding: the Unified Runtime binds to the loader it
-was built against, so installing a newer loader alone is not enough there.
+that the v2 adapter now runs their 2- and 4-buffer exchange after building the Level Zero loader 1.35.0 and the Unified
+Runtime from source, the runtime linked against that loader. Their finding: the Unified Runtime binds to the loader it
+was built against, so installing a newer loader alone is not enough there. A later reply in the same thread says their
+integrated GPU now works under that build too. Loader v1.36.0 came out on 2026-11-13.
 
 The Windows test machine has loader 1.33.1 (shipped with driver 32.0.101.9175) and the oneAPI 2026.0 Unified Runtime.
 Two v2 problems are open here: the cross-device `ext_oneapi_submit_barrier` abort
@@ -71,14 +72,35 @@ Two v2 problems are open here: the cross-device `ext_oneapi_submit_barrier` abor
 
 Test, cheapest first:
 
-1. The official loader 1.35.0 (or newer) Windows build placed next to the test executables, nothing system-wide.
-   Re-run `l0-deadlock` and the standalone barrier exchange test
-   ([tensor-split notes](../llama.cpp-sycl/TENSOR-SPLIT-DECODE.md)) on the v2 adapter.
-2. Only if 1 changes nothing: build the Unified Runtime against that loader, as on Linux.
+1. Loader 1.35.0 next to the test executables, nothing system-wide. **Ran 2026-11-15; it cannot answer the
+   question** (below).
+2. Build the Unified Runtime against that loader, as on Linux. Not run; this is now the only way to test it.
 
 What it could buy: the barrier exchange for llama.cpp `-sm tensor` on the v2 adapter (the related two-staging-slot
 change measured +1-2%), and dropping the GLM port's forced v1 adapter (its v1/v2 A/B showed no speed difference). So
 this is mainly a bug check for #556; little speed is expected.
+
+### Step 1 result (2026-11-15): a drop-in loader is not usable with the oneAPI 2026.0 runtime
+
+- The Windows SDK zip for 1.35.0 has headers and `ze_loader.lib` only, no `ze_loader.dll`. The DLL was built from the
+  v1.35.0 source tag (MSVC, Release).
+- Copying `ze_loader.dll` next to the executable does nothing: the SYCL proxy loader loads the Level Zero adapter with
+  a System32-only search, so the System32 1.33.1 loader is used anyway. To get the local copy loaded, the test
+  executables were relinked with a direct import of `ze_loader.dll` (Windows then maps it from the executable's
+  folder before SYCL starts, and the adapter reuses it). Each run prints the loader module actually loaded.
+- With 1.35.0 actually loaded, the runtime finds no GPU. The loader loads the Intel driver, then the runtime's
+  built-in loader stub requests API v1.14 and `zeDdiTableInit` fails with `ZE_RESULT_ERROR_UNSUPPORTED_VERSION`
+  (seen with `ZE_ENABLE_LOADER_DEBUG_TRACE=1`). This matches the Linux finding: the runtime has to be built against
+  the new loader.
+- Baseline on 1.33.1 in the same session, v2 adapter, `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS` unset:
+
+| Test | Runs | Result on 1.33.1 |
+|---|---|---|
+| Barrier exchange, 2 cards, 200 rounds | 9 | aborts every run (`Abort was called at 3576 line`, 0xC0000409), before round 0 finishes |
+| `spin5` cross-queue checks, 2 cards | 2 | aborts at the same line, after the plain memcpy steps pass |
+| `l0-deadlock`, 4 threads x 4 cards, 60 s | 9 | hangs in 5 of 9 (a thread makes no progress for 30 s) |
+
+Both bugs still reproduce on 1.33.1. Whether 1.35.0 or 1.36.0 fixes them is unknown until step 2.
 
 ## ep-probe: can two B70s share memory on Windows?
 

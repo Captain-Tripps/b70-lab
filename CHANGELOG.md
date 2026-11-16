@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-15
+- **Level Zero loader 1.35.0 drop-in test on Windows: no answer yet.** Built from source (the Windows SDK has no DLL). Placed next to the executables it is ignored; forced in, the oneAPI 2026.0 runtime finds no GPU (`ZE_RESULT_ERROR_UNSUPPORTED_VERSION`). Both v2 bugs still reproduce on 1.33.1. Next is building the Unified Runtime against the new loader. [Reproducers](reproducers/README.md#parked-next-step-a-newer-level-zero-loader-under-the-v2-adapter).
+
 ## 2026-11-14
 - **GLM-5.3 decode +3.5%: aligned-load Q6_K mat-vec, live.** The dense one-column mat-vec reads each lane's weights as aligned 32-bit words (210-byte blocks are 0-3 bytes off) and takes two rows a warp: 8-14% faster per kernel, decode on code 52.2-52.9 -> 54.5-54.6 tok/s, output bit-exact. Two traps on the way: pack tensors at odd offsets, and FMA contraction under the engine's `-fp-model=precise`. [Aligned Q6_K](glm-5.3/sycl-port/experiments/2026-11-14-q6k-aligned-gemv/).
 - **GLM-5.3 decode profile.** Every expert is VRAM-resident and decode is already a two-stage spec pipeline (CUDA0+1 / CUDA2+3); a step is the tail stage plus the MTP draft in series, and each card idles ~50%. VTune per-kernel time: routed experts ~27% of decode kernel time, dense GEMV ~55%; expert kernels at ~52% of bandwidth, dense at ~69%. A host-staged cross-card hop costs 19 us at 64 KB. Expert parallelism rejected; new decode leads L7-L11 ranked. Nothing changed live. [Decode profile](glm-5.3/sycl-port/experiments/2026-11-14-decode-profile/).
