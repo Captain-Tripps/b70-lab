@@ -19,6 +19,9 @@ Intel's `icx` compiler, including two-card expert parallel and int8 KV.
 - Upstream Strata (Niko1221/Strata) v0.2.12 does not include this two-card expert parallel mode. Built on Windows, its
   helper-card mode (`--expert-cache-device1 auto`) decoded 32 tok/s because of an adaptive-tier check that ignores the
   helper's cache; fixed to 61 tok/s in Niko1221/Strata#5540 (2026-11-07).
+- Prompt read +31%, live 2026-11-17: the grouped expert path now runs on IQ3_S (per-layer type check), on both cards
+  (a `T_max == 12288` pin kept the second card off it), and on the llama.cpp fork's ESIMD grouped GEMM. 32k read
+  1,680 -> 2,194 tok/s, decode unchanged. Patch, shim and numbers in [esimd-prefill/](esimd-prefill/).
 
 Patches (prepared with AI assistance; Strata is MIT, notice in
 [../LICENSES/Strata-LICENSE](../LICENSES/Strata-LICENSE)). Apply in order with `git apply`:
@@ -31,7 +34,7 @@ Patches (prepared with AI assistance; Strata is MIT, notice in
 | `0004` optional timer-resolution request | `STRATA_WIN_TIMER_MS=N` calls `timeBeginPeriod(N)` at engine start (default 1, 0 = off). Measured: no effect on decode (72 vs 72 tok/s); the configs set it to 0 |
 
 `configs/` has the engine configs used below (paths replaced with placeholders): `strata-iq3s-200k1-pf8k.json` (the
-current best setup), `strata-ep2-jit.json` (IQ3_XXS, int8, 2 x 200k), `strata-ep2-int8-32k.json`, `strata-ep2-fp16-96k.json`.
+current best setup; since 2026-11-17 it needs the [esimd-prefill/](esimd-prefill/) build), `strata-ep2-jit.json` (IQ3_XXS, int8, 2 x 200k), `strata-ep2-int8-32k.json`, `strata-ep2-fp16-96k.json`.
 
 ## How to run it
 
@@ -82,7 +85,7 @@ folder, `tokenizer` is the pack's `tokenizer` folder.
 | `--ple-io` | `mmap` | `direct` reads the 27 GB PLE table from the SSD every token; needs ~27 GB free RAM |
 | `--spec` / `--spec-min-p` | `4` / `0` (upstream defaults) | other values were equal or worse |
 | `--expert-parallel-device` | `1` | the second card |
-| `STRATA_NIGHT_PREFILL_GROUPED` | `0` | the grouped prefill kernel does not support IQ3_S (IQ3_XXS needs it on) |
+| `STRATA_NIGHT_PREFILL_GROUPED` / `_MAX` / `STRATA_NIGHT_PREFILL_ESIMD` | `1` / `1024` / `1` | needs the [esimd-prefill/](esimd-prefill/) patch and build; without it, `GROUPED` must be `0` for IQ3_S |
 | `STRATA_VERIFY_DEVICE_PLAN`, `STRATA_VERIFY_NO_HOST` | `1`, `1` | without them verify waits on a host doorbell and hangs |
 | `ONEAPI_DEVICE_SELECTOR` | e.g. `level_zero:2,3` | the two cards to use |
 
@@ -188,8 +191,10 @@ it replaced IQ3_XXS.
 
 ## Strata settings that matter
 
-- `STRATA_NIGHT_PREFILL_GROUPED` must be **0 for IQ3_S**: the grouped prefill kernel does not support it (engine
-  error "card 0 gate/up type 23", then a restart). IQ3_XXS needs it **on** (off: prompt read 239 tok/s).
+- `STRATA_NIGHT_PREFILL_GROUPED` must be **0 for IQ3_S** on the unpatched engine: the grouped prefill kernel does not
+  support it (engine error "card 0 gate/up type 23", then a restart). IQ3_XXS needs it **on** (off: prompt read 239
+  tok/s). With the [esimd-prefill/](esimd-prefill/) patch (2026-11-17) each layer checks its own types, so IQ3_S runs
+  with it on: 32k read 1,680 -> 2,194 tok/s.
 - Prompt chunk size matters a lot: IQ3_S with 4k chunks 881 tok/s, with 8k chunks 1,415 tok/s.
 - IQ3_S at 2 x 200k and 2 x 131k does not fit on two 32 GB cards; 1 x 200k and 2 x 112k do.
 

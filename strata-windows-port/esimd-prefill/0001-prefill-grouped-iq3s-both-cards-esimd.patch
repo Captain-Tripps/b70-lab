@@ -1,0 +1,337 @@
+From: Captain-Tripps
+Subject: [PATCH] sycl prefill: grouped expert path for IQ3_S, both cards, ESIMD GEMM option
+
+Three changes to the prompt-read expert path (STRATA_NIGHT_PREFILL_GROUPED).
+
+1. Per-layer type check. The grouped path was all-or-nothing on the
+   model's expert types, so a quant mix with one unsupported layer (IQ3_S:
+   one IQ4_XS layer, some Q2_0 down layers) never took it. Each layer now
+   checks its own types (night_grouped_layer_ok) and falls back to dequant
+   + oneMKL on its own. Chunks shorter than STRATA_NIGHT_PREFILL_GROUPED_MIN_T
+   (default 256) also keep the old path, so MTP verify windows are unchanged.
+
+2. The second card. peer_alias_resident required m.T_max == 12288 and a
+   whole-model type list, so at --prefill 8192 the expert-parallel card
+   never ran the grouped path. The rows buffer is T_max*K*N*4, so the pin
+   is not needed; it is now m.T_max > 0, and the type check is per layer.
+   stderr prints "peer alias path on/off (T_max N)" once.
+
+3. STRATA_NIGHT_PREFILL_ESIMD=1 runs the grouped experts' GEMMs on the
+   llama.cpp SYCL fork's ESIMD grouped dequant GEMM (llama.cpp#31428 plus
+   an IQ2_S loader and 64-wide tiles), linked through a small C shim
+   (strata_esimd_shim.cpp) built as its own object library, because the
+   fork's dpct helper and Strata's dpct headers both define namespace dpct.
+   Gate/up run as one stacked GEMM when the up rows follow the gate rows,
+   then a split-layout SwiGLU, then down. Types the kernel does not cover
+   (Q2_0 down) fall back to night_grouped_f16. CMake builds it only when
+   STRATA_ESIMD_DIR and STRATA_ESIMD_FORK are set. Entry lists go up
+   through a small pinned ring (STRATA_NIGHT_PREFILL_PINNED_UP, default 1).
+   With STRATA_PREFILL_TIMING the peer timeline adds grouped prep, grouped
+   gate/up, grouped act+down and reduce.
+
+Measured (Windows, 2x Arc Pro B70, Qwen3.8-Flash-Next GSQ-RCO IQ3_S,
+--prefill 8192, timing off, 32k-token prompt, three interleaved rounds):
+base 1,680 tok/s, (1) 1,989, (1)+(3) on card 0 2,132, all three 2,194
+(+31%). Decode unchanged (114-116 short, 106-108 after 32k). Greedy
+output: first tokens identical at 32k; an 8k answer rewords at token 4
+(rounding-level drift, same content).
+
+---
+diff --git a/sycl/CMakeLists.txt b/sycl/CMakeLists.txt
+index 56becbb..cd64fb4 100644
+--- a/sycl/CMakeLists.txt
++++ b/sycl/CMakeLists.txt
+@@ -280,6 +280,22 @@ target_compile_options(strata_prefill PUBLIC ${_strata_mkl})
+ target_link_options(strata_prefill PUBLIC ${_strata_mkl})
+ target_link_libraries(strata_prefill PUBLIC strata_engine)
+ 
++# night lab: the llama.cpp SYCL fork's ESIMD grouped dequant GEMM for the grouped prefill experts
++# (STRATA_NIGHT_PREFILL_ESIMD). Off unless STRATA_ESIMD_DIR (fused-gemm-esimd.cpp + strata_esimd_shim.cpp) and
++# STRATA_ESIMD_FORK (the fork's ggml dir) are set; built with the fork's headers, apart from Strata's dpct.
++set(STRATA_ESIMD_DIR "" CACHE PATH "dir with fused-gemm-esimd.cpp and strata_esimd_shim.cpp")
++set(STRATA_ESIMD_FORK "" CACHE PATH "the llama.cpp SYCL fork's ggml dir")
++if(STRATA_ESIMD_DIR AND STRATA_ESIMD_FORK)
++  add_library(strata_esimd OBJECT ${STRATA_ESIMD_DIR}/fused-gemm-esimd.cpp ${STRATA_ESIMD_DIR}/strata_esimd_shim.cpp)
++  target_include_directories(strata_esimd BEFORE PRIVATE ${STRATA_ESIMD_DIR} ${STRATA_ESIMD_FORK}/src/ggml-sycl
++                             ${STRATA_ESIMD_FORK}/src ${STRATA_ESIMD_FORK}/include)
++  target_compile_definitions(strata_esimd PRIVATE GGML_SYCL_F16 GGML_SYCL_SUPPORT_XMX GGML_SYCL_WARP_SIZE=16
++                             GGML_SYCL_XMX_AOT_SG=16 MKL_ILP64 NOMINMAX _CRT_SECURE_NO_WARNINGS)
++  target_compile_options(strata_esimd PRIVATE -Wno-narrowing)
++  target_sources(strata_prefill PRIVATE $<TARGET_OBJECTS:strata_esimd>)
++  target_compile_definitions(strata_prefill PRIVATE STRATA_ESIMD=1)
++endif()
++
+ strata_resolve(_main src/program/generate.cpp)
+ add_executable(strata ${_main})
+ target_link_libraries(strata PRIVATE strata_engine strata_prefill strata_spec)
+diff --git a/sycl/src/prefill/prefill.cpp b/sycl/src/prefill/prefill.cpp
+index ce67e99..1265b3d 100644
+--- a/sycl/src/prefill/prefill.cpp
++++ b/sycl/src/prefill/prefill.cpp
+@@ -52,9 +52,11 @@
+ #include <atomic>
+ #include <condition_variable>
+ #include <cstring>
++#include <map>
+ #include <future>
+ #include <memory>
+ #include <mutex>
++#include <set>
+ #include <thread>
+ #include <vector>
+ 
+@@ -395,6 +397,109 @@ inline int night_grouped_max() {
+     }();
+     return v;
+ }
++// night lab GROUPED, per layer: night_grouped_f16 decodes types 16 17 18 20 21 22 42 (night_grouped.hpp); a layer with
++// any other gate/up or down type (Flash-Next GSQ-RCO's layer 47 is IQ4_XS gate/up) keeps dequant + oneMKL for all its
++// experts instead of failing the request
++inline bool night_grouped_type(int t) { return t == 16 || t == 17 || t == 18 || t == 20 || t == 21 || t == 22 || t == 42; }
++inline bool night_grouped_layer_ok(int gt, int dt) { return night_grouped_type(gt) && night_grouped_type(dt); }
++// STRATA_NIGHT_PREFILL_GROUPED_MIN_T (default 256): chunks shorter than this keep dequant + oneMKL (a short read has
++// few rows an expert, where the grouped launches do not pay)
++inline int64_t night_grouped_min_t() {
++    static const int64_t v = [] {
++        const char* e = std::getenv("STRATA_NIGHT_PREFILL_GROUPED_MIN_T");
++        return e ? (int64_t) std::max(0, std::atoi(e)) : (int64_t) 256;
++    }();
++    return v;
++}
++// night lab ESIMD (STRATA_NIGHT_PREFILL_ESIMD=1, a build with STRATA_ESIMD): the grouped pass's GEMMs on the llama.cpp
++// SYCL fork's ESIMD grouped dequant GEMM (strata_esimd_shim.cpp) where it covers the type, else night_grouped_f16 as
++// before. Gate/up go as one 1280-row GEMM (gate and up stacked in the slot), so the activation uses the split layout.
++#ifdef STRATA_ESIMD
++extern "C" int strata_esimd_grouped(void* q, int type, const void* const* w, const int64_t* row0, const int32_t* rows,
++                                    int n_ent, const uint16_t* x, float* y, int M, int K);
++extern "C" void strata_swiglu_split(const float* gu, uint16_t* h16, int64_t n, void* q);
++#endif
++inline bool night_esimd() {
++#ifdef STRATA_ESIMD
++    static const bool v = [] {
++        const char* e = std::getenv("STRATA_NIGHT_PREFILL_ESIMD");
++        return e != nullptr && std::atoi(e) != 0;
++    }();
++    return v;
++#else
++    return false;
++#endif
++}
++// one grouped pass's experts for the ESIMD GEMMs: slot, first row, rows
++struct NightEsimdSet {
++    std::vector<const void*> gw, dw;
++    std::vector<int64_t> r0;
++    std::vector<int32_t> n;
++    void clear() { gw.clear(); dw.clear(); r0.clear(); n.clear(); }
++    void add(const uint8_t* bd, uint64_t down_off, int64_t o, int32_t c) {
++        gw.push_back(bd); dw.push_back(bd + down_off); r0.push_back(o); n.push_back(c);
++    }
++};
++// gate/up + SwiGLU (+ down) of `s` on q: X [rows][N] FP16 -> GU [rows][1280] -> H [rows][640] FP16 -> Y [rows][N] FP32.
++// 0: nothing launched (the caller's own path does all of it); 1: all done; 2: H is ready, down is the caller's (a down
++// type the ESIMD GEMM does not take, Q2_0). Counters for the timing summary.
++inline int64_t g_night_esimd_gu = 0, g_night_esimd_d = 0, g_night_esimd_no = 0;
++template <typename Mid> inline int night_esimd_ffn(Mid&& mid, sycl::queue* q, int gu_type, int d_type, bool stacked, NightEsimdSet& s, const uint16_t* X,
++                           float* GU, uint16_t* H, float* Y, int64_t rows, int N) {
++#ifdef STRATA_ESIMD
++    // first outcome of each (gate/up, down) type pair to stderr, so a run shows where ESIMD engaged
++    static std::mutex mu;
++    static std::set<int> seen;
++    auto note = [&](int rc) {
++        std::lock_guard<std::mutex> g(mu);
++        if (seen.insert(gu_type * 1000 + d_type).second)
++            std::fprintf(stderr, "strata: night ESIMD gate/up type %d down type %d stacked %d: %s\n", gu_type, d_type, (int) stacked,
++                         rc == 1 ? "both ESIMD" : rc == 2 ? "gate/up ESIMD, down night_grouped" : "night_grouped");
++    };
++    if (!night_esimd() || !stacked || s.n.empty()) { ++g_night_esimd_no; note(0); return 0; }
++    const int ne = (int) s.n.size();
++    if (!strata_esimd_grouped(q, gu_type, s.gw.data(), s.r0.data(), s.n.data(), ne, X, GU, 1280, N)) { ++g_night_esimd_no; note(0); return 0; }
++    ++g_night_esimd_gu;
++    mid();   // a timeline mark between gate/up and the rest
++    strata_swiglu_split(GU, H, rows, q);
++    if (!strata_esimd_grouped(q, d_type, s.dw.data(), s.r0.data(), s.n.data(), ne, H, Y, N, 640)) { note(2); return 2; }
++    ++g_night_esimd_d;
++    note(1);
++    return 1;
++#else
++    (void) mid; (void) q; (void) gu_type; (void) d_type; (void) stacked; (void) s; (void) X; (void) GU; (void) H; (void) Y; (void) rows; (void) N;
++    return 0;
++#endif
++}
++// night lab: the grouped entry tables go up from a ring of pinned host buffers (STRATA_NIGHT_PREFILL_PINNED_UP, default 1).
++// A copy from pageable host memory can hold the host thread until the queue reaches it, and under HALVES that host
++// thread also queues the other card's half; a pinned source lets the copy be truly asynchronous. A slot is reused
++// only after its copy has finished.
++inline bool night_pinned_up() {
++    static const bool v = [] { const char* e = std::getenv("STRATA_NIGHT_PREFILL_PINNED_UP"); return !e || std::atoi(e) != 0; }();
++    return v;
++}
++inline void night_upload(sycl::queue* q, void* dst, const void* src, size_t bytes) {
++    if (bytes == 0) return;
++    if (!night_pinned_up()) { q->memcpy(dst, src, bytes); return; }
++    struct Slot { void* p = nullptr; size_t cap = 0; sycl::event done; };
++    struct Ring { Slot s[8]; int next = 0; };
++    static std::mutex mu;
++    static std::map<sycl::queue*, Ring> rings;
++    std::lock_guard<std::mutex> g(mu);
++    Ring& r = rings[q];
++    Slot& s = r.s[r.next];
++    r.next = (r.next + 1) % 8;
++    s.done.wait();
++    if (s.cap < bytes) {
++        if (s.p) sycl::free(s.p, *q);
++        s.cap = bytes + bytes / 4 + 4096;
++        s.p = sycl::malloc_host(s.cap, *q);
++        if (!s.p) { s.cap = 0; q->memcpy(dst, src, bytes).wait(); return; }
++    }
++    std::memcpy(s.p, src, bytes);
++    s.done = q->memcpy(dst, s.p, bytes);
++}
+ inline bool night_f16sum() {
+     static const bool v = night_env("STRATA_NIGHT_PREFILL_F16SUM",
+                                     "the EP peer sums return as FP16 x per-token power-of-two scale (numerics change)");
+@@ -2361,8 +2466,8 @@ struct PfTimer {
+     }
+ };
+ // multi-GPU: the peer's own timeline (STRATA_PREFILL_TIMING): marks on the peer stream, folded with the primary's
+-enum PePhase { kPeIdle, kPeMoeIn, kPeMoeGemm, kPeMoeOut, kPeCount };
+-const char* const kPeNames[kPeCount] = {"idle", "moe in", "moe gemm", "moe out"};
++enum PePhase { kPeIdle, kPeMoeIn, kPeMoeGemm, kPeMoeOut, kPeNgPrep, kPeNgGU, kPeNgDown, kPeReduce, kPeCount };
++const char* const kPeNames[kPeCount] = {"idle", "moe in", "moe gemm (big experts)", "moe out", "grouped prep", "grouped gate/up", "grouped act+down", "reduce"};
+ struct PeTimer {
+     bool on = std::getenv("STRATA_PREFILL_TIMING") != nullptr;
+     int dev = -1;
+@@ -2584,7 +2689,7 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+         if (peer_alias_opt && !m.borrowed && LB == 0 && LE == 48 && !next_ && !hand_in_ &&
+             g.n_layers == 48 && g.n_embd == N && g.n_expert == 512 && g.n_expert_used == K &&
+             g.n_ff == 640 && g.n_ff_shexp == 640 && g.hc == 4 && g.hc_lr == 320 &&
+-            ss.k == K && m.T_max == 12288 && m.cache && m.host_res && m.pp) {
++            ss.k == K && m.T_max > 0 && m.cache && m.host_res && m.pp) {
+             const auto& P = *m.pp;
+             const auto& layout = strata::kernels::cpu::expert_layout();
+             const char* async = std::getenv("STRATA_EP_PREFILL_ASYNC");
+@@ -2596,9 +2701,10 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                 layout.fmt.size() == (size_t) g.n_layers;
+             for (int64_t l = 0; peer_alias_resident && l < g.n_layers; ++l) {
+                 const auto& f = layout.fmt[(size_t) l];
+-                peer_alias_resident = f.n_embd == N && f.n_ff == 640 &&
+-                    (f.gu_type == 16 || f.gu_type == 17 || f.gu_type == 18 || f.gu_type == 21 || f.gu_type == 22) &&
+-                    (f.d_type == 20 || f.d_type == 42);
++                // the types are checked per layer (night_grouped_layer_ok) before a layer's experts take the grouped
++                // kernel; the alias path's other experts dequantize + oneMKL like the plain path, for any native type
++                // (a whole-model type list here kept Flash-Next GSQ-RCO, IQ4_XS gate/up in layer 47, off the alias path)
++                peer_alias_resident = f.n_embd == N && f.n_ff == 640;
+                 for (int64_t e = 0; peer_alias_resident && e < g.n_expert; ++e) {
+                     const int32_t a = m.cache->slot_of(l, e), b = P.ep->slot_of(l, e);
+                     const bool primary = a >= 0 && a < m.cache->slots() && m.cache->device_slot(a);
+@@ -2609,6 +2715,10 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                 }
+             }
+         }
++        if (peer_alias_opt) {   // night lab: once, whether the peer takes the alias (and so the grouped) path
++            static bool said = false;
++            if (!said) { said = true; std::fprintf(stderr, "strata prefill: peer alias path %s (T_max %lld)\n", peer_alias_resident ? "on" : "off", (long long) m.T_max); }
++        }
+         strata::core::prefill_host::chunk(p0, T);
+         core::progress_at("reading the prompt (batched): preparing the chunk from token", p0);   // #251
+         ++stats_.chunks;
+@@ -3864,6 +3974,7 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                         // night lab GROUPED (card 0): its own experts with <= G rows first, when every one of them is resident and
+                         // the layer takes the plain FP16 path (no MMQ, no XMX modes, nothing streamed this layer)
+                         bool ng0 = night_grouped() && (night_grouped_cards() & 2) && m.pp && m.pp->ipc() && m.pp->ng0_ent != nullptr && !use_mmq && lay.native &&
++                                   night_grouped_layer_ok(lay.fmt[(size_t) l].gu_type, lay.fmt[(size_t) l].d_type) && T >= night_grouped_min_t() &&
+                                    strata::prefill::xmx::mode() == 0 && m.Xs && m.Hh && m.cache && m.host_res &&
+                                    (!stream_all || seq_start[(size_t) l] == seq_start[(size_t) l + 1]);
+                         for (int32_t e = 0; ng0 && e < m.g->n_expert; ++e)
+@@ -4105,7 +4216,8 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                 // night lab GROUPED: the leading run of order_peer with <= G rows goes through the grouped
+                                 // kernels after the larger experts (processed first, from the highest offset, as before)
+                                 size_t ng_n = 0;
+-                                if (peer_alias && P.ng_ent != nullptr && (night_grouped_cards() & 1))
++                                if (peer_alias && P.ng_ent != nullptr && (night_grouped_cards() & 1) &&
++                                    night_grouped_layer_ok(f.gu_type, f.d_type) && T >= night_grouped_min_t())
+                                     while (ng_n < n && m.cnt[(size_t) order_peer[ng_n]] <= night_grouped_max()) ++ng_n;
+                                 for (size_t j = 0; j < n - ng_n; ++j) {
+                                     const int32_t e = order_peer[peer_alias ? n - 1 - j : j];
+@@ -4135,6 +4247,7 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                     ps->memcpy(P.chk_x, alias_x + chk_a * N, (size_t) chk_rows * N * 2);
+                                 }
+                                 if (ng_n > 0) {
++                                    pe.mark(kPeNgPrep, ps);
+                                     // entries: each small expert cut into row tiles of 16 / 32 / 64 (by its count), grouped
+                                     // by tile size inside batches of <= T_max rows (GUf / Hh capacity); gate/up table then
+                                     // down table, uploaded in one copy
+@@ -4176,10 +4289,22 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                     const size_t ne_gu = ng_host.size();
+                                     if (2 * ne_gu > P.ng_cap) { err = "prefill (STRATA_NIGHT_PREFILL_GROUPED): too many entries"; return false; }
+                                     ng_host.insert(ng_host.end(), dn.begin(), dn.end());
+-                                    ps->memcpy(P.ng_ent, ng_host.data(), ng_host.size() * sizeof(sk::NightGroupedEntry));
++                                    night_upload(ps, P.ng_ent, ng_host.data(), ng_host.size() * sizeof(sk::NightGroupedEntry));
++                                    const bool es_stacked = (uint64_t) f.up_off == (uint64_t) 640 * (uint64_t) f.gu_row;
++                                    NightEsimdSet es;
+                                     for (size_t bi = batches.size(); bi-- > 0;) {   // highest offsets first (alias in place)
+                                         const Batch& b = batches[bi];
+-                                        for (int t = 0; t < 4; ++t) {
++                                        int es_rc = 0;
++                                        pe.mark(kPeNgGU, ps);
++                                        if (night_esimd()) {
++                                            es.clear();
++                                            for (int t = 0; t < 4; ++t)
++                                                for (size_t i = b.gu[t][0]; i < b.gu[t][1]; ++i)
++                                                    es.add(ng_host[i].w, f.down_off, ng_host[i].row0, ng_host[i].rows);
++                                            es_rc = night_esimd_ffn([&] { pe.mark(kPeNgDown, ps); }, ps, f.gu_type, f.d_type, es_stacked, es, alias_x + b.a * N, P.GUf, P.Hh,
++                                                                    rows + b.a * N, b.rows, (int) N);
++                                        }
++                                        for (int t = 0; t < 4 && es_rc == 0; ++t) {
+                                             const int cnt_t = (int) (b.gu[t][1] - b.gu[t][0]);
+                                             if (cnt_t > 0 && !sk::night_grouped_f16(f.gu_type, true, P.ng_ent + b.gu[t][0], cnt_t, 2 << t,
+                                                                                      alias_x + b.a * N, P.GUf, 1280, (int) N, f.up_off, ps)) {
+@@ -4188,8 +4313,8 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                             }
+                                             P.ng_launches += cnt_t > 0;
+                                         }
+-                                        swiglu_interleaved(P.GUf, P.Hh, b.rows, ps);
+-                                        for (int t = 0; t < 4; ++t) {
++                                        if (es_rc == 0) { pe.mark(kPeNgDown, ps); swiglu_interleaved(P.GUf, P.Hh, b.rows, ps); }
++                                        for (int t = 0; t < 4 && es_rc != 1; ++t) {
+                                             const int cnt_t = (int) (b.gu[t][1] - b.gu[t][0]);
+                                             if (cnt_t > 0 && !sk::night_grouped_f16(f.d_type, false, P.ng_ent + ne_gu + b.gu[t][0], cnt_t, 2 << t,
+                                                                                      P.Hh, rows + b.a * N, (int) N, 640, 0, ps)) {
+@@ -4220,6 +4345,7 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                         night_grouped_report("card 1", l, p0, ga, gb, ex, N, f.gu_type, f.d_type);
+                                     }
+                                 }
++                                pe.mark(kPeReduce, ps);
+                                 strata::core::prefill_host::mark("peer_loop_end");
+                                 // night lab HALVES: this half's rows of the sum region (FP16: rows, then the chunk's scale
+                                 // column), and the last work-group raises card 0's sum doorbell
+@@ -4892,18 +5018,25 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                 }
+                                 const size_t ne_gu = ng0_host.size();
+                                 ng0_host.insert(ng0_host.end(), dn.begin(), dn.end());
+-                                m.cs->memcpy(P0.ng0_ent, ng0_host.data(), ng0_host.size() * sizeof(sk::NightGroupedEntry));
++                                night_upload(m.cs, P0.ng0_ent, ng0_host.data(), ng0_host.size() * sizeof(sk::NightGroupedEntry));
+                                 pt.mark(kPfGemmGU, cs);
+-                                for (int t = 0; t < 4; ++t)
++                                int es_rc = 0;
++                                if (night_esimd()) {
++                                    NightEsimdSet es;
++                                    for (size_t i = 0; i < ne_gu; ++i) es.add(ng0_host[i].w, f.down_off, ng0_host[i].row0, ng0_host[i].rows);
++                                    es_rc = night_esimd_ffn([] {}, m.cs, f.gu_type, f.d_type, (uint64_t) f.up_off == (uint64_t) 640 * (uint64_t) f.gu_row,
++                                                            es, m.Xs, m.GU, m.Hh, m.Dm, S, (int) N);
++                                }
++                                for (int t = 0; t < 4 && es_rc == 0; ++t)
+                                     if (lim[t + 1] > lim[t] &&
+                                         !sk::night_grouped_f16(f.gu_type, true, P0.ng0_ent + lim[t], (int) (lim[t + 1] - lim[t]), 2 << t,
+                                                                m.Xs, m.GU, 1280, (int) N, f.up_off, m.cs)) {
+                                         err = "prefill (STRATA_NIGHT_PREFILL_GROUPED): card 0 gate/up type " + std::to_string(f.gu_type);
+                                         return false;
+                                     }
+-                                swiglu_interleaved(m.GU, m.Hh, S, m.cs);
++                                if (es_rc == 0) swiglu_interleaved(m.GU, m.Hh, S, m.cs);
+                                 pt.mark(kPfGemmD, cs);
+-                                for (int t = 0; t < 4; ++t)
++                                for (int t = 0; t < 4 && es_rc != 1; ++t)
+                                     if (lim[t + 1] > lim[t] &&
+                                         !sk::night_grouped_f16(f.d_type, false, P0.ng0_ent + ne_gu + lim[t], (int) (lim[t + 1] - lim[t]), 2 << t,
+                                                                m.Hh, m.Dm, (int) N, 640, 0, m.cs)) {
