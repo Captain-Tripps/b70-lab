@@ -1,0 +1,102 @@
+CHECK-006 - SOURCE_AUDIT (PASS)
+Checked: 2026-11-16T22:39:34Z
+Run: deepseek-1017-arc-pro-windows (research-first-build, research-only)
+Criterion: Key ledger claims (EV-001..EV-011) re-audited against their original sources; no contradictions found; open unknowns recorded.
+
+Method
+1. Pinned-commit claims were re-verified against the PRIMARY local source on Zeus
+   (D:\llama-unmap2, a git worktree of D:\llama-unmap, detached HEAD read directly
+   from /mnt/d/llama-unmap/.git/worktrees/llama-unmap2/HEAD):
+     - 9fba51d2c9a1b5cb5f0c47986c031334e2d7663a  (confirmed, matches SRC-001/SRC-002/SRC-010)
+   Commands run read-only via zeus-run.mjs (grep/sed/ls/cat), 2026-11-16T22:30-22:38Z.
+2. The b12445 release asset list was re-verified live via the GitHub API:
+   gh api repos/ggml-org/llama.cpp/releases/tags/b12445
+   -> "llama-b12445-bin-win-sycl-x64.zip" present; published_at 2026-11-16T20:44:41Z.
+3. All other claims were re-checked line-by-line against the recorded source notes
+   (sources/SRC-*.md), which capture the exact source content at the pinned
+   revision/URL with access times; cross-note consistency was verified
+   (SRC-002 <-> SRC-005 fix linkage; SRC-004 <-> SRC-003 release line;
+   SRC-010 hardware <-> SRC-006/SRC-007 fit math; SRC-008/SRC-009 anchor limits).
+
+Per-EV re-verification (EV-001..EV-011)
+EV-001  CONSISTENT. SYCL.md re-read at pinned commit: OS table lists Windows 11 as
+        supported; prebuilt Windows package "including binary files and depended
+        oneAPI dll files"; source build via examples\sycl\win-build-sycl.bat;
+        GGML_SYCL_BMG_VRAM_CHECK present in the env-var table (line 844, BMG
+        allocation-overflow workaround, default 1).
+EV-002  CONSISTENT, STATEMENT CORRECTED. Documented selector forms are
+        "level_zero:0;level_zero:1" (named pair) or "level_zero:*" (all devices),
+        NOT the abbreviated "level_zero:0;1;2;3" form initially recorded in the
+        ledger; ledger updated. ZES_ENABLE_SYSMAN=1 is documented as "Recommended
+        to use when --split-mode = layer" (env-var table), not strictly required;
+        ledger reworded. Tensor split "currently optimized for 2 GPUs; other
+        device counts fall back to a generic all-reduce" (lines 434/747).
+EV-003  CONSISTENT, STRENGTHENED. set_rows.cpp re-read at pinned commit (577
+        lines): ggml_sycl_op_set_rows asserts src0 is F32/F16 and dispatches F16
+        sources to the sycl::half template (lines 560-575); the kernel's
+        destination switch contains a GGML_TYPE_BF16 case under
+        #ifdef GGML_SYCL_HAS_BF16 writing sycl::ext::oneapi::bfloat16
+        (lines 344-353). This is the cast issue #26462 identified as missing.
+        File also inspected at tag b12445 (per SRC-002).
+EV-004  CONSISTENT. PR #31086 "model: DSV4.1 flash" merged 2026-10-25; first
+        release b11870 (per SRC-004 note); b12445 is well past that.
+EV-005  CONSISTENT, RE-VERIFIED LIVE. GitHub API confirms the win-sycl asset in
+        the b12445 release and the exact publication timestamp. New observation
+        recorded: Linux SYCL assets ship as fp16/fp32 variants; the win-sycl
+        asset is a single build with no precision suffix (precision still
+        undocumented - limitation retained).
+EV-006  CONSISTENT. Issue #26462 content matches SRC-005 note (DS4F SIGSEGV on
+        Arc/B70 in SYCL set_rows; missing f16->bf16; fix linked).
+EV-007  CONSISTENT. Unsloth repo README/tree match SRC-006 note (UD-IQ1_S ~233 GB
+        smallest full quant; engram/ variants IQ4_NL 110.6 GB, Q5_K 135.2 GB,
+        Q6_K 161.3 GB, MXFP8 202.8 GB; set_split.py swap guidance).
+EV-008  CONSISTENT. ggml-org repo file tree matches SRC-007 note (Q2_K ~335 GB,
+        Q2_K_S ~298 GB, dspark draft, mmproj; no smaller full quant published).
+EV-009  CONSISTENT. project-maya INTEL_ARC.md matches SRC-008 note (V4.1 GGUFs on
+        multi-card Arc 88 GB Linux; >= b11870 expects deepseek41.ple.* layout;
+        Maya-XS distilled 45.6 t/s prefill / 10.9 t/s decode @64K).
+EV-010  CONSISTENT. snailium B70 README matches SRC-009 note (golden config;
+        470-490 t/s prefill / 41-46 t/s decode for a smaller model, Docker/Linux).
+EV-011  CONSISTENT. Zeus probe outputs match SRC-010 note (4x Arc Pro B70 32 GB,
+        driver 32.0.101.9175, Win 25H2, 112 GB RAM, WSL2 up / Docker stopped,
+        oneAPI 2026.0+2025.1, worktree at pinned commit). Worktree HEAD file was
+        re-read during this audit (step 1) - still at 9fba51d2c9a1b5cb5f0c47986c031334e2d7663a.
+
+Inference claims (EV-012..EV-014): premises all CONSISTENT as above; the
+inferences follow arithmetically/logically from them (233 GB vs ~224 GB usable
+budget; recipe composed of individually documented elements; speed prior bounded
+by the two anchors). No new facts introduced beyond premises.
+
+Corrections applied during this audit (ledger updated before render/check):
+1. EV-002: selector example changed to the documented forms ("level_zero:0;level_zero:1" /
+   "level_zero:*"); ZES_ENABLE_SYSMAN reworded from "required for full VRAM
+   visibility" to "recommended for --split-mode layer (enables free-memory
+   queries)"; tensor fallback wording added.
+2. Q-004 resolution, DEC-003 candidate/revisit trigger, STEP-003 outcome,
+   CHECK-003 command: selector changed to 'level_zero:*'; DEC-003 fallback
+   changed from "--split-mode row" (not in the current SYCL docs' split-mode
+   table; "row" appears only in the 2024.3 changelog as "on developing") to
+   "2+2 card pairs or --split-mode tensor (2-GPU optimized, requires flash
+   attention)".
+3. SRC-001/SRC-002/SRC-003 notes updated with the exact documented forms and
+   line-level locators; SRC-003 gained the API re-verification.
+
+Open unknowns (recorded; none blocks prebuild)
+1. KV cache size for V4.1 compressed KV at 32-64K context is not documented in
+   any inspected source; 32K is a conservative starting point and the margin
+   against the ~224 GB usable budget is tight (EV-012 limitation).
+2. 4-card Windows layer split: mechanism documented (EV-002) but no public
+   4-card Windows B70 stability report; all public B70 field reports are Linux
+   (EV-009, EV-010). Accepted risk; fallbacks: 2+2 pairs, tensor mode, WSL2.
+3. The b12445 win-sycl zip was not unpacked; asset presence verified by list and
+   API, contents and build precision (F16/F32) not inspected.
+4. Decode speed for the full 1017 with CPU-offloaded experts/engram is a prior
+   (EV-014), not a published number.
+5. Engram-swap semantics come from the unsloth README guide, not a measured run
+   (EV-007 limitation).
+6. WMI AdapterRAM is 32-bit capped; per-card 32 GB is from the card model, not
+   WMI (EV-011 limitation).
+
+Result: PASS - no contradictions between ledger claims and the original sources;
+two ledger inaccuracies found and corrected (selector form; row-mode fallback);
+all limitations and open unknowns recorded in the ledger.

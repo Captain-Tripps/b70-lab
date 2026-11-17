@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "run_id": "deepseek-1017-arc-pro-windows",
+  "stage": "PREBUILD_CHECKED",
+  "prebuild_receipt": {
+    "fingerprint": "65612fe8ba52e2a4bc44c3a8caaef8aa472ec8c8544401d129f3249f9deba0da",
+    "checked_at": "2026-11-16T22:48:43+00:00"
+  },
+  "postbuild_receipt": null,
+  "rendered_at": "2026-11-16T22:48:43+00:00"
+}

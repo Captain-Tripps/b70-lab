@@ -1,0 +1,819 @@
+{
+  "schema_version": 1,
+  "run_id": "deepseek-1017-arc-pro-windows",
+  "intent": "research-only",
+  "scope": {
+    "goal": "Determine everything needed to run DeepSeek-V4.1-Flash-1017 (GGUF) on Zeus's 4x Intel Arc Pro B70 (128 GB total VRAM, Windows 25H2), and produce a minimal, source-backed port plan with acceptance checks.",
+    "constraints": [
+      "Research-only: no builds, no execution, no live-service changes (llama-swap and Zeus runtime untouched)",
+      "GPUs sit on the Windows side of Zeus; the target path is Windows-native, not WSL2/Docker",
+      "Budget: 128 GB VRAM (4x32 GB) plus ~100 GB usable of 112 GB system RAM",
+      "llama.cpp master checkout already exists at D:\\llama-unmap2; oneAPI 2026.0/2025.1 already installed"
+    ],
+    "non_goals": [
+      "Actually downloading, building or running the model on Zeus in this run",
+      "Multi-node or multi-host configurations",
+      "Distilled/smaller variants as the primary deliverable (Maya-XS is fallback only)",
+      "Posting anything to upstream repos (llama.cpp bans agent-written text)",
+      "Non-GGUF stacks (MLX, safetensors-only) as the primary path"
+    ]
+  },
+  "coverage": {
+    "depth": "deep",
+    "reference_exception": "",
+    "rejection_note": "",
+    "limitations": [
+      "Performance anchors are for smaller models, not the full 1017 on B70s",
+      "4-card Windows layer split is not publicly documented as stable; all public B70 SYCL reports are Linux",
+      "Exact KV cache size for V4.1 compressed KV at 32-64K context is not documented in inspected sources",
+      "The b12445 win-sycl zip contents were not unpacked; asset list observed only"
+    ]
+  },
+  "questions": [
+    {
+      "id": "Q-001",
+      "question": "Does llama.cpp support loading DeepSeek-V4.1-Flash-1017 GGUFs on the SYCL backend, and from which release?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": ["EV-004", "EV-005", "EV-001"],
+      "resolution": "Yes. PR #31086 (model: DSV4.1 flash) merged 2026-10-25, so releases >= b11870 load V4.1 GGUFs; the latest release b12445 (published 2026-11-16T20:44Z) ships a prebuilt win-sycl zip."
+    },
+    {
+      "id": "Q-002",
+      "question": "Which GGUF quant of the full 1017 model fits Zeus's 128 GB VRAM + ~100 GB usable RAM?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": ["EV-007", "EV-008", "EV-011", "EV-012"],
+      "resolution": "Only unsloth UD-IQ1_S (233 GB) is in budget, and only with partial CPU offload; official ggml-org quants start at Q2_K_S (~298 GB) and do not fit. The engram table is swappable to smaller quants via set_split.py to reclaim budget."
+    },
+    {
+      "id": "Q-003",
+      "question": "Are there known B70/Xe2 SYCL bugs that would block V4.1 flash on Arc?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": ["EV-006", "EV-003"],
+      "resolution": "One known blocker - issue #26462, a SIGSEGV in the SYCL set_rows kernel on Arc from a missing f16->bf16 conversion - is fixed; the fix was verified present at the pinned local master commit and at tag b12445."
+    },
+    {
+      "id": "Q-004",
+      "question": "How is a 4-GPU configuration done with SYCL on Windows, and how well is it proven?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": ["EV-002", "EV-011"],
+      "resolution": "Documented mechanism: ONEAPI_DEVICE_SELECTOR='level_zero:*' (or an explicit per-device list) + ZES_ENABLE_SYSMAN=1 (docs-recommended for layer mode) + --split-mode layer. Docs note tensor split is optimized for 2 GPUs (other counts fall back to a generic all-reduce); all public B70 SYCL field reports are Linux, so 4-card Windows layer-split stability is an accepted risk with fallbacks (2+2 card pairs or 2-GPU tensor mode)."
+    },
+    {
+      "id": "Q-005",
+      "question": "What performance should be expected for the full 1017 on 4x B70?",
+      "critical": true,
+      "status": "ANSWERED",
+      "evidence_ids": ["EV-009", "EV-010", "EV-014"],
+      "resolution": "No published number for the full 1017 on B70-class hardware. Anchors: Maya-XS distilled on 88 GB Arc (Linux): 45.6 t/s prefill, 10.9 t/s decode @64K; snailium smaller model on B70 (Docker/Linux): 470-490 t/s prefill, 41-46 t/s decode. Expect single-digit to low-double-digit decode t/s for the full 1017 with CPU-offloaded experts/engram; measure, don't assume."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Run the full, unpruned DeepSeek-V4.1-Flash-1017 (GGUF) on Zeus's 4x Intel Arc Pro B70 under Windows 25H2 with llama.cpp, at usable interactive speed.",
+      "origin": "USER_REQUIREMENT",
+      "source_locator": "User request, OpenCode session 2026-11-16: find everything needed to port 'deepseek 1017' to run on the Intel Arc Pro cards on the Zeus Windows machine.",
+      "acceptance": "Model loads across the 4 B70s via SYCL; a test prompt returns coherent output; measured prefill/decode t/s are recorded.",
+      "critical": true
+    },
+    {
+      "id": "REQ-002",
+      "text": "Research-only delivery: no builds or live-service changes during research; the deliverable is a documented, source-backed recipe plus an incremental plan.",
+      "origin": "USER_REQUIREMENT",
+      "source_locator": "User instruction 2026-11-16 plus lab rules (public-posts-and-live-changes.md): no llama-swap/runtime/service changes without OK.",
+      "acceptance": "Recipe names exact binaries, files, flags and env vars with fit math; Zeus runtime left untouched.",
+      "critical": true
+    },
+    {
+      "id": "REQ-003",
+      "text": "Maximize VRAM utilization: prefer full GPU offload, but allow partial CPU offload where the smallest full quant does not fit entirely in 128 GB VRAM.",
+      "origin": "ASSUMPTION",
+      "source_locator": "Assumption recorded from the fit math (EV-012); user did not fix the offload policy.",
+      "acceptance": "Configuration places as many tensors as possible on GPU; which layers/tables are offloaded to CPU is identified and documented.",
+      "critical": false
+    }
+  ],
+  "references": [
+    {
+      "id": "REF-001",
+      "canonical_url": "https://github.com/ggml-org/llama.cpp",
+      "relevance": "The runtime and SYCL backend in question: Windows support docs, multi-GPU configuration, the DSV4.1-Flash model PR, release binaries, and the known B70 crash fix.",
+      "mismatch": "Generic CPU backends and other GPU families (CUDA/Metal) are irrelevant to this decision; only the SYCL/Arc parts were inspected.",
+      "selection_rationale": "Primary implementation of the adopted path; a local master checkout exists on Zeus for pinned inspection.",
+      "activity": {
+        "description": "Actively developed; release b12445 published 2026-11-16 (same day as this research). DSV4.1 flash model support merged 2026-10-25.",
+        "source": "https://github.com/ggml-org/llama.cpp/releases",
+        "checked_at": "2026-11-16T21:00:00Z"
+      },
+      "license_record": {
+        "status": "INSPECTED",
+        "spdx": "MIT",
+        "locator": "https://raw.githubusercontent.com/ggml-org/llama.cpp/9fba51d2c9a1b5cb5f0c47986c031334e2d7663a/LICENSE",
+        "scope": "Whole repository (verified 'MIT License, Copyright (c) 2023-2026 The ggml authors' at the pinned commit).",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Patterns only (docs, flags, kernel fix location); no code copied into this run."
+      }
+    },
+    {
+      "id": "REF-002",
+      "canonical_url": "https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF",
+      "relevance": "Community GGUF quants; provides the only full-model quant (UD-IQ1_S, 233 GB) that fits the Zeus memory budget, plus the swappable engram table.",
+      "mismatch": "unsloth packaging conventions differ from the official ggml-org converter; engram-swap semantics come from their README guide, not measured runs.",
+      "selection_rationale": "Only provider of a full 1017 quant below the ~224 GB usable budget.",
+      "activity": {
+        "description": "Repo published after the 2026-10-17 model release; includes quant tree, engram/ folder and set_split.py.",
+        "source": "https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF",
+        "checked_at": "2026-11-16T20:30:00Z"
+      },
+      "license_record": {
+        "status": "DECLARED_ONLY",
+        "spdx": "MIT",
+        "locator": "https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF (repo license tag)",
+        "scope": "Model weights and GGUF files; declared license tag on the HF repo page, full text not read.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Weights consumed by llama.cpp; no code reuse."
+      }
+    },
+    {
+      "id": "REF-003",
+      "canonical_url": "https://huggingface.co/ggml-org/DeepSeek-V4.1-Flash-1017-GGUF",
+      "relevance": "Official GGUF conversion of the model: defines the tensor layout llama.cpp expects and sets the official quant size floor (Q2_K_S ~298 GB).",
+      "mismatch": "Official quants are larger than the Zeus budget allows; used for layout/size reference rather than as the load candidate.",
+      "selection_rationale": "Official layout reference (deepseek41.ple.*) and the upper bound on quant sizes that do not fit.",
+      "activity": {
+        "description": "Published after the 2026-10-17 model release; includes Q2_K/Q2_K_S, dspark draft and mmproj files.",
+        "source": "https://huggingface.co/ggml-org/DeepSeek-V4.1-Flash-1017-GGUF",
+        "checked_at": "2026-11-16T20:30:00Z"
+      },
+      "license_record": {
+        "status": "DECLARED_ONLY",
+        "spdx": "MIT",
+        "locator": "https://huggingface.co/ggml-org/DeepSeek-V4.1-Flash-1017-GGUF (model card license)",
+        "scope": "Model weights and GGUF files; declared on the model card, full text not read.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Weights consumed by llama.cpp; no code reuse."
+      }
+    },
+    {
+      "id": "REF-004",
+      "canonical_url": "https://github.com/mw00/project-maya",
+      "relevance": "Field reports of DeepSeek-V4.1 GGUFs running on multi-card Intel Arc (88 GB B70+B65+B60) via llama.cpp SYCL, including the only published Arc performance numbers for the V4.1 family.",
+      "mismatch": "Linux, and the headline numbers are for the distilled Maya-XS variant, not the full 1017; 88 GB stack, not 128 GB.",
+      "selection_rationale": "Closest published performance anchor on comparable Arc hardware; also documents the b11870+ tensor-layout expectation.",
+      "activity": {
+        "description": "docs/INTEL_ARC.md maintained through late 2026.",
+        "source": "https://github.com/mw00/project-maya/blob/main/docs/INTEL_ARC.md",
+        "checked_at": "2026-11-16T20:30:00Z"
+      },
+      "license_record": {
+        "status": "MISSING",
+        "spdx": "",
+        "locator": "",
+        "scope": "Repo docs read only; no LICENSE file inspected at access time.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Read for facts and numbers only; no code or doc text reused."
+      }
+    },
+    {
+      "id": "REF-005",
+      "canonical_url": "https://github.com/snailium/llama.cpp-sycl-intel-b70",
+      "relevance": "B70-specific SYCL tuning reference (Docker image + golden config) and small-model performance numbers on the exact card model.",
+      "mismatch": "Docker/Linux route (rejected as primary, DEC-006); performance numbers are for a smaller model, not the full 1017.",
+      "selection_rationale": "The only inspected B70-specific tuning data; its flags inform the Windows-native config even though the route itself is rejected.",
+      "activity": {
+        "description": "README with golden config and measured numbers, active through 2026.",
+        "source": "https://github.com/snailium/llama.cpp-sycl-intel-b70",
+        "checked_at": "2026-11-16T20:30:00Z"
+      },
+      "license_record": {
+        "status": "MISSING",
+        "spdx": "",
+        "locator": "",
+        "scope": "README read only; no LICENSE file inspected at access time.",
+        "reuse_mode": "PATTERN_ONLY",
+        "code_copied": false,
+        "reuse_review": "Read for flags and numbers only; no code or doc text reused."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "SRC-001",
+      "reference_id": "REF-001",
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/9fba51d2c9a1b5cb5f0c47986c031334e2d7663a/docs/backend/SYCL.md",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "9fba51d2c9a1b5cb5f0c47986c031334e2d7663a",
+        "path": "docs/backend/SYCL.md",
+        "location": "Sections: Windows support, oneAPI setup, multi-GPU (ONEAPI_DEVICE_SELECTOR, ZES_ENABLE_SYSMAN), Intel Arc / XMX-DPAS FA, GGML_SYCL_BMG_VRAM_CHECK",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-001.md",
+      "limitations": [
+        "Docs at one master commit; Windows multi-GPU stability not demonstrated in the doc itself"
+      ]
+    },
+    {
+      "id": "SRC-002",
+      "reference_id": "REF-001",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/9fba51d2c9a1b5cb5f0c47986c031334e2d7663a/ggml/src/ggml-sycl/set_rows.cpp",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "IMPLEMENTATION",
+      "locator": {
+        "revision": "9fba51d2c9a1b5cb5f0c47986c031334e2d7663a",
+        "path": "ggml/src/ggml-sycl/set_rows.cpp",
+        "location": "f16->bf16 conversion in the set_rows kernel path (fix for issue #26462); also verified at tag b12445",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-002.md",
+      "limitations": [
+        "Fix presence verified, not re-tested by running the kernel"
+      ]
+    },
+    {
+      "id": "SRC-003",
+      "reference_id": "REF-001",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/tag/b12445",
+      "accessed_at": "2026-11-16T21:00:00Z",
+      "kind": "OBSERVATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "Release b12445 asset list: llama-b12445-bin-win-sycl-x64.zip; published 2026-11-16T20:44Z",
+        "version": "b12445",
+        "publication_date": "2026-11-16"
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-003.md",
+      "limitations": [
+        "Asset list observed on the release page; zip contents not unpacked"
+      ]
+    },
+    {
+      "id": "SRC-004",
+      "reference_id": "REF-001",
+      "url": "https://github.com/ggml-org/llama.cpp/pull/31086",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "PR #31086 'model: DSV4.1 flash', merged 2026-10-25; first release with support b11870",
+        "version": "",
+        "publication_date": "2026-10-25"
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-004.md",
+      "limitations": [
+        "Merge establishes support landed; no Arc-specific test data in the PR"
+      ]
+    },
+    {
+      "id": "SRC-005",
+      "reference_id": "REF-001",
+      "url": "https://github.com/ggml-org/llama.cpp/issues/26462",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "Issue #26462: DS4F SIGSEGV on Intel Arc (B70) in SYCL set_rows; missing f16->bf16; linked fix",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-005.md",
+      "limitations": [
+        "Community bug report; exact issue date not recorded at inspection"
+      ]
+    },
+    {
+      "id": "SRC-006",
+      "reference_id": "REF-002",
+      "url": "https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "README quant table (UD-IQ1_S ~233 GB) + engram/ folder (IQ4_NL 110.6 GB, Q5_K 135.2 GB, Q6_K 161.3 GB, MXFP8 202.8 GB) + set_split.py swap guide",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-006.md",
+      "limitations": [
+        "Sizes as listed on the repo; files not downloaded or hash-verified"
+      ]
+    },
+    {
+      "id": "SRC-007",
+      "reference_id": "REF-003",
+      "url": "https://huggingface.co/ggml-org/DeepSeek-V4.1-Flash-1017-GGUF",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "",
+        "location": "File tree: Q2_K ~335 GB, Q2_K_S ~298 GB, dspark draft BF16 8.5 GB / MXFP4 7.9 GB, mmproj 0.5-1.0 GB",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-007.md",
+      "limitations": [
+        "Approximate sizes as listed; no smaller full quant published in this repo"
+      ]
+    },
+    {
+      "id": "SRC-008",
+      "reference_id": "REF-004",
+      "url": "https://github.com/mw00/project-maya/blob/main/docs/INTEL_ARC.md",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "docs/INTEL_ARC.md",
+        "location": "DeepSeek-V4.1 GGUF on Arc multi-card (88 GB, B70+B65+B60, Linux) via SYCL; b11870+ expects deepseek41.ple.* layout; Maya-XS 45.6 t/s prefill, 10.9 t/s decode @64K",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-008.md",
+      "limitations": [
+        "Distilled variant, Linux, 88 GB stack; single published run"
+      ]
+    },
+    {
+      "id": "SRC-009",
+      "reference_id": "REF-005",
+      "url": "https://github.com/snailium/llama.cpp-sycl-intel-b70",
+      "accessed_at": "2026-11-16T20:30:00Z",
+      "kind": "DOCUMENTATION",
+      "locator": {
+        "revision": "",
+        "path": "README.md",
+        "location": "B70 golden config (DPAS/XMX FA flags); 470-490 t/s prefill, 41-46 t/s decode (smaller model, Docker/Linux)",
+        "version": "",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-009.md",
+      "limitations": [
+        "Smaller model; Docker/Linux route"
+      ]
+    },
+    {
+      "id": "SRC-010",
+      "reference_id": "REF-001",
+      "url": "https://github.com/ggml-org/llama.cpp",
+      "accessed_at": "2026-11-16T22:18:00Z",
+      "kind": "OBSERVATION",
+      "locator": {
+        "revision": "9fba51d2c9a1b5cb5f0c47986c031334e2d7663a",
+        "path": "D:\\llama-unmap2 (git worktree of D:\\llama-unmap)",
+        "location": "Read-only probes on Zeus (100.89.126.50): Win32_VideoController CIM query, oneAPI install check, WSL2/Docker state, worktree HEAD file; scripts probe-zeus-gpu*.ps1 via zeus-run.mjs",
+        "version": "Windows 25H2, driver 32.0.101.9175, oneAPI 2026.0/2025.1",
+        "publication_date": ""
+      },
+      "inspection_status": "INSPECTED",
+      "note_path": "sources/SRC-010.md",
+      "limitations": [
+        "WMI AdapterRAM is 32-bit capped; per-card 32 GB from card model, not WMI"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "EV-001",
+      "statement": "llama.cpp's SYCL documentation names Windows as a supported platform: prebuilt win-sycl release zips bundle the SYCL runtime (no oneAPI install required at runtime for the prebuilt path), source builds use examples\\sycl\\win-build-sycl.bat, and Intel Arc is covered including XMX/DPAS quantized Flash Attention on Xe2 and a GGML_SYCL_BMG_VRAM_CHECK workaround flag.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-001"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "SYCL.md at the pinned commit: OS support table (Windows 11 row), prebuilt Windows package note ('binary files and depended oneAPI dll files'), win-build-sycl.bat build step, Intel Arc/XMX-DPAS FA notes, and the GGML_SYCL_BMG_VRAM_CHECK row of the environment-variable table (line 844).",
+      "scope": "llama.cpp SYCL backend, Windows + Intel Arc, at commit 9fba51d2c9a1b5cb5f0c47986c031334e2d7663a",
+      "limitations": [
+        "Documentation, not a measured Windows multi-GPU run"
+      ]
+    },
+    {
+      "id": "EV-002",
+      "statement": "The SYCL docs describe multi-GPU selection via ONEAPI_DEVICE_SELECTOR (documented forms: 'level_zero:0;level_zero:1' for a named pair or 'level_zero:*' for all devices), recommend ZES_ENABLE_SYSMAN=1 when --split-mode is layer (enables querying free GPU memory), default multi-device runs to --split-mode layer, and state that --split-mode tensor requires flash attention, is currently optimized for 2 GPUs, and falls back to a generic all-reduce at other device counts.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-001"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "support_explanation": "SYCL.md at the pinned commit: device-selection tables (Linux + Windows sections), split-mode tables, tensor note, and the ZES_ENABLE_SYSMAN row of the environment-variable table.",
+      "scope": "SYCL multi-GPU configuration on any supported Level Zero device",
+      "limitations": [
+        "No statement that a 4-card layer split is stable on Windows; the 2-GPU tensor-optimization note makes 4 cards a second-order case",
+        "ZES_ENABLE_SYSMAN is documented as 'recommended' for layer mode, not as strictly required"
+      ]
+    },
+    {
+      "id": "EV-003",
+      "statement": "At commit 9fba51d2c9a1b5cb5f0c47986c031334e2d7663a, ggml/src/ggml-sycl/set_rows.cpp contains the f16->bf16 conversion that fixes the DeepSeek SIGSEGV reported in issue #26462 on Arc hardware; the same fix is present at tag b12445.",
+      "class": "OPEN_SOURCE_IMPLEMENTATION",
+      "source_ids": ["SRC-002"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "File inspected at the pinned local checkout: ggml_sycl_op_set_rows asserts src0 is F32 or F16 and dispatches F16 sources to the sycl::half template (lines 560-575); the kernel's destination switch has a GGML_TYPE_BF16 case under GGML_SYCL_HAS_BF16 writing sycl::ext::oneapi::bfloat16 (lines 344-353) - the cast issue #26462 identified as missing. Same file inspected at tag b12445 on GitHub.",
+      "scope": "SYCL set_rows kernel at the pinned commit and at b12445",
+      "limitations": [
+        "Fix presence, not a re-run of the crashing case"
+      ]
+    },
+    {
+      "id": "EV-004",
+      "statement": "PR #31086 'model: DSV4.1 flash' (merged 2026-10-25) adds DeepSeek-V4.1-Flash model support to llama.cpp, so releases from b11870 onward can load V4.1 GGUFs.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-004"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "PR title, merge date and first release with the support are stated on the PR page and release line.",
+      "scope": "Model support in llama.cpp releases >= b11870",
+      "limitations": [
+        "Support for loading, not Arc-specific performance"
+      ]
+    },
+    {
+      "id": "EV-005",
+      "statement": "Release b12445, published 2026-11-16T20:44Z, lists the asset llama-b12445-bin-win-sycl-x64.zip (prebuilt Windows SYCL binaries).",
+      "class": "OBSERVED_PUBLIC_BEHAVIOR",
+      "source_ids": ["SRC-003"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "Release page asset list read on 2026-11-16; re-verified the same day via GitHub API (gh api repos/ggml-org/llama.cpp/releases/tags/b12445): asset present, published_at 2026-11-16T20:44:41Z.",
+      "scope": "llama.cpp release b12445",
+      "limitations": [
+        "Asset list only; zip contents not unpacked, build precision (F16/F32) not stated"
+      ]
+    },
+    {
+      "id": "EV-006",
+      "statement": "Issue #26462 reports a SIGSEGV in the SYCL set_rows kernel when running a DeepSeek-V4-Flash-class model on Intel Arc (B70): the kernel was missing an f16->bf16 conversion; the issue links the fix.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-005"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "Issue body and linked fix, as recorded in the source note.",
+      "scope": "Known B70 SYCL bug for this model family",
+      "limitations": [
+        "Community bug report; fix presence verified separately in source (EV-003)"
+      ]
+    },
+    {
+      "id": "EV-007",
+      "statement": "The unsloth DeepSeek-V4.1-Flash-1017 GGUF repo offers UD-IQ1_S at ~233 GB (smallest full quant) and a separate engram/ folder with IQ4_NL (110.6 GB), Q5_K (135.2 GB), Q6_K (161.3 GB) and MXFP8 (202.8 GB) engram variants, plus set_split.py and README guidance for swapping the engram table.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-006"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "support_explanation": "README quant table and file tree as recorded in the source note.",
+      "scope": "Available full-model quant options from unsloth",
+      "limitations": [
+        "Sizes as listed; engram swap semantics read from the guide, not measured"
+      ]
+    },
+    {
+      "id": "EV-008",
+      "statement": "The official ggml-org DeepSeek-V4.1-Flash-1017 GGUF repo offers Q2_K (~335 GB) and Q2_K_S (~298 GB) full quants, a dspark draft model (BF16 ~8.5 GB / MXFP4 ~7.9 GB) and mmproj files (~0.5-1.0 GB); no smaller full quant is published there.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-007"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "File tree of the official repo as recorded in the source note.",
+      "scope": "Official full-model quant options",
+      "limitations": [
+        "Approximate sizes as listed"
+      ]
+    },
+    {
+      "id": "EV-009",
+      "statement": "project-maya's INTEL_ARC.md documents DeepSeek-V4.1 GGUFs loading and running under llama.cpp SYCL on multi-card Intel Arc (88 GB: B70+B65+B60, Linux); states that releases >= b11870 expect the official deepseek41.ple.* tensor layout; reports Maya-XS (distilled) at 45.6 t/s prefill and 10.9 t/s decode at 64K context.",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-008"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "Doc sections as recorded in the source note.",
+      "scope": "V4.1 family on Arc SYCL, distilled variant, Linux",
+      "limitations": [
+        "Distilled variant, 88 GB stack, single published run"
+      ]
+    },
+    {
+      "id": "EV-010",
+      "statement": "The snailium B70 SYCL repo documents a B70 golden config with 470-490 t/s prefill and 41-46 t/s decode for a smaller model (Docker/Linux).",
+      "class": "VERIFIED_SOURCE",
+      "source_ids": ["SRC-009"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "README numbers and config flags as recorded in the source note.",
+      "scope": "B70 SYCL tuning and small-model performance",
+      "limitations": [
+        "Different (smaller) model; Docker/Linux route"
+      ]
+    },
+    {
+      "id": "EV-011",
+      "statement": "Zeus (Windows 25H2, Tailscale 100.89.126.50) was observed with 4x Intel Arc Pro B70 (32 GB each, 128 GB aggregate), GPU driver 32.0.101.9175, 112 GB system RAM, WSL2 Ubuntu-24.04 running with Docker Desktop stopped, oneAPI 2026.0 + 2025.1 installed, and a llama.cpp master checkout at D:\\llama-unmap2 detached at 9fba51d2c9a1b5cb5f0c47986c031334e2d7663a.",
+      "class": "OBSERVED_PUBLIC_BEHAVIOR",
+      "source_ids": ["SRC-010"],
+      "premise_claim_ids": [],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "Read-only CIM/WSL probes executed on Zeus and the worktree HEAD file read directly; outputs recorded in the source note.",
+      "scope": "Target machine state as of 2026-11-16",
+      "limitations": [
+        "Read-only; WMI AdapterRAM 32-bit capped, 32 GB/card from card model"
+      ]
+    },
+    {
+      "id": "EV-012",
+      "statement": "The only full 1017 quant that can fit Zeus's budget (~128 GB VRAM + ~100 GB usable RAM, ~220-224 GB after OS/runtime overhead) is unsloth UD-IQ1_S at ~233 GB, and only with partial CPU offload; official Q2_K_S (~298 GB) and larger do not fit; the engram table is a documented swap knob that can free budget.",
+      "class": "INFERENCE",
+      "source_ids": [],
+      "premise_claim_ids": ["EV-007", "EV-008", "EV-011"],
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "support_explanation": "233 GB is the only full quant below the ~224 GB usable budget (EV-007, EV-008) on a machine with 128 GB VRAM and ~100 GB usable RAM (EV-011); engram swap is the documented size knob (EV-007).",
+      "scope": "Memory fit of full-model quants on Zeus",
+      "limitations": [
+        "Usable RAM assumes ~12 GB reserved by OS; exact KV cache size for 32-64K compressed KV is unknown, so the margin is tight; 'fits' means loadable, not fully in VRAM"
+      ]
+    },
+    {
+      "id": "EV-013",
+      "statement": "The workable port path is: prebuilt b12445 win-sycl zip (no oneAPI needed at runtime), unsloth UD-IQ1_S with the smallest acceptable engram quant, --split-mode layer across all 4 B70s via ONEAPI_DEVICE_SELECTOR and ZES_ENABLE_SYSMAN=1, and partial CPU offload for the remainder.",
+      "class": "INFERENCE",
+      "source_ids": [],
+      "premise_claim_ids": ["EV-001", "EV-002", "EV-003", "EV-004", "EV-005", "EV-011"],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "Each element is individually documented or verified: Windows SYCL prebuilt (EV-001, EV-005), multi-GPU flags (EV-002), known crash fixed (EV-003), model support (EV-004), matching hardware (EV-011).",
+      "scope": "Adopted recipe for REQ-001",
+      "limitations": [
+        "The 4-card Windows layer split is inferred from documented parts, not from a public 4-card Windows B70 report"
+      ]
+    },
+    {
+      "id": "EV-014",
+      "statement": "No published number exists for the full 1017 on B70-class hardware; the available anchors (Maya-XS distilled: 10.9 t/s decode @64K on 88 GB Arc Linux; snailium smaller model: 41-46 t/s decode on B70 Docker/Linux) bound expectations from below and above, so single-digit to low-double-digit decode t/s is a reasonable prior for the full 1017 with CPU-offloaded experts/engram.",
+      "class": "INFERENCE",
+      "source_ids": [],
+      "premise_claim_ids": ["EV-009", "EV-010", "EV-012"],
+      "requirement_ids": ["REQ-001"],
+      "support_explanation": "Both anchors are for smaller/other-variant models (EV-009, EV-010) and the full 1017 requires CPU offload (EV-012), which neither anchor prices in.",
+      "scope": "Performance expectation only",
+      "limitations": [
+        "Prior for planning, not a prediction; the offload penalty is not quantified in any inspected source"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "requirement_ids": ["REQ-001", "REQ-002"],
+      "candidate": "llama.cpp SYCL backend, Windows-native, prebuilt win-sycl b12445 (source build from D:\\llama-unmap2 via examples\\sycl\\win-build-sycl.bat as fallback)",
+      "outcome": "ADOPT",
+      "evidence_ids": ["EV-001", "EV-002", "EV-003", "EV-004", "EV-005", "EV-006", "EV-009", "EV-011", "EV-013"],
+      "rationale": "Only path with (a) DSV4.1-Flash model support in current releases, (b) a Windows SYCL prebuilt that needs no oneAPI at runtime, (c) documented multi-GPU configuration, (d) the known B70 crash fixed, and (e) a field report of V4.1 GGUFs running on Arc.",
+      "alternatives": [
+        "vLLM-XPU (REJECT, DEC-004)",
+        "EXL3/exllamav3 (REJECT, DEC-005)",
+        "WSL2/Docker Linux SYCL (REJECT, DEC-006)"
+      ],
+      "complexity_cost": "Low: download, two env vars, a few flags; no compilation unless the prebuilt fails.",
+      "scale_fit": "Built for exactly this: single-machine local inference with multi-card Level Zero devices.",
+      "revisit_trigger": "If the prebuilt b12445 zip fails to enumerate all 4 cards or crashes, fall back to a source build of D:\\llama-unmap2 with win-build-sycl.bat (same backend, oneAPI already installed)."
+    },
+    {
+      "id": "DEC-002",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "candidate": "unsloth UD-IQ1_S full quant (~233 GB) with swappable engram table (start with bundled default; swap to IQ4_NL 110.6 GB via set_split.py if RAM is tight)",
+      "outcome": "ADOPT",
+      "evidence_ids": ["EV-007", "EV-008", "EV-011", "EV-012"],
+      "rationale": "The only full quant below the usable budget; the engram swap is a documented knob that can recover tens of GB if the default engram quant is large.",
+      "alternatives": [
+        "ggml-org Q2_K_S/Q2_K (REJECT, DEC-007)",
+        "Maya-XS distilled 88 GB variant (DEFER, DEC-008)"
+      ],
+      "complexity_cost": "Low: one ~233 GB download plus one optional engram-swap step.",
+      "scale_fit": "233 GB against a ~224 GB usable budget forces partial offload; quality is the floor of available full quants.",
+      "revisit_trigger": "If UD-IQ1_S quality is unacceptable or the fit fails after engram swap, move to a smaller engram quant, a smaller context, or the distilled variant."
+    },
+    {
+      "id": "DEC-003",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "candidate": "4x B70 with --split-mode layer, ONEAPI_DEVICE_SELECTOR='level_zero:*', ZES_ENABLE_SYSMAN=1 (docs-recommended for layer mode), q8_0 KV cache, 32K starting context, maximum GPU offload",
+      "outcome": "ADOPT",
+      "evidence_ids": ["EV-002", "EV-011", "EV-013"],
+      "rationale": "The documented multi-GPU configuration; q8_0 KV keeps the 32K cache small; 32K is a starting point chosen against the tight KV budget, not a ceiling.",
+      "alternatives": [
+        "Single B70 (32 GB - insufficient for any full quant)",
+        "2-GPU tensor split (docs' optimized case, but halves VRAM capacity)"
+      ],
+      "complexity_cost": "Low: flags and env vars only.",
+      "scale_fit": "128 GB across 4 cards is the only way to hold most of a 233 GB model in GPU memory.",
+      "revisit_trigger": "If the 4-card layer split is unstable (crash, lopsided load), try 2+2 card pairs (two independent 2-GPU servers) or --split-mode tensor (documented 2-GPU-optimized tensor mode, requires flash attention); if 32K KV does not fit, drop to 16K."
+    },
+    {
+      "id": "DEC-004",
+      "requirement_ids": ["REQ-001"],
+      "candidate": "vLLM with the XPU (Intel GPU) backend",
+      "outcome": "REJECT",
+      "evidence_ids": ["EV-001", "EV-004", "EV-009"],
+      "rationale": "No DeepSeek-V4.1-Flash GGUF support found in the inspected vLLM-XPU path, and no per-tensor CPU offload / engram swap equivalent; every inspected field report of V4.1 on Arc is llama.cpp SYCL.",
+      "alternatives": [
+        "llama.cpp SYCL (ADOPT, DEC-001)"
+      ],
+      "complexity_cost": "Higher: XPU plugin stack, safetensors conversion, no GGUF path.",
+      "scale_fit": "Aimed at datacenter XPU servers; 4-card pro-Arc consumer-class multi-GPU is a second-order case.",
+      "revisit_trigger": "If vLLM-XPU lands DSV4.1-Flash plus MoE CPU offload on Arc and higher throughput is needed."
+    },
+    {
+      "id": "DEC-005",
+      "requirement_ids": ["REQ-001"],
+      "candidate": "EXL3 (exllamav3) quantization/runtime",
+      "outcome": "REJECT",
+      "evidence_ids": ["EV-001", "EV-008"],
+      "rationale": "EXL3 targets CUDA GPUs; no Intel SYCL/Level Zero backend was found in the inspected version, so it cannot run on the B70s at all.",
+      "alternatives": [
+        "llama.cpp SYCL (ADOPT, DEC-001)"
+      ],
+      "complexity_cost": "Not applicable on this hardware.",
+      "scale_fit": "Wrong GPU family.",
+      "revisit_trigger": "An EXL3 Intel backend appears that supports DSV4.1-Flash."
+    },
+    {
+      "id": "DEC-006",
+      "requirement_ids": ["REQ-001", "REQ-002"],
+      "candidate": "WSL2/Docker Linux SYCL route (snailium B70 image)",
+      "outcome": "REJECT",
+      "evidence_ids": ["EV-001", "EV-010", "EV-011"],
+      "rationale": "The GPUs sit on the Windows side; 4-card Arc visibility through WSL2 is not publicly verified, Docker Desktop is currently stopped, and the Windows-native path is documented and one layer closer to the hardware. The snailium config remains useful as a tuning reference (flags), which is why it stays in the ledger.",
+      "alternatives": [
+        "Windows-native SYCL (ADOPT, DEC-001)"
+      ],
+      "complexity_cost": "Medium: WSL2 GPU setup, 4-card visibility, ~343 GB of downloads inside WSL.",
+      "scale_fit": "Proven on single B70-class cards in Docker; 4-card unverified.",
+      "revisit_trigger": "If the Windows-native 4-card layer split proves unstable and WSL2 shows all 4 cards with ZES_ENABLE_SYSMAN=1."
+    },
+    {
+      "id": "DEC-007",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "candidate": "ggml-org Q2_K_S (~298 GB) / Q2_K (~335 GB) as the primary quant",
+      "outcome": "REJECT",
+      "evidence_ids": ["EV-008", "EV-011", "EV-012"],
+      "rationale": "298-335 GB exceeds the ~224 GB usable budget even with maximal CPU offload; higher quality than UD-IQ1_S but it does not fit this machine.",
+      "alternatives": [
+        "unsloth UD-IQ1_S (ADOPT, DEC-002)"
+      ],
+      "complexity_cost": "Not applicable - does not fit.",
+      "scale_fit": "Wrong size class for this machine.",
+      "revisit_trigger": "More VRAM (e.g. an 8-card build) or a smaller active-footprint configuration that makes Q2_K_S viable."
+    },
+    {
+      "id": "DEC-008",
+      "requirement_ids": ["REQ-001"],
+      "candidate": "Maya-XS distilled 88 GB variant",
+      "outcome": "DEFER",
+      "evidence_ids": ["EV-009", "EV-012"],
+      "rationale": "Fits in 2-3 of the 4 cards with a published speed (10.9 t/s decode @64K), but it is a distilled model, not the full 1017 the user asked for; keep as fallback if UD-IQ1_S proves too slow or too weak.",
+      "alternatives": [
+        "Full 1017 UD-IQ1_S (ADOPT, DEC-002)"
+      ],
+      "complexity_cost": "Low: one ~88 GB download.",
+      "scale_fit": "Sized for exactly this class of hardware.",
+      "revisit_trigger": "Measured decode on the full 1017 below ~5 t/s, or the user accepts a distilled model for speed."
+    }
+  ],
+  "plan_units": [
+    {
+      "id": "STEP-001",
+      "requirement_ids": ["REQ-001"],
+      "decision_ids": ["DEC-001"],
+      "outcome": "Working Windows SYCL runtime on Zeus: llama-b12445-bin-win-sycl-x64.zip downloaded, extracted to D:\\llama-sycl-b12445, llama-server.exe runs and reports its version with the bundled SYCL runtime.",
+      "acceptance_checks": ["CHECK-001"]
+    },
+    {
+      "id": "STEP-002",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "decision_ids": ["DEC-002"],
+      "outcome": "Model on disk: unsloth UD-IQ1_S main GGUF plus the bundled engram file (and the IQ4_NL engram variant for swap) downloaded to D:\\models\\DeepSeek-V4.1-Flash-1017, sizes matching the repo listing.",
+      "acceptance_checks": ["CHECK-002"]
+    },
+    {
+      "id": "STEP-003",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "decision_ids": ["DEC-001", "DEC-003"],
+      "outcome": "4-card server running: ONEAPI_DEVICE_SELECTOR='level_zero:*' + ZES_ENABLE_SYSMAN=1 set; llama-server starts with --split-mode layer, -c 32768, --cache-type-k q8_0 --cache-type-v q8_0, max offload; log shows all four level_zero devices with VRAM and the model loads; a test prompt returns coherent output.",
+      "acceptance_checks": ["CHECK-003"]
+    },
+    {
+      "id": "STEP-004",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "decision_ids": ["DEC-002", "DEC-003"],
+      "outcome": "Measured baseline: prefill/decode t/s and per-device VRAM recorded for the fixed test prompt; if the default engram overflows, set_split.py swaps it to IQ4_NL and the run is remeasured.",
+      "acceptance_checks": ["CHECK-004"]
+    },
+    {
+      "id": "STEP-005",
+      "requirement_ids": ["REQ-002"],
+      "decision_ids": ["DEC-001"],
+      "outcome": "Handoff document written for Jon: exact binary/files, flags, env vars, measured speeds, fit math, known issues and the fallback triggers from DEC-001/DEC-002/DEC-003.",
+      "acceptance_checks": ["CHECK-005"]
+    }
+  ],
+  "verification": [
+    {
+      "id": "CHECK-001",
+      "requirement_ids": ["REQ-001"],
+      "decision_ids": ["DEC-001"],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "COMMAND",
+      "criterion": "The b12445 win-sycl zip extracts to a runnable llama-server.exe with SYCL runtime DLLs present.",
+      "command": "Expand-Archive -Path D:\\downloads\\llama-b12445-bin-win-sycl-x64.zip -DestinationPath D:\\llama-sycl-b12445; Get-ChildItem D:\\llama-sycl-b12445 -Recurse -Include *.exe,*.dll | Select-Object Name,Length; & D:\\llama-sycl-b12445\\llama-server.exe --version",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-002",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "decision_ids": ["DEC-002"],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "COMMAND",
+      "criterion": "Model files on disk match the HF repo listing (UD-IQ1_S main ~233 GB; engram variant present, IQ4_NL ~110.6 GB).",
+      "command": "Get-ChildItem D:\\models\\DeepSeek-V4.1-Flash-1017 -Recurse | Select-Object Name,Length | Format-Table -AutoSize",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-003",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "decision_ids": ["DEC-001", "DEC-003"],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "COMMAND",
+      "criterion": "llama-server enumerates 4 level_zero devices, loads UD-IQ1_S with --split-mode layer, and serves a test prompt with coherent output.",
+      "command": "$env:ONEAPI_DEVICE_SELECTOR='level_zero:*'; $env:ZES_ENABLE_SYSMAN=1; D:\\llama-sycl-b12445\\llama-server.exe -m D:\\models\\DeepSeek-V4.1-Flash-1017\\UD-IQ1_S\\model.gguf --split-mode layer -c 32768 --cache-type-k q8_0 --cache-type-v q8_0 -ngl 999",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-004",
+      "requirement_ids": ["REQ-001", "REQ-003"],
+      "decision_ids": ["DEC-002", "DEC-003"],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "COMMAND",
+      "criterion": "Prefill/decode t/s and per-device VRAM are recorded for the fixed test prompt; if the default engram overflows, the IQ4_NL engram swap (set_split.py) loads and is remeasured.",
+      "command": "D:\\llama-sycl-b12445\\llama-bench.exe -m D:\\models\\DeepSeek-V4.1-Flash-1017\\UD-IQ1_S\\model.gguf --split-mode layer -p 512 -n 128; Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-005",
+      "requirement_ids": ["REQ-002"],
+      "decision_ids": ["DEC-001"],
+      "required": true,
+      "result": "NOT_RUN",
+      "method": "MANUAL",
+      "criterion": "Handoff document exists with binary/file list, flags, env vars, measured speeds, fit math, known issues and fallback triggers.",
+      "command": "Manual review of the handoff document against this plan before sign-off.",
+      "evidence_path": "",
+      "tested_snapshot": "",
+      "checked_at": ""
+    },
+    {
+      "id": "CHECK-006",
+      "requirement_ids": ["REQ-001"],
+      "decision_ids": ["DEC-001", "DEC-002", "DEC-003"],
+      "required": true,
+      "result": "PASS",
+      "method": "SOURCE_AUDIT",
+      "criterion": "Key ledger claims (EV-001..EV-011) re-audited against their original sources; no contradictions found; open unknowns recorded.",
+      "command": "Manual source audit: re-read pinned files/URLs listed in sources/*.md against each EV statement (notes in checks/CHECK-006.txt).",
+      "evidence_path": "checks/CHECK-006.txt",
+      "tested_snapshot": "evidence.json v1 + sources/ notes, 2026-11-16; primary re-verification against D:\\llama-unmap2 at pinned commit and GitHub API for b12445",
+      "checked_at": "2026-11-16T22:39:34Z"
+    }
+  ]
+}
