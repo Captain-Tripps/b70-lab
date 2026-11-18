@@ -108,8 +108,11 @@ likelier.
 7 8k reads, against about 50% stalls on v2. The GLM port already runs v1. The engine's speed on v1 against v2 is not
 measured, because v2 does not finish reliably. On the llama.cpp fork, v1 was slower
 ([rejected-ideas](../../rejected-ideas/)). **Open caveat:** on Windows, v1 has been reported to lose the device
-on the first job after the GPU has idled ([lc0#2473](https://github.com/LeelaChessZero/lc0/issues/2473)). An idle test in
-serve mode (requests with 1-, 5- and 10-minute gaps) is running. v1 is not daily-driver safe until it passes.
+on the first job after the GPU has idled ([lc0#2473](https://github.com/LeelaChessZero/lc0/issues/2473)). **Idle test, passed (one run):** in serve mode,
+an 8k request, then 2k after 60 s idle, 8k after 300 s, 2k after 600 s. All four answered, none lost the device:
+8k 281.3 / 288.1 tok/s, 2k 211.4 / 211.4, 8 generated tokens at 30.6-30.9 tok/s. The watchdog fired once while the
+server sat idle (no layers to run, a false alarm in serve mode), and the process threw its known teardown exception at
+`QUIT`. Longer idle gaps (hours) are still untested.
 If it fails, the fallback is a process-wide lock around kernel submission on v2, the same workaround the llama.cpp
 cross-card pipeline uses.
 
@@ -164,4 +167,4 @@ Ranked by expected gain toward 600 tok/s prompt and ~50 decode:
 6. **Chunk-256 hang, teardown exception** (the process exits 9 after printing results), and the 2k nondeterminism:
    all needed before a llama-swap entry.
 
-Next step: read the idle test. If v1 holds, run a 30-minute mixed soak, then propose a llama-swap entry to the owner.
+Next step: a 30-minute mixed soak on the v1 adapter, then a llama-swap entry proposal to the owner.
