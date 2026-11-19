@@ -1,8 +1,11 @@
-# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 18)
+# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 19)
 
-**Two days into the port: decode 29.3 tok/s (36.8 with the drafter), an 8k prompt reads at about 280 tok/s.** The
-llama.cpp fork yardstick on the same cards is 3.92 decode / 0.65 prompt. The targets are 600+ tok/s prompt and ~50
-decode, so prompt reads are about halfway there. Not live: there is no llama-swap entry and none will be added without the owner's OK.
+**Three days into the port: decode 37.5 tok/s with the drafter (31.7 plain) on the benchmark prompt, prompts read at
+about 740 tok/s at 8k and 811 at 120k.** Served decode depends on how well the drafter guesses the text: about 35 tok/s
+after a short prompt in the soak, 43-45 on easy or long-context replies. The llama.cpp fork yardstick on the same cards is 3.92 decode / 0.65 prompt.
+The targets are 600+ tok/s prompt and 50+ decode, so the prompt target is met and decode is three quarters of the way.
+Since 2026-11-18 the engine has a llama-swap entry (owner's OK) that swaps with the GLM entry on demand, behind Maya's
+OpenAI-compatible server.
 
 Setup: Windows 11, four Arc Pro B70s (32 GB each), EPYC 7402P (Zen 2, AVX2 only), driver 32.0.101.9175, oneAPI DPC++
 2026.0, JIT build, persistent kernel cache (`SYCL_CACHE_PERSISTENT=1`). Model: the Maya-XS IQ1_S pack of
@@ -10,8 +13,10 @@ DeepSeek-V4.1-Flash-1017 (116.8 GB model + 161.3 GB Q6_K Engram tables read from
 Engine: Project Maya's in-tree `src/ds4/`, run through `dpct` and then fixed by hand, the same route as the
 [GLM-5.3 port](../../glm-5.3/sycl-port/). This is option A' of the [engine decision](../engine-decision-2026-11-16/ENGINE-DECISION.md).
 
-Layout: tensor parallel falls back 2 -> 1 (n_ff 2304 does not split into 256-value blocks), so the four cards run a
-layer pipeline of 10 layers each. All 15,360 routed experts fit in VRAM with `--reserve-mib 1024`.
+Layout: tensor parallel falls back 2 -> 1 (an expert's n_ff 2304 is 9 blocks of 256 values, which do not split in two;
+the uneven split is tested [below](#tensor-parallel-2-with-the-uneven-split-2026-11-19)), so the four cards run a
+layer pipeline of about 10 layers each. All 15,360 routed experts fit in VRAM with `--reserve-mib 1024` at 12k context;
+the served 128k entry needs `--reserve-mib 768` for the same (2026-11-18, below).
 
 ## Results
 
@@ -27,6 +32,28 @@ Long-answer prompt (34 tokens), 128 generated, greedy, two or more warm runs per
 | + no `use_root_sync` on launches | 28.5 | 35.5-35.9 | identical |
 | **+ dense Q6_K in 128-row SoA tiles** | **29.3** (3 ABAB rounds, off 28.4-28.6) | **36.8** (off 36.0) | identical |
 
+### Decode switches (2026-11-18, evening)
+
+Same long-answer prompt, 128 generated (16 after 8k), v1 adapter, fx31 build, one executable, runtime switches only:
+
+| Setting | Plain decode, tok/s | Drafted, tok/s | Decode after 8k, tok/s | 8k read, tok/s |
+|---|---:|---:|---:|---:|
+| Default | 28.45 / 28.51 | 35.92 / 36.42 | 22.99 / 23.35 | 764.1 / 761.2 |
+| `DS4_HC_STREAM=0` | 31.45 / 31.41 | 37.05 | - | - |
+| **`DS4_HC_STREAM=0` + `DS4_HC_FUSE=2`** | **32.08** (`=1`: 32.15) | **37.70 / 37.57** | **27.35 / 27.23** | 772.1 / 768.5 |
+| + `DS4_DECODE_TRIM=3` | 31.96 | 33.78 (with `--window`, below) | - | - |
+| `--threads on` (a worker thread per card) | 25.93 | - | - | - |
+
+- `DS4_HC_STREAM=0` keeps the hyper-connection mix / split on the layer's own queue. The port ran them on a second
+  queue, which costs four host event waits a layer (160 a token) on this stack. Maya's HIP build already turns the side
+  stream off on Windows for the same reason. Plain tokens are identical with and without it.
+- `DS4_HC_FUSE=2` merges split and pre-norm into one launch for 1-row decode and for verify windows. At load the engine checks it
+  against the old kernels: bit for bit on all four cards.
+- Both are in the served config since 2026-11-18. The 8k prompt read and its output are unchanged.
+- Measurement trap: the CLI's `--window 65536`, needed for prompt reads, also makes drafted decode slower (32.3 vs 36.4
+  tok/s, same build). Drafted decode numbers are taken without it. The server does not use the flag.
+- v1 vs v2 adapter, plain decode: 28.4 vs 29.8 tok/s (+4.6% on v2); drafted equal. v2 stays off because of the deadlock.
+
 ### Prompt read (2026-11-18)
 
 8,015-token prompt, `--window 65536` (see the measurement note), output = the 16 greedy tokens after the prompt,
@@ -38,7 +65,9 @@ compared by hash, plus a full-vocabulary logit compare against the attention-XMX
 | Chunk 2048 / 1536 / 1024 / **512** | 84.5 / 94.2 / 105.3 / **112.1** | - | same |
 | + XMX sparse attention (fx21) | 211.3 | 145.9 | same |
 | + XMX heavy-expert gate/up (fx26c) | 265.8-272.8 | 190.3 | same |
-| **+ XMX heavy-expert down (fx26c/27), v1 adapter** | **279.4 / 280.5 / 281.2** | **195.0** | same |
+| + XMX heavy-expert down (fx26c/27), v1 adapter | 279.4 / 280.5 / 281.2 | 195.0 | same |
+| + no host wait around heavy launches (`DS4_HX_SYNC=0`) | 286 / 283 (on: 281 / 281) | 195 (on: 190) | same |
+| **+ hand-off copies on the copy engine (fx31)** | **762.2 / 763.8 / 776.0** | **469.9** | same |
 
 Against the attention-XMX build, the final build's last-position logits have rel L2 0.20-0.26, about the run-to-run noise.
 The same top token every run, top-5 overlap 3-5 of 5. Decode after the 8k prompt is 23-24 tok/s on 16 tokens, unchanged.
@@ -57,7 +86,223 @@ Per-kernel time on the final build, 8k read, summed over the four cards (`DS4_KT
 | **Total** | **30,323** | | |
 
 30.3 s of kernel time over 4 cards is about 7.6 s a card against a 28.7 s wall: **each card is busy about 26% of the read.**
-The rest is pipeline bubbles and host time. That is the next lever (see future leads).
+The rest looked like pipeline bubbles and host time. The timeline below shows most of it was one kernel `DS4_KT` does not time.
+
+### Where the time went: a classified timeline (fx30)
+
+`DS4_TL=<csv>` records every launch and host wait per card with host timestamps, and a report script sorts each gap
+on a card into one of four kinds: no input yet (the previous stage has not handed over), ready but not submitted,
+submitted but not running, and unclassified. Tracing costs about 3-8% (705 vs ~765 tok/s at 8k). `DS4_KT` has to stay off while tracing.
+
+On the build above (8k read, ~280 tok/s):
+
+| Card | Busy | Of it, the hand-off copy kernel | Largest gap |
+|---|---:|---:|---|
+| 0-2 | ~78% | ~16 s of a 28 s read, ~1.0 s a chunk | - |
+| 3 (last stage, no outgoing hand-off) | 21% | - | 20 s waiting for input |
+
+The cards were not idle. Cards 0-2 spent most of the read in `xfer_put_kernel`, which copies each chunk's ~33 MB
+hand-off into host USM with plain kernel stores from at most 64 work-groups. Card 3 then waited for it.
+
+### Hand-off copies on the copy engine (fx31)
+
+fx31 replaces the kernel copy with one `queue.memcpy` per segment, then launches the same kernel with no segments so
+that it only raises the flag. The queue is in order, so the flag goes up after the copies finish. `DS4_XFER_MEMCPY=0` restores the old copy.
+
+8k read, alternating runs of one executable, 16 greedy tokens after the prompt:
+
+| Run | Copy | 8k read, tok/s | Output |
+|---|---|---:|---|
+| A1 | kernel stores | 282.5 | `e80ae869` (first run of the build) |
+| B1 | copy engine | 766.5 | `2e96bd4d` |
+| A2 | kernel stores | 281.6 | `2e96bd4d` |
+| B2 | copy engine | 763.6 | `2e96bd4d` |
+| B, traced | copy engine | 705.0 | `2e96bd4d` |
+
+Promoted to the served build the same day: 776.0 (first run), 763.8, 762.2 with the copy engine, 284.7 with
+`DS4_XFER_MEMCPY=0`, all four `2e96bd4d`. Last-position logits against the old copy: rel L2 0.19-0.26, the same top
+token, top-5 overlap 4-5 of 5. Two copy-engine runs differ from each other by 0.18-0.20, so this is run-to-run noise.
+
+Each hand-off copy is now about 10 ms, plus about 1 ms of small segments, per chunk and card. The traced read takes
+10.3 s, and each card is busy 57-62% of it. The gaps that are left:
+
+| Gap | Size |
+|---|---:|
+| Submitted but not running, every card | 1.5-1.9 s |
+| Card 3 waiting for input (pipeline fill) | 2.46 s, of it 2.07 s before the first chunk |
+| Card 0 idle after its last chunk (drain) | 2.19 s |
+| Card 1 idle after its last chunk | 1.07 s |
+
+### Context length (2026-11-18)
+
+Engine CLI, 128k-capable placement (`--max-context` as listed), prompt 1-8k short of the full context, 64 tokens
+generated without the drafter, build before fx31:
+
+| Max context | Prompt tokens | Prompt read, tok/s | Decode after, tok/s | Lowest free VRAM a card |
+|---|---:|---:|---:|---:|
+| 32k | 31,019 | 312.9 | 25.5 | 2.97 GB |
+| 64k | 63,019 | 311.2 / 312.2 / 312.3 | 11.4 / 23.6 / 24.7 | 2.93 GB |
+| 128k | 120,019 | 304.9 | 24.1 | 2.89 GB |
+
+DeepSeek V4's attention keeps a fixed 128-token window per layer plus a compressed FP4 history, so caches are
+0.01-0.05 GB a card even at 128k, and every expert stays in VRAM. The first 64k run decoded at half speed: layer time 68 ms
+a token against 30-37 ms. Two reruns did not repeat it, so it is a one-off with no known cause.
+
+**With fx31 the 120k read takes 148.6 s, 807.9 tok/s (was 393.6 s, 304.9).** One run; decode after it 21.4 tok/s on
+16 tokens. The hand-off copy cost the same ~1 s a chunk at any depth, so the gain holds at long context.
+
+### Prompt chunk re-sweep on the fx31 build
+
+| Chunk | 8k read, tok/s (2 runs) | 2k read, tok/s (1 run) |
+|---:|---:|---:|
+| 256 | 752.5 (1 run) | - |
+| 384 | 747.9 / 734.0 | 502.8 |
+| **512** | **763.7 / 758.4** | **469.9** |
+| 768 | 762.6 / 767.3 | 447.6 |
+| 1024 | 735.5 / 734.6 | 379.6 |
+
+At 8k, 512 and 768 are equal within noise. 384 is 7% faster at 2k but 2-4% slower at 8k, so the chunk stays 512.
+The 2k read went from 195 to 470 tok/s with fx31. Chunk 256 hung at 8k on the slow-copy build and now finishes
+(one run). The 8k output was `2e96bd4d` in 9 of 10 runs; one 512 run gave `8da9f19f`, with the same top token and
+rel L2 0.19 against its pair. 2k outputs differ between runs, as before.
+
+### Serving (2026-11-18)
+
+Maya's `server.py` drives the engine through its stdin protocol and serves OpenAI-compatible chat completions with
+streaming and prompt-prefix reuse. The engine has no `WRAP` command, so the server's wrap timer is set to 0.
+
+- **30-minute mixed soak** (drafter on, v1 adapter, build before fx31): 67 of 67 requests answered, no hangs. Drafted
+  decode 35.4 tok/s after a short prompt, 42.7-44 after 8k; prompt read 8k 288, 2k 211. Repeated requests gave the same
+  tokens, except the first request after load, which differed from later identical ones at token 3 (open, below).
+- **HTTP smoke test**, run before and after fx31: ready 68-70 s after start; non-streaming, streaming and a repeat all
+  answered correctly with reasoning; repeats had 42 of 43 prompt tokens cached and decoded at 28-36 tok/s; stopping
+  the process tree stopped the engine.
+
+## Decode hill climb (2026-11-18 night / 19)
+
+Goal: drafted decode from ~37 (CLI) toward 50+. Unless a row says otherwise: engine CLI, the long-answer prompt,
+256 tokens, `--dspark on --dspark-conf 0.15`, `STRATA_DS4_DSPARK_CUM=0.1`, v1 adapter, warm runs, output compared by hash.
+
+### Host launch cost is not the limit
+
+A stand-alone benchmark of empty kernels on one card, in-order queue, Level Zero v1:
+
+| Launch | us a launch |
+|---|---:|
+| `parallel_for`, no event used, profiling off | ~7.5 |
+| the same, profiling on / with an event / with a queue copy | ~7.5 |
+| `nd_launch` | 8.9 |
+| `UR_L0_USE_IMMEDIATE_COMMANDLISTS=0` | 5.1, but decode hung in 3 of 4 runs: rejected |
+| a 256-byte kernel capture | +1 |
+
+The classified timeline agrees: inside a layer the gaps between kernels are under 1 us, so the host stays ahead of
+the cards. A plain decode token is device bound: 31.2 ms span, all four cards idle at once for only 3.9 ms of it.
+
+### Drafted rounds: two stalls found and fixed (fx33, `--reserve-mib 768`)
+
+A drafted round (draft, then one verify window) had 12.1 ms with every card idle. Two causes:
+
+1. **The drafter's tap copy.** The verify window copies its hidden-state taps to the host with `dpct`'s pitched
+   device-to-host copy. That helper allocates a temporary buffer and frees it in a `host_task`, which stalls the
+   in-order queue: about 0.74 ms, three times a round. fx33 copies up to 16 rows with one plain `queue.memcpy` each
+   (`DS4_TAP_COPY=0` restores the helper).
+2. **Experts spilled to the CPU lane on the last card.** With `--reserve-mib 1024` the served 128k placement left 33
+   routed experts on the CPU lane (13 at 12k). No token was routed to them, but a layer that owns any CPU-lane expert
+   waits for the CPU lane's answer every token, so it is no longer free of host waits. `--reserve-mib 768` puts all of
+   them in VRAM (978 MiB still free on the last card).
+
+| Build | Round, ms | All cards idle, ms | Verify window rows 2 / 3 / 4 / 5, ms | Draft, ms |
+|---|---:|---:|---|---:|
+| before | 60.1 | 12.1 | - | - |
+| **fx33 + reserve 768** | **50.7** | **6.2** | 38.9 / 43.4 / 52.8 / 63.1 | 6.4 |
+
+Both live since 2026-11-18. One served smoke-test prompt decoded at 43-44 tok/s warm. 120k prompt read 811.6 tok/s (814 at
+reserve 1024: unchanged).
+
+### Where a verify window's extra time goes
+
+Device time a plain token, by kernel length (27.3 ms in all):
+
+| Kernel length | Launches | ms |
+|---|---:|---:|
+| under 5 us | 838 | 2.55 |
+| 5-20 us | 254 | 2.9 |
+| 20-50 us | 48 | 1.5 |
+| 50 us or more | 335 | 20.3 |
+
+Extra device time of a verify window over a plain token, by rows:
+
+| Kernel group | 2 rows, ms | 3 rows, ms | 4 rows, ms |
+|---|---:|---:|---:|
+| routed experts | +4.1 | +6.9 | +10.0 |
+| dense Q6_K tiles | +1.6 | +2.5 | +3.5 |
+| other dense mat-vec | +0.6 | +0.9 | +1.2 |
+| router (`gemv_f32` rows kernel) | +1.1 | +1.2 | +1.2 |
+
+The 6.2 ms still idle per round: next round's start 0.62, card-to-card hand-offs ~1.2, drafter seed 0.31, replicate
+waits ~0.55, gaps before the MoE input quantize ~0.57, the rest spread thin.
+
+### Verify-width kernels (fx34, fx35)
+
+fx34 gives the dense Q6_K tiled mat-vec templates for the exact column count of a verify window (`DS4_Q6T_MC`), in
+place of rounding up to 4 or 8. Dense Q6_K tile time per verify window (plain token 10.62 ms):
+
+| `DS4_Q6T_MC` | 2 rows | 3 rows | 4 rows | 5 rows |
+|---|---:|---:|---:|---:|
+| 0 (old dispatch) | 12.29 | 13.13 | 14.07 | 16.23 |
+| **1 (exact width)** | **11.82** | **12.90** | **13.99** | **15.05** |
+| 2 (4 output rows a work-item) | 26.24 | 29.16 | 36.59 | 43.85 |
+
+Mode 2 is about 2x slower (likely register spills). Mode 1 helps most at 2 and 5 rows. The kernel looks bound by
+instruction issue, not memory, so the next step for it is XMX int8 (DPAS) rather than more rows a work-item.
+
+fx35 makes mode 1 the default and sends router windows of 2-8 rows down the one-launch-a-token path (the rows kernel
+stages an 8-row tile however few rows are live; `DS4_ROUTER_SMALL=0` restores it; prompt chunks keep the rows kernel).
+
+| Run | Live (fx33) | fx35 |
+|---|---:|---:|
+| Drafted decode, 3 alternating runs | 36.58 / 36.81 / 37.00, mean 36.80 | 37.26 / 37.67 / 37.50, mean **37.48 (+1.9%)** |
+| fx35 build, both switches off | - | 37.01 |
+| Plain decode | 31.65 | 31.65 |
+| 8k prompt read | 738.4 | 738.5 |
+
+Drafted output identical (`f70da23b`) with the same acceptance per position. Live since 2026-11-19 (served smoke test, one easy prompt:
+44.4 / 45.3 tok/s warm).
+
+### Drafter settings re-checked
+
+| Setting | Drafted decode, tok/s | Note |
+|---|---:|---|
+| `--dspark-conf 0.15`, CUM 0.1 (live) | 36.73 / 36.92 | |
+| conf 0.1 / 0.15 / 0.25 with CUM 0.2 | 37.20 / 37.23 / 36.84 | within noise of live |
+| CUM 0.05 (any conf) | 35.4-35.9 | 3-4% slower: longer drafts that fail |
+| `DS4_DRAFT_COST=1` (cost-based cut) | 35.56-35.72 vs 36.96-37.03 | -4%, same tokens |
+| `DS4_ROUTER_ROWS=0` | +1.0% decode, -1.1% prompt | led to fx35's row limit |
+
+The draft cut is already near its best; the settings stay. The drafter keeps 53-55% of its first-position drafts.
+
+### Tensor parallel 2 with the uneven split (2026-11-19)
+
+`DS4_TP_GGUF_UNEVEN=1` splits each expert's 9 blocks 5 / 4 (1280 / 1024 values) between two cards. It loads: cards 0+1
+run layers 0-18, cards 2+3 layers 19-39 and the head, no expert on the CPU lane, 1.5-4.2 GB free a card. **But it
+hangs:** `--tp 2` also turns on threads mode (one submitting host thread per card), which this port had not run in
+decode. The first cross-card flag is never raised, then every layer's CPU-lane answer flag stays 0 until the host wait
+gives up (~11 s each, 86 waits in a 600 s run). Plain and drafted runs both. The engine's own source marks the uneven
+split as having no flow on its groups yet. Not pursued for now: even working, TP needs at least one group exchange a
+layer (~40 a token) through host USM at ~0.3-0.4 ms each on this stack, which eats most of the gain of halving each layer.
+
+### Projection to 50+
+
+| Lever | Expected gain |
+|---|---:|
+| fx35 (done) | +1.9% measured |
+| XMX int8 Q6_K mat-vec for verify windows | 3-6% |
+| fusing the sub-5 us kernels (838 a token) | 3-4% |
+| deferring hand-off and replicate waits | 1-2% |
+| verify that stops early once a draft position is rejected | 1-3% |
+
+Stacked, +8-15%: about 40-43 tok/s on the benchmark prompt. 50 on that prompt needs more than these, most likely
+cheaper routed experts in the verify window (+4.1 ms at 2 rows, the largest single cost above) or more drafts kept. Idle time alone is not enough to reach 50; device time a verify window has to fall.
 
 ## What made the difference
 
@@ -82,6 +327,15 @@ The rest is pipeline bubbles and host time. That is the next lever (see future l
    `joint_matrix` GEMM in place of the F32 tiles. One work-group covers an expert and 128 output rows (8 sub-groups of 16), with B tiles
    packed in SLM, 32 rows a pass. The two IQ1_S sub-block scales are folded into B, which is exact in f16 because code x scale <= 135.
    Switch: `DS4_HEAVY_XMX` (0 off, 1 both halves, 2 gate/up only, 3 down only).
+7. **Hand-off copies on the copy engine (fx31, 8k 282 -> 765).** A ~33 MB copy into host USM from at most 64 work-groups
+   of kernel stores took ~1.0 s a chunk. A queue `memcpy` takes ~10 ms. Profilers that time kernels by name will
+   show this as ordinary kernel time, so it looked like work rather than a bubble. Only the classified
+   timeline showed that the last stage was waiting on it.
+8. **No host stalls inside a drafted round (fx33 + `--reserve-mib 768`, round 60.1 -> 50.7 ms).** `dpct`'s pitched
+   copy frees its temporary buffer in a `host_task` that stalls the queue, and a layer that owns even one unused
+   CPU-lane expert waits for the CPU every token. Plain per-row copies and a smaller reserve remove both.
+9. **Kernels sized to the verify window (fx35, +1.9% drafted).** Exact-width dense Q6_K templates, and the router's
+   one-launch-a-token path for windows of up to 8 rows.
 
 ## Bugs found on the way
 
@@ -121,6 +375,10 @@ cross-card pipeline uses.
 - `dpct` mapped every `cudaStreamQuery` to "done" (11 sites, `DPCT_CHECK_ERROR(q->ext_oneapi_empty())` returns the
   error code, not the bool). Real, fixed, but not the cause of the stall it was suspected of.
 - `CompBatch` was passed by value at 2,820 bytes, over the 2 KB kernel-argument limit. It is now passed through a USM slot. This was the drafter's JIT crash.
+- The teardown exception at exit: the "no helper queue" sentinel was `&dpct::get_in_order_queue()`, which returns the
+  queue of the *current* device, so the comparison failed on any thread that had switched device and the cleanup
+  freed a queue it did not own. The sentinel is now captured once (fx29). The exception is gone. The process still
+  exits with code 116 after printing its results; the source is unknown.
 - `DS4_DSPARK_CONF` is declared and never read. The drafter floor is the CLI flag `--dspark-conf`.
 - The `ds4` CLI feeds the prompt `--window` tokens a call (default 16). The chunked prompt path needs one feed of at least
   512 tokens, so every CLI prompt number before 2026-11-18 was windows of 16 (about 23 tok/s at 2k and 8k).
@@ -135,36 +393,57 @@ cross-card pipeline uses.
 | Q6_K per-row and block-interleaved repacks | slower than the original layout on every shape; 128-row SoA tiles won (kept, above) |
 | XMX for the light experts (fewer than 64 rows, fx22, opt-in `DS4_LIGHT_XMX`) | 8k 211 -> 199, 2k 146 -> 125: too few rows to fill the tiles |
 | Restructured heavy kernel alone (fx26: scale fold, one accumulator per tile) | did not fix the empty down output; the second role (fx26c) did |
-| Host waits around every heavy launch (fx27, `DS4_HX_SYNC`) | did not stop the hang; kept as an option, default on |
+| Host waits around every heavy launch (fx27, `DS4_HX_SYNC`) | did not stop the hang. Off is +1.5% on the v1 adapter (8k 281 -> 286 / 283), so the served config runs `DS4_HX_SYNC=0` |
 | Engram reads as the hang cause | wrong; the stacks put it in the driver |
-| Prompt chunk 256 | hangs at 8k; not looked into, likely the same deadlock |
+| Prompt chunk 256 | hung at 8k before fx31; finishes on the fx31 build (752 tok/s, one run), slower than 512 |
+| Fewer host launches as the decode lever (launch benchmark) | ~7.5 us a launch however launched; the host already runs ahead of the cards inside a layer |
+| `UR_L0_USE_IMMEDIATE_COMMANDLISTS=0` | 7.5 -> 5.1 us a launch, but decode hung in 3 of 4 runs |
+| Dense Q6_K with 4 output rows a work-item (`DS4_Q6T_MC=2`) | about 2x slower than exact width at every verify size |
+| Cost-based draft cut (`DS4_DRAFT_COST=1`) | -4%, same tokens |
+| Looser drafter floor (CUM 0.05) | -3 to -4% |
+| Replicate waits as the next lever | ~0.55 ms a round: too small to pay first, parked |
+| Tensor parallel 2, uneven split (`DS4_TP_GGUF_UNEVEN=1`) | loads, then hangs in threads mode (above); parked |
 
 ## Measurement notes
 
 - Prompt reads need `--window 65536` (or any window of at least one chunk) on the `ds4` CLI.
-- `DS4_KT=1` per-kernel timing costs about 1% at 8k (276.7 vs ~280 tok/s).
+- `DS4_KT=1` per-kernel timing costs about 1% at 8k (276.7 vs ~280 tok/s). It does not time `xfer_put_kernel`, which
+  is why the per-kernel table above has no hand-off copy in it.
+- `DS4_TL=<csv>` (the classified timeline) costs about 3-8% and must not run together with `DS4_KT`.
+- The first run of a freshly built executable is slower and can give different tokens (kernel JIT). Every A/B above
+  discards it, except where the table marks it.
 - The check mode for the heavy kernels (`DS4_HX_CHECK=n`) poisons the light rows of its buffer, so an end-to-end result
   in that mode is invalid. It checks kernels only.
 - `DS4_WATCH=<s>` starts a thread that suspends every thread and prints its stack (`StackWalk64` + `SymFromAddr`)
   after `s` seconds without a layer starting. Driver and runtime frames resolve; the engine's own did not in this build.
 - The two 2k runs of the default build gave different 16-token hashes (`70b6660b` / `6fe86dce`); the 8k hash is stable
   across every build above. Unexplained.
+- On the fx33-era builds the 16 drafted tokens after the 8k prompt can also differ run to run, on every build tested,
+  the live one included (live `2e96bd4d` twice, fx35 `2e96bd4d` twice, one switch-only build once `258e892f`). Treat a
+  single changed hash on that test as noise until it repeats; the 256-token drafted test stays byte-stable.
+- The first run of a new kernel shape is slow (JIT on first use), including after a server restart: the first served
+  reply decoded at 25.9 tok/s, the next two at 44.4 / 45.3.
 
 ## Future leads
 
 Ranked by expected gain toward 600 tok/s prompt and ~50 decode:
 
-1. **Pipeline bubbles in the prompt read.** Each card is busy about 26% of an 8k read. Ideas: finer hand-offs (per-layer
-   rather than per-card stage), overlapping the host waits with the next chunk's launches, and checking whether the
-   default 4-stage schedule waits on the slowest card each chunk. With the cards never idle, today's kernels alone would read 8k at about 1,050 tok/s.
-2. **Re-sweep the prompt chunk** on the XMX build: 512 was picked when the kernels were 3-4x slower.
-3. **Sparse attention (23.5%) and the light experts (24% together).** Light experts need a grouped kernel that batches
-   several small experts per work-group rather than per-expert XMX tiles. The ESIMD grouped GEMM that sped up
+1. **Decode toward 50+**, in this order (see the [projection](#projection-to-50)): XMX int8 Q6_K mat-vec for verify
+   windows; fusing the 838 kernels under 5 us a token; deferring hand-off and replicate waits; early stop of a verify
+   window after a rejected position. Routed experts are the largest part of a verify window's extra cost (+4.1 ms at
+   2 rows) and the next target after those.
+2. **Prompt pipeline fill and drain.** With fx31 the largest gaps are card 3 waiting for its first chunk (~2.5 s) and
+   cards 0 and 1 idle after their last (~2.2 / ~1.1 s) at 8k. A different chunk size does not recover them (see the re-sweep);
+   a smaller first chunk might.
+3. **Submitted but not running, 1.5-1.9 s a card.** Work is queued but the card has not started it. Next look:
+   launch-to-start latency per kernel type, and whether the host waits for one hand-off flag hold up the launches behind it.
+4. **Sparse attention and the light experts**, now a larger share of a shorter read. Light experts need a grouped
+   kernel that batches several small experts per work-group. The ESIMD grouped GEMM that sped up
    [GLM](../../glm-5.3/sycl-port/experiments/2026-11-15-esimd-grouped-gemm/) and
    [Flash-Next](../../strata-windows-port/esimd-prefill/) is the reference.
-4. **Decode attention.** About 21 of 34 ms a decode token in an earlier profile; untouched so far.
-5. **Whole-tensor Q6_K SoA repack** for the remaining dense shapes (wo_b, k 8192), bench -7%.
-6. **Chunk-256 hang, teardown exception** (the process exits 9 after printing results), and the 2k nondeterminism:
-   all needed before a llama-swap entry.
-
-Next step: a 30-minute mixed soak on the v1 adapter, then a llama-swap entry proposal to the owner.
+5. **The first request after load can differ from later identical ones.** Candidates, in test order: the background GEMM
+   warm-up thread, prompt-prefix reuse, the drafter's shapes on first use, the Engram row cache.
+6. **Exit code 116**, the serve-mode watchdog false alarm, and a 256k context test.
+7. **Whole-tensor Q6_K SoA repack** for the remaining dense shapes (wo_b, k 8192), bench -7%.
+8. **Tensor parallel through threads mode**: find why the first cross-card flag of `--tp 2` is never raised. Only
+   worth it if group exchanges get much cheaper than ~0.3 ms.
