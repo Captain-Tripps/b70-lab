@@ -9,10 +9,10 @@ were tried on GLM decode. Only one gains, and only a little:
 |---|---:|---|
 | 256 registers for `glmf::moe_gate_up` (it spills 4.3-5.8 KB a thread) | -3% | rejected |
 | `use_root_sync` dropped from every launch (549) | +0.3% (noise) | rejected |
-| 16-lane aligned Q6_K mat-vec (`STRATA_GLM_MV_AL16=1`) | **+0.5 / +0.7%** (two rounds) | staged, not live |
+| 16-lane aligned Q6_K mat-vec (`STRATA_GLM_MV_AL16=1`) | **+0.5 / +0.7%** (two rounds) | live |
 
-Every run of every build produced the same 768 tokens. The 16-lane kernel is exact by construction (see below), so
-it can go live without a quality check, but the gain is small. It is built and waiting for the owner's call.
+Every run of every build produced the same 768 tokens. The 16-lane kernel is exact by construction (see below). It
+went live on 2026-11-19 ([promotion](#promotion)).
 
 ## Run conditions
 
@@ -72,7 +72,14 @@ In round 2 every 16-lane run beat every live run. The gain is about the size of 
 (+0.6-0.8%) and well under fx43's +3.3%. On DeepSeek the dense Q6_K kernel was the plain bottleneck; on GLM the
 critical path is the tail stage of the spec pipeline plus the MTP draft, so a faster mat-vec moves the total less.
 
+## Promotion
+
+Live 2026-11-19 on the owner's OK: a new runtime folder holds the r3 exe (`79f714d1...`), and the engine config points
+at it with `STRATA_GLM_MV_AL16=1` added ([`promote_r3.py`](promote_r3.py); the config is backed up first, so rolling
+back is restoring the backup). Served smoke through the proxy after the swap: 17 x 23 = 391, a 193-token prose answer
+coherent and identical on a repeat, 41.3 tok/s served. There is no same-prompt served baseline from tonight, so the
+CLI A/B above is the measured gain.
+
 ## Next
 
-- Go live with r3 (exe swap + `STRATA_GLM_MV_AL16=1` in the config) or leave it staged: the owner's call.
 - `moe_route` (1.6%, 1.7 KB spill) is not worth a build on these numbers.
