@@ -1,0 +1,33 @@
+GLM-5.3-Flash Maya-M, 4x B70, live engine config env, CLI decode: t200 code prompt, --max-new 768 --greedy.
+Hash = first 8 hex of the MD5 of the comma-joined "T <id>" lines. Order: warm B, then A B B A A B.
+A = live exe (7559cf05c285a18463c278afa769b660).
+
+r1: B = gate/up with grf_size<256> (STRATA_GLM_GU_GRF=1), exe 4b820f1440574349b800e8c550ad9818
+  A 50.66 / 50.66 / 50.77 tok/s     B 49.29 / 49.01 / 49.21 tok/s     tokens 5538FBC4 in every run
+
+r2: B = use_root_sync dropped from all 549 launches, exe 95876c0df01b0d735ecc813da22a9f33
+r2warmB  exit 0 | glm stat: decode 19.87 ms/tok (50.33 tok/s) | 768 tokens 5538FBC4
+r2A1     exit 0 | glm stat: decode 20.05 ms/tok (49.87 tok/s) | 768 tokens 5538FBC4
+r2B1     exit 0 | glm stat: decode 19.83 ms/tok (50.42 tok/s) | 768 tokens 5538FBC4
+r2B2     exit 0 | glm stat: decode 19.66 ms/tok (50.85 tok/s) | 768 tokens 5538FBC4
+r2A2     exit 0 | glm stat: decode 19.61 ms/tok (51.00 tok/s) | 768 tokens 5538FBC4
+r2A3     exit 0 | glm stat: decode 19.74 ms/tok (50.66 tok/s) | 768 tokens 5538FBC4
+r2B3     exit 0 | glm stat: decode 19.74 ms/tok (50.66 tok/s) | 768 tokens 5538FBC4
+
+r3: B = 16-lane aligned Q6_K GEMV (STRATA_GLM_MV_AL16=1), exe 79f714d1b7b5dba09efd3feaaec50ac4
+round 1
+r3warmB  exit 0 | glm stat: decode 19.94 ms/tok (50.15 tok/s) | 768 tokens 5538FBC4
+r3A1     exit 0 | glm stat: decode 19.85 ms/tok (50.39 tok/s) | 768 tokens 5538FBC4
+r3B1     exit 0 | glm stat: decode 19.60 ms/tok (51.03 tok/s) | 768 tokens 5538FBC4
+r3B2     exit 0 | glm stat: decode 19.80 ms/tok (50.51 tok/s) | 768 tokens 5538FBC4
+r3A2     exit 0 | glm stat: decode 19.93 ms/tok (50.17 tok/s) | 768 tokens 5538FBC4
+r3A3     exit 0 | glm stat: decode 19.66 ms/tok (50.88 tok/s) | 768 tokens 5538FBC4
+r3B3     exit 0 | glm stat: decode 19.60 ms/tok (51.02 tok/s) | 768 tokens 5538FBC4
+round 2
+r3warmB  exit 0 | glm stat: decode 19.72 ms/tok (50.71 tok/s) | 768 tokens 5538FBC4
+r3A1     exit 0 | glm stat: decode 19.71 ms/tok (50.74 tok/s) | 768 tokens 5538FBC4
+r3B1     exit 0 | glm stat: decode 19.58 ms/tok (51.08 tok/s) | 768 tokens 5538FBC4
+r3B2     exit 0 | glm stat: decode 19.63 ms/tok (50.93 tok/s) | 768 tokens 5538FBC4
+r3A2     exit 0 | glm stat: decode 19.72 ms/tok (50.70 tok/s) | 768 tokens 5538FBC4
+r3A3     exit 0 | glm stat: decode 19.72 ms/tok (50.70 tok/s) | 768 tokens 5538FBC4
+r3B3     exit 0 | glm stat: decode 19.66 ms/tok (50.87 tok/s) | 768 tokens 5538FBC4

@@ -1,0 +1,4 @@
+strata serve: prompt 256 tokens = 0 reused + 256 read in 2100 ms (121.9 tok/s), 239 generated in 2163 ms (110.5 tok/s), drafts accepted 147 of 273, 1 checkpoints
+strata decode GPU stages (ms/window): GDN layers: hc-read0 1.37 q8+qkv/q-idx gemv 1.70 conv 0.15 ab 0.24 z 1.00 rec 0.58 out-proj 1.18 hc-read1+router 1.88 shared+quant 0.27 waitA 0.05 VRAM hits 4.58 copy+combine 0.34 (gap) 0.06 head 1.07 | QSA layers: hc-read0 0.39 q8+kv-idx 0.17 k/v+norm-rope 0.19 kv+idx append 0.15 q+q-idx 0.67 scores+topk 0.09 kv-resolve 0.02 attention 0.52 gate 0.04 out-proj 0.40 hc-read1+router 0.63 shared+quant 0.09 waitA 0.02 VRAM hits 1.76 copy+combine 0.11 (gap) 0.02 | total 19.74 ms/window over 94 windows
+
+Without the profiler (same request): 239 generated in 2134 ms (112.0 tok/s), drafts accepted 147 of 273; same tokens.
