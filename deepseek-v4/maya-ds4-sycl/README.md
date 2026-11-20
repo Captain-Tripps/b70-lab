@@ -1,9 +1,10 @@
 # DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 19)
 
-**Three days into the port: decode 37.5 tok/s with the drafter (31.7 plain) on the benchmark prompt, prompts read at
-about 740 tok/s at 8k and 811 at 120k.** Served decode depends on how well the drafter guesses the text: about 35 tok/s
-after a short prompt in the soak, 43-45 on easy or long-context replies. The llama.cpp fork yardstick on the same cards is 3.92 decode / 0.65 prompt.
-The targets are 600+ tok/s prompt and 50+ decode, so the prompt target is met and decode is three quarters of the way.
+**Three days into the port: decode 43.7 tok/s with the drafter (36.2 plain) on the benchmark prompt, prompts read at
+812 tok/s at 8k and 867 at 120k.** Served decode depends on how well the drafter guesses the text: 47-50 tok/s on warm
+short prose prompts, up to ~70 on code. The llama.cpp fork yardstick on the same cards is 3.92 decode / 0.65 prompt;
+the port's first working decode was 0.03 tok/s. The targets are 600+ tok/s prompt and 50+ decode: the prompt target is
+met and decode is at 87% on the benchmark prompt ([round 4](#decode-round-4-2026-11-19-day)).
 Since 2026-11-18 the engine has a llama-swap entry (owner's OK) that swaps with the GLM entry on demand, behind Maya's
 OpenAI-compatible server.
 
@@ -304,6 +305,122 @@ layer (~40 a token) through host USM at ~0.3-0.4 ms each on this stack, which ea
 Stacked, +8-15%: about 40-43 tok/s on the benchmark prompt. 50 on that prompt needs more than these, most likely
 cheaper routed experts in the verify window (+4.1 ms at 2 rows, the largest single cost above) or more drafts kept. Idle time alone is not enough to reach 50; device time a verify window has to fall.
 
+## Decode round 4 (2026-11-19, day)
+
+Five steps, each measured on the CLI bench (34-token prompt, 256 tokens, greedy; drafted with `--dspark-conf 0.15`).
+Every setting got a warm-up run first (the first run of a new kernel shape includes its JIT compile), then 2-5
+alternating reps. **The 256 output tokens were identical to the live build in every run of every step.**
+
+| Step | Drafted, tok/s | Plain, tok/s |
+|---|---:|---:|
+| Start of the day (fx35, v1 adapter) | 37.5 | 31.7 |
+| fx37 lane-packed dense Q6_K + `DS4_Q6K_RM=18`, fx38 256 registers on the prompt experts, `DS4_IQ_RP=4` | 41.4 | 34.6 |
+| + Level Zero v2 adapter with `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` | 41.55 | 34.6 |
+| + fx40 IQ1_S gate / up tiles, fx41 expert-group cap, drafter cut CUM 0.4 | 42.97 | 35.0 |
+| **+ fx43 16-lane dense Q6_K (`DS4_Q6K_LEAN=3`) and 256 registers for decode attention (`DS4_GRF43=1`)** | **43.6-43.7** | **36.2** |
+
+All five steps are live (owner's OK each time). Served (warm, short prompts) runs 47-50 tok/s on prose and up to ~70
+on code; the first request after a load is slow (JIT). The 8k prompt read is 812 tok/s and 120k 867 tok/s.
+
+### fx37: a lane-packed dense Q6_K layout
+
+A plain read on one B70 reaches 580-600 GB/s; the dense mat-vecs ran at 420-450. fx37 re-packs every dense Q6_K weight
+at load into 128-row tiles laid out for sub-group block loads (each lane's words contiguous; low bits, high bits and
+scales in separate planes). Bench: one layer's dense set 292 -> 249 us, `wo_b` 80 -> 63 us. In the engine it only
+paid with the verify windows at 1 row x 8 sub-groups (`DS4_Q6K_RM=18`); 2 rows was 1.5% slower. Exact (same sums in
+the same order). Plain +4.2%, drafted +7.1%.
+
+### fx38: 256 registers, per kernel
+
+The JIT option `-ze-intel-enable-auto-large-GRF-mode` gave the 8k read +14% but cost drafted decode 2.5%, so it is
+applied per kernel instead, with `sycl::ext::intel::experimental::grf_size<256>`. The heavy XMX expert kernels (prompt
+only) went 735 -> 782 tok/s at 8k, decode unaffected. Each launch with the property needs its own lambda, or SYCL sees
+two kernels with one name.
+
+### The v2 adapter, back on
+
+The v2 deadlock ([below](#faster-kernels-expose-the-level-zero-v2-adapter-deadlock)) sat in exactly the call that
+`UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1` turns off. With it: six 8k reads, 0 stalls (about 50% before), then a
+served idle soak with gaps of 2 / 5 / 10 / 20 / 30 / 45 / 60 min, 16 of 16 correct, no stall. On the bench v2's gain is
+within noise (drafted 41.4 -> 41.55). Launch cost on one card: 7.96 us (v1) / 7.80 (v2) on an in-order queue with
+profiling, 6.45 on v2 without profiling, 0.56 for a SYCL graph replay.
+
+### fx40, fx41: expert tiles, a group cap, a higher draft cut
+
+- **fx40** packs the IQ1_S gate / up weights at load into 32-sub-block tiles (`DS4_IQ1_TILES=1`, only on layers whose
+  experts are all on a GPU). A micro-bench promised 1.5-2x, but its baseline layout ran at 122 GB/s against the engine's
+  real 230-250 GB/s, so the engine gain was small: gate/up 86.6 -> 78.2 us a call, plain +1.2%, drafted +0.7%.
+- **fx41** runs expert groups of 5-8 entries through the 4-entry build (`DS4_IQ_NE_CAP=4`); each entry keeps its sums in
+  order, so it is exact.
+- **Drafter cut CUM 0.1 -> 0.4.** Two-draft rounds kept only 0.6 tokens on average; a higher cut drops the weak second
+  drafts. Position-1 acceptance 54% -> 67%. With fx41: drafted 41.3 -> 43.0 (+3.9%), plain +1.4%.
+
+### Where a token's time goes (VTune, per delivered token, four cards summed)
+
+| | plain | drafted |
+|---|---:|---:|
+| device time | 28.97 ms | 23.90 ms |
+| wall time (from tok/s) | 28.9 | 24.0 |
+| dense Q6_K mat-vec | 12.57 (43%) | 7.93 |
+| IQ1_S gate / up | 3.46 | 4.1 |
+| expert down | 2.13 | 2.5 |
+| sparse attention | 1.54 | 0.88 |
+
+Device time equals wall time: at batch 1 the layer pipeline runs one card at a time and host submission is hidden.
+So the levers are kernel speed or real cross-card parallelism, not host overhead. Dense Q6_K is bandwidth bound
+(3 columns cost about the same as 1), and the routed experts are what grow with the verify width
+(gate/up 87 / 140 / 179 / 223 / 336 us at 1-5 tokens).
+
+### Probes that closed two doors
+
+- **No peer-to-peer on Windows.** `ext_oneapi_can_access_peer` is 0 both ways and a device-to-device `memcpy` fails.
+  A host-staged hop costs +12 / +18 / +34 us over no hop for 20 / 100 / 320 KB. Tensor parallel on this stack would pay
+  ~45-50 us a hop, which caps it near the current speed.
+- **No same-card kernel overlap.** Two queues, or one out-of-order queue, gain at most 6%, even for two half-empty
+  kernels. The shared-expert / routed-expert overlap idea is dead on this driver.
+- Side finding: a 27.6 MB read repeated alone runs at ~1,100 GB/s, so the L2 holds about 28 MB.
+
+### fx43: dense Q6_K on 16-lane sub-groups, and the spill fixes
+
+- **Rows spill when a sub-group does more than one.** Every row carries seven 64-bit tile pointers; 4 rows a sub-group
+  ran 2x slower. "Lean" addressing (one tile base + 32-bit offsets, x loaded once a chunk) removes the spill and is
+  exact, but in the engine it gave only +0.6-0.8% (fx42), against -18% on the bench.
+- **16 lanes is Xe2's native width.** One row per 16-lane sub-group, lane `l` doing the 32-lane kernel's lanes `l` and
+  `l + 16` with separate accumulators, then `lo + hi` (the xor-16 step done in-lane) and xor 8, 4, 2, 1: the same adds
+  in the same order, so the same bits (0 differences across 9 bench variants). Bench: one layer 300 -> 268 us (a plain
+  read of the same bytes is 240).
+- **The one-query decode attention spilled 3,968 bytes a thread** (VTune `Spill Memory Size`), ~1.5 ms a plain token.
+  256 registers for that kernel alone (`DS4_GRF43=1`) removes it. 256 registers for the drafter's Q8_0 mat-vec (it spills
+  too) did not pay.
+- Engine: plain 34.95 -> 36.2 (+3.3-3.7%, confirmed three times), drafted +0.3 to +2.4% (noisier). Prompt read unchanged.
+
+**Bench gains overstated engine gains 5-10x** on fx40 and fx42, and the bench's copy of the live kernel ran ~30% slower
+at 3 columns than the engine's own VTune times (unexplained). Only the engine A/B decides.
+
+### Prompt read: already past the target
+
+| Prompt chunk | 8k, tok/s | 120k, tok/s | Output vs 512 |
+|---|---:|---:|---|
+| 256 | 774 | 770 | same |
+| **512 (live)** | **808-817** (6 runs) | **867** | - |
+| 1024 | 824 | **955** | 8k same; **120k differs from the 4th token** |
+
+- The prompt runs as four 10-layer stages, one card each; there is no tensor-parallel all-reduce in it.
+- The cards are busy ~74% of an 8k read: 16 chunks through a 4-stage pipeline leave a fill / drain bubble of about
+  3 / (16 + 3). At 120k (235 chunks) the bubble is ~1%, which is why 120k reads faster than 8k.
+- The prompt kernels do not spill (the worst is 1,600 bytes in a kernel at 0.8% of the time), so per-kernel registers
+  have nothing left to give there. Time split: routed experts ~58%, sparse attention ~24%.
+- Chunk 1024 is +10% at 120k but changes the output there. It stays off until a correctness check (repeat run,
+  log-prob compare, 2048 probe); on the GLM port 2048 was not deterministic and 3072+ was wrong.
+- In 1 of 6 runs of the 8k read the first two generated tokens differed and the next 14 matched. It looks like a
+  near-tie after a long prompt; being watched.
+
+### Measurement trap: a profile that includes the model load
+
+A VTune capture of the whole process showed memory copies as 21% of the GPU time (109.5 GB device-to-host). They are
+the model load: about 110 GB of experts uploaded to VRAM. A near-empty profiled run shows the same ~16k copies. Profile
+a run long enough that the load is a small share, or subtract a load-only run.
+
 ## What made the difference
 
 1. **Cross-card flags: wait on the host, then launch (M1, decode 0.03 -> 19.9 tok/s).** Maya hands data between cards
@@ -336,6 +453,13 @@ cheaper routed experts in the verify window (+4.1 ms at 2 rows, the largest sing
    CPU-lane expert waits for the CPU every token. Plain per-row copies and a smaller reserve remove both.
 9. **Kernels sized to the verify window (fx35, +1.9% drafted).** Exact-width dense Q6_K templates, and the router's
    one-launch-a-token path for windows of up to 8 rows.
+10. **A dense Q6_K layout made for sub-group block loads (fx37, drafted +7%).** The weights are re-packed at load so
+    each lane's words are contiguous. Bandwidth, not arithmetic, set the dense time.
+11. **256 registers where a kernel spills, and nowhere else (fx38, fx43).** The global large-register option helped the
+    prompt and hurt decode; per kernel it helps both. VTune's `Spill Memory Size` column finds them.
+12. **16-lane sub-groups for the dense mat-vec (fx43, plain +3.3%).** Exact, by doing the 32-lane kernel's two lanes
+    per lane and folding the xor-16 step in-lane.
+13. **The v2 adapter's deadlock has an off switch** (`UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1`).
 
 ## Bugs found on the way
 
@@ -403,6 +527,18 @@ cross-card pipeline uses.
 | Looser drafter floor (CUM 0.05) | -3 to -4% |
 | Replicate waits as the next lever | ~0.55 ms a round: too small to pay first, parked |
 | Tensor parallel 2, uneven split (`DS4_TP_GGUF_UNEVEN=1`) | loads, then hangs in threads mode (above); parked |
+| Global large-register JIT option | 8k read +14% but drafted decode -2.5%; applied per kernel instead (fx38, fx43) |
+| 256 registers on the light prompt experts' 16-row form (fx38b) | 780 vs 780 tok/s |
+| 256 registers on the drafter's Q8_0 mat-vec (`DS4_GRF43` bit 2) | spill gone, no speed (43.49 vs 43.74) |
+| Lean dense addressing by shape / everywhere (fx42 `DS4_Q6K_LEAN=1` / `=2`) | plain -1% / +0.8%; superseded by the 16-lane kernel |
+| Expert down kernel on 16-lane sub-groups (fx44, `DS4_DN16=1`, exact) | plain 36.11 / 36.16 vs 36.14 / 36.16: no gain; the gate/up 16-lane rewrite skipped with it |
+| Persistent dense kernels (fixed sub-groups walking rows, with or without next-row prefetch) | 5-20% slower on the bench |
+| `DS4_IQ_AHEAD=1` | drafted -25% |
+| Drafter on the last card (layer split 10, 11, 10, 9) | 60 experts no longer fit VRAM and went to the CPU lane; output changed |
+| IQ lookup tables in device USM instead of shared USM (fx39) | flat, tokens identical |
+| `--reserve-mib` 2048 / 3500 (VRAM paging check) | 780 / 772 vs 780: not paging |
+| Prompt chunk 256 on the round-4 build | 8k 774, 120k 770 vs 812 / 867 |
+| Two queues, or one out-of-order queue, on one card | at most +6%: the driver serializes them |
 
 ## Measurement notes
 
@@ -426,7 +562,16 @@ cross-card pipeline uses.
 
 ## Future leads
 
-Ranked by expected gain toward 600 tok/s prompt and ~50 decode:
+After round 4 (2026-11-19): the prompt target is met; decode needs ~15% more on the benchmark prompt.
+
+- **Prompt chunk 1024** (+10% at 120k): needs the correctness check above before it can go live.
+- **Routed experts in the verify window** are the part of a drafted token that grows with width. The exact 16-lane form
+  did nothing for the down kernel, so the next try is a different load pattern, not a narrower sub-group.
+- **SYCL graph replay** costs 0.56 us against ~7.8 us a launch. Device time already equals wall time at batch 1, so
+  this matters only where the host is on the critical path (verify windows, the drafter).
+- **Tensor parallel** stays parked: no peer-to-peer on Windows, ~45-50 us a host-staged hop.
+
+The older list, ranked by expected gain toward 600 tok/s prompt and ~50 decode (items 1, 2 and 7 since partly done):
 
 1. **Decode toward 50+**, in this order (see the [projection](#projection-to-50)): XMX int8 Q6_K mat-vec for verify
    windows; fusing the 838 kernels under 5 us a token; deferring hand-off and replicate waits; early stop of a verify
