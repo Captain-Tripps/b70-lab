@@ -1,0 +1,14 @@
+--- a/ggml/src/ggml-sycl/fused-gemm.hpp
++++ b/ggml/src/ggml-sycl/fused-gemm.hpp
+@@ -39,7 +39,10 @@
+ #endif
+ }
+ 
+-static constexpr int GGML_SYCL_FG_BN = 32;
++#ifndef MAYA_FG_BN
++#define MAYA_FG_BN 32
++#endif
++static constexpr int GGML_SYCL_FG_BN = MAYA_FG_BN;
+ static constexpr int64_t GGML_SYCL_MMID_SCHED_MAX_EXPERTS = 4096;
+ 
+ // Shape and type gates for the kernels below. Device capability is separate: it needs a queue to ask.

@@ -86,8 +86,6 @@
   "STRATA_NIGHT_MMVQ2": "1",
   "STRATA_NIGHT_MMVQ2_MASK": "2",
   "STRATA_NIGHT_PREFILL_GROUPED": "1",
-  "STRATA_NIGHT_PREFILL_GROUPED_MAX": "1024",
-  "STRATA_NIGHT_PREFILL_ESIMD": "1",
   "STRATA_NIGHT_PATTN_XMX": "2",
   "STRATA_NIGHT_TOPK10": "1",
   "STRATA_NIGHT_GDN_AB": "1",
@@ -99,7 +97,10 @@
   "STRATA_NIGHT_PREFILL_DQ32": "1",
   "STRATA_NIGHT_PREFILL_DQCACHE": "1",
   "STRATA_NIGHT_BF16": "1",
-  "STRATA_MTP_SHARED_BRANCH": "0"
+  "STRATA_MTP_SHARED_BRANCH": "0",
+  "STRATA_WIN_TIMER_MS": "0",
+  "STRATA_NIGHT_PREFILL_GROUPED_MAX": "1024",
+  "STRATA_NIGHT_PREFILL_ESIMD": "1"
  },
  "args": [
   "--pack",
@@ -144,5 +145,13 @@
   "0",
   "--mtp-max-t",
   "4"
- ]
+ ],
+ "vision": {
+  "exe": "<STRATA_RUNTIME_DIR>\\strata-vision.exe",
+  "mmproj": "<MODELS_DIR>\\ISTA-DASLab\\Qwen3.8-Flash-Next-GSQ-RCO-GGUF\\mmproj-Qwen3.8-Flash-Next-BF16.gguf",
+  "model": "<MODELS_DIR>\\ISTA-DASLab\\Qwen3.8-Flash-Next-GSQ-RCO-GGUF\\IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+  "gpu": false,
+  "max_tokens": 1024,
+  "threads": 24
+ }
 }
