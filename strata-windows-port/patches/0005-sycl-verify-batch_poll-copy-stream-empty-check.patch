@@ -1,0 +1,36 @@
+From: Captain-Tripps
+Subject: [PATCH] sycl verify: batch_poll: test the copy stream's empty() result, not its error code
+
+Verifier::batch_poll checks whether the copy stream still has work before it
+reports a batched window as done:
+
+    const dpct::err0 qc = DPCT_CHECK_ERROR(copy_->ext_oneapi_empty());
+    if (qc == 1) return 0;
+
+DPCT_CHECK_ERROR returns 0 unless the call throws, so qc is always 0 and the
+check never fires. When the compute queue has drained but copy_ still has
+work, the poll returns "done" and the caller goes on to ep_check /
+sample_rows / reading b_out_. The sibling check on the compute queue a few
+lines up was already written as `empty() ? 0 : 1`; this one was missed.
+
+Measured (Windows, 2x Arc Pro B70, Qwen3.8-Flash-Next IQ3_S, served, A/B/A/B,
+9 requests per round): speeds equal (19.7k prompt 2,410 tok/s both, decode
+97.6-156.9 both) and draft-accepted counts identical on every request. No
+failure was seen without the fix, probably because copy_ normally finishes
+first. A correctness cleanup, not a speed change.
+
+---
+diff --git a/sycl/src/core/verify.cpp b/sycl/src/core/verify.cpp
+index 8cac6af..a684704 100644
+--- a/sycl/src/core/verify.cpp
++++ b/sycl/src/core/verify.cpp
+@@ -4094,8 +4094,7 @@ int Verifier::batch_poll(PoolMultiFn pool, void *user, std::string &err) try {
+       b_running_ = false;
+       return -1;
+     }
+-    const dpct::err0 qc = DPCT_CHECK_ERROR(
+-        ((copy_)->ext_oneapi_empty())); // no host function of this window may
++    const dpct::err0 qc = (copy_)->ext_oneapi_empty() ? 0 : 1; // no host function of this window may
+                                         // raise flag B in the next
+     /*
+     DPCT1001: The statement could not be removed.

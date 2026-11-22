@@ -96,11 +96,16 @@ time left is in host routing/grouping and the combine wait, not the GEMMs. That 
 
 ## How to build it
 
-1. Build the GLM-5.3 recipe's tree first ([../../glm-5.3/sycl-port/recipe/RECIPE.md](../../glm-5.3/sycl-port/recipe/RECIPE.md)),
-   or at least its steps 1 and 3. That gives `<work>\llama-pr` (llama.cpp PR #31428 at `eec5c09`) and
-   `<work>\tree\src\forkxmx\fused-gemm-esimd.cpp` / `.hpp` with the IQ2_S loader and `MAYA_FG_BN 64`.
-2. Put `fused-gemm-esimd.cpp`, `fused-gemm-esimd.hpp` and this folder's `strata_esimd_shim.cpp` in one folder,
-   `<ESIMD_DIR>`.
+The full recipe, with versions, is in [../README.md#how-to-run-it](../README.md#how-to-run-it). In short:
+
+1. Check out llama.cpp PR #31428 at `eec5c09` as `<work>\llama-pr` and apply
+   [esimd/llama-pr-31428-fused-gemm-tile-width.patch](esimd/llama-pr-31428-fused-gemm-tile-width.patch) (the tile
+   width comes from `MAYA_FG_BN`). Only its headers are used.
+2. Put [esimd/fused-gemm-esimd.cpp](esimd/fused-gemm-esimd.cpp), [esimd/fused-gemm-esimd.hpp](esimd/fused-gemm-esimd.hpp)
+   (the PR's kernel plus the IQ2_S loader and `MAYA_FG_BN 64`, the files the live build used) and this folder's
+   `strata_esimd_shim.cpp` in one folder, `<ESIMD_DIR>`. The GLM-5.3 recipe
+   ([../../glm-5.3/sycl-port/recipe/RECIPE.md](../../glm-5.3/sycl-port/recipe/RECIPE.md), steps 1 and 3) produces
+   the same two files.
 3. In the Strata checkout with the port patches 0001-0004 and [../slow-starts/](../slow-starts/) 0002-0003 applied:
 
    ```

@@ -1,96 +1,282 @@
-# Strata on native Windows
+# Strata on native Windows: Qwen3.8-Flash-Next on two Arc Pro B70s
 
 [Strata](https://github.com/hotschmoe/Strata) is a SYCL inference engine with B70-specific work (two-card expert
-parallel, MTP, int8 KV). It targets Linux. These four patches make it build and run natively on Windows 11 with
-Intel's `icx` compiler, including two-card expert parallel and int8 KV.
+parallel, MTP speculative decoding, int8 KV). It targets Linux. The patches here make it build and run natively on
+Windows 11 with Intel's `icx` compiler, and add the fixes and the prompt-read work that the numbers below depend on.
 
-- Base: `hotschmoe/Strata` branch `b70-night-20261016` @ `1c360526` (from SergiioB/b70-launcher PR #4).
-- Model: ISTA-DASLab GSQ-RCO quants of Qwen3.8-Flash-Next, **IQ3_S** (84 GB, current) and IQ3_XXS (76 GB, earlier),
-  sha256 checked; packs + MTP built on the same machine. Cards: two B70s (`level_zero:2,3`).
-- Status (2026-10-17): **best setup = IQ3_S, 1 slot x 200k context, int8 KV, prompt chunk 8192, JIT build,
-  `--ple-io mmap`**: decode ~99 tok/s, prompt read ~1,420 tok/s at 33.6k, answers correct, vision working, 2-hour
-  soak through llama-swap clean. The AOT build with oneAPI 2026.0 miscompiles the int8 attention (see below).
-  Not done: AOT with oneAPI 2026.1.
-- Start-to-start speed lottery on the served build (78-89 vs 32-45 tok/s per start), fixed 2026-11-07: with EP psum,
-  card 0's own expert rows went through the host-memory exchange region. Keeping them in VRAM gives ~106 tok/s on
-  every start (8 of 8), output identical. Patch and details in [slow-starts/](slow-starts/); sent upstream as
-  [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1). The 2026-11-01 file-cache guard is retired.
-  The prompt read had the same kind of leak (card 1's rows buffer): ~1,550 tok/s at 37k on every start, was 775-1,552.
-- Upstream Strata (Niko1221/Strata) v0.2.12 does not include this two-card expert parallel mode. Built on Windows, its
-  helper-card mode (`--expert-cache-device1 auto`) decoded 32 tok/s because of an adaptive-tier check that ignores the
-  helper's cache; fixed to 61 tok/s in Niko1221/Strata#5540 (2026-11-07).
-- Prompt read +31%, live 2026-11-17: the grouped expert path now runs on IQ3_S (per-layer type check), on both cards
-  (a `T_max == 12288` pin kept the second card off it), and on the llama.cpp fork's ESIMD grouped GEMM. 32k read
-  1,680 -> 2,194 tok/s, decode unchanged. Patch, shim and numbers in [esimd-prefill/](esimd-prefill/).
+**What this setup does (served, as of 2026-11-21):** Qwen3.8-Flash-Next, ISTA-DASLab GSQ-RCO IQ3_S, two B70s, one
+slot with 200k context, int8 KV.
 
-Patches (prepared with AI assistance; Strata is MIT, notice in
-[../LICENSES/Strata-LICENSE](../LICENSES/Strata-LICENSE)). Apply in order with `git apply`:
+| Measure | Result | How it was measured |
+|---|---:|---|
+| Decode, 7-prompt bench through llama-swap | **130 tok/s** mean | [`bench/sbench.py`](../bench/), 512 tokens, temperature 0, thinking off (2026-11-07) |
+| Decode per fresh engine start, 4-prompt set | **104-108 tok/s**, 8 of 8 starts | [`slow-starts/start_ab.py`](slow-starts/), median per start (2026-11-07) |
+| Decode on code / explain / summary requests through llama-swap | 111-133 tok/s | single requests (2026-11-07) |
+| Decode on real traffic, 234 requests of 256+ tokens (2026-11-18 to 11-21) | median 117, middle 80% 106-131 tok/s | the engine's own log |
+| Prompt read, 32k tokens, engine bench | **2,194 tok/s** (2,260-2,267 in a second window) | stdin serve protocol, warm, timing off |
+| Prompt read, 32k-65k tokens, real traffic | median 1,594, middle 80% 1,518-1,605 tok/s (25 reads) | the engine's own log |
+| Prompt read, 37k tokens, before the ESIMD work (2026-11-07) | 1,476-1,570 tok/s | 4 fresh starts |
+| Decode right after a 32k prompt | 106-108 tok/s | engine bench, 256 tokens |
 
-| Patch | What |
-|---|---|
-| `0001` native Windows build (icx) | CMake: `/fp:precise`, `/Qmkl:sequential`, C-safe warning flags; Level Zero SDK lookup; positioned reads with `ReadFile`; drop a CUDA-only shared-memory query; undo `<windows.h>` macros (`small`, `IN`, `OUT`, `near`, `far`) that clash with engine names; `memmem` fallback |
-| `0002` two-card expert parallel through host memory | every GPU shares one `sycl::context`; the shared expert-parallel regions are host USM in that context (one address for both cards). `STRATA_WIN_SHARED_CONTEXT=0` restores one context per device |
-| `0003` JIT build option for Xe2 | `STRATA_SYCL_XE2_JIT=ON` makes a JIT build define `STRATA_XMX_SG16` like the bmg AOT build does; `STRATA_SYCL_AOT_OPTIONS` passes extra ocloc options to an AOT build; `setenv` shim for two parity tests |
-| `0004` optional timer-resolution request | `STRATA_WIN_TIMER_MS=N` calls `timeBeginPeriod(N)` at engine start (default 1, 0 = off). Measured: no effect on decode (72 vs 72 tok/s); the configs set it to 0 |
-
-`configs/` has the engine configs used below (paths replaced with placeholders): `strata-iq3s-200k1-pf8k.json` (the
-current best setup; since 2026-11-17 it needs the [esimd-prefill/](esimd-prefill/) build), `strata-ep2-jit.json` (IQ3_XXS, int8, 2 x 200k), `strata-ep2-int8-32k.json`, `strata-ep2-fp16-96k.json`.
+The 2026-11-17 ESIMD prompt work did not move decode (114-116 tok/s on short prompts before and after, same
+harness). The llama.cpp SYCL fork on 4 of the same cards ran this model at 60.6 tok/s decode and 748 tok/s prompt read.
 
 ## How to run it
 
-**1. Build (JIT).** In a `vcvars64` (MSVC) environment plus the oneAPI 2026.0 component `env\vars.bat` files
-(tbb, umf, dnnl, mkl, dpl, ocloc, compiler), with patches 0001-0004 applied:
+This is the recipe for the build that is live here. Every step below was checked against that machine on
+2026-11-21: the patch chain was applied to a clean checkout and compared file by file with the sources the live
+`strata.exe` was built from, and the config is the live one with the paths replaced.
 
+### 1. What you need
+
+| Item | Version used | Notes |
+|---|---|---|
+| GPUs | 2x Intel Arc Pro B70 (32 GB each) | the box has 4; this setup uses 2 of them |
+| GPU driver | 32.0.101.9175 | the 2026-10 numbers were on 32.0.101.8976 |
+| OS | Windows 11 Pro 25H2 (build 26200) | |
+| CPU / RAM | 24-core EPYC, 112 GB RAM | the PLE table needs **~27 GB of free RAM** for the OS file cache (step 6) |
+| Disk | 84 GB GGUF shards, plus the pack and ~5 GB of MTP files | NVMe |
+| Visual Studio Build Tools | 18 (2026), MSVC 14.51 | "Desktop development with C++" (MSVC, CMake, Ninja) |
+| Intel oneAPI Base Toolkit | 2026.0 | DPC++ (`icx`), oneMKL, TBB, oneDNN |
+| Level Zero SDK | 1.33.1 | installer from [oneapi-src/level-zero](https://github.com/oneapi-src/level-zero/releases); CMake finds it under `C:\Program Files\LevelZeroSDK` |
+| Python | 3.14 (3.10+ works) | a venv in the Strata checkout, `pip install -r requirements.txt` |
+
+### 2. Sources
+
+Clone everything with `core.autocrlf=false`. The patches are LF, and a CRLF checkout makes `git apply` fail.
+
+```bat
+git -c core.autocrlf=false clone https://github.com/hotschmoe/Strata <STRATA_SOURCE_DIR>
+cd <STRATA_SOURCE_DIR>
+git checkout 1c360526bce659f45cec60b2e36c46b7770c5bf1
+rem   (= the tip of branch b70-night-20261016, from SergiioB/b70-launcher PR #4)
+
+git -c core.autocrlf=false clone https://github.com/ggml-org/llama.cpp <LLAMA_PR>
+cd <LLAMA_PR>
+git fetch origin pull/31428/head
+git checkout eec5c09cef61885636ee31406855abfe2feb7a44
+git apply <this repo>\strata-windows-port\esimd-prefill\esimd\llama-pr-31428-fused-gemm-tile-width.patch
 ```
-cmake -B build-win -S sycl -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTRATA_SYCL_AOT= -DSTRATA_SYCL_XE2_JIT=ON ^
-      -DSTRATA_SYCL_PARITY=OFF -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx
+
+`<LLAMA_PR>` only provides the headers for the ESIMD GEMM (step 4). Nothing in it gets built on its own.
+
+### 3. Apply the patches
+
+From `<STRATA_SOURCE_DIR>`, in this order. Each one applies cleanly on the one before it:
+
+```bat
+set P=<this repo>\strata-windows-port
+git apply %P%\patches\0001-sycl-native-Windows-build-icx-of-the-SYCL-engine.patch
+git apply %P%\patches\0002-sycl-Windows-two-card-expert-parallel-through-host-m.patch
+git apply %P%\patches\0003-sycl-Windows-JIT-build-option-for-Xe2-extra-AOT-opti.patch
+git apply %P%\patches\0004-sycl-Windows-optional-timer-resolution-request-STRAT.patch
+git apply %P%\slow-starts\0002-ep-psum-own-rows-in-vram.patch
+git apply %P%\slow-starts\0003-ep-prefill-rows-private.patch
+git apply %P%\esimd-prefill\0001-prefill-grouped-iq3s-both-cards-esimd.patch
+git apply %P%\patches\0005-sycl-verify-batch_poll-copy-stream-empty-check.patch
+```
+
+`git status` should then show 20 modified files under `sycl/` and one new one (`sycl/include/strata_win_undefs.h`).
+The live build's sources match this tree except for comment wording in three files and one extra stderr line
+("EP psum: this card's own expert rows in VRAM").
+
+| Patch | What it does |
+|---|---|
+| `patches/0001` | native Windows build with `icx` (see [the patch table](#what-each-patch-does)) |
+| `patches/0002` | two-card expert parallel through host memory (Windows has no peer access between B70s) |
+| `patches/0003` | JIT build option for Xe2 (`STRATA_SYCL_XE2_JIT=ON`) |
+| `patches/0004` | optional timer-resolution request (the config turns it off) |
+| `slow-starts/0002` | card 0's own expert rows stay in VRAM: ends the per-start speed lottery |
+| `slow-starts/0003` | card 1's prompt-chunk rows buffer stays in VRAM: same fix for the prompt read |
+| `esimd-prefill/0001` | grouped prompt experts on IQ3_S, on both cards, on the ESIMD GEMM: +31% prompt read |
+| `patches/0005` | `batch_poll` checked the copy stream's error code instead of its empty flag (correctness, no speed change) |
+
+### 4. Build (JIT, not AOT)
+
+Put the ESIMD kernel and the shim in one folder:
+
+```bat
+mkdir <ESIMD_DIR>
+copy %P%\esimd-prefill\esimd\fused-gemm-esimd.cpp <ESIMD_DIR>\
+copy %P%\esimd-prefill\esimd\fused-gemm-esimd.hpp <ESIMD_DIR>\
+copy %P%\esimd-prefill\strata_esimd_shim.cpp <ESIMD_DIR>\
+```
+
+`fused-gemm-esimd.cpp` / `.hpp` are llama.cpp PR #31428's ESIMD grouped GEMM at `eec5c09`, plus an IQ2_S loader and
+64-wide tiles (`MAYA_FG_BN 64`) from the [GLM-5.3 work](../glm-5.3/sycl-port/experiments/2026-11-16-esimd-tile-sweep/).
+They are the files the live build used.
+
+Then, in a `cmd` window:
+
+```bat
+call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+for %C in (tbb umf dnnl mkl dpl ocloc compiler) do call "C:\Program Files (x86)\Intel\oneAPI\%C\latest\env\vars.bat"
+
+cd <STRATA_SOURCE_DIR>
+cmake -B build-win -S sycl -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+      -DSTRATA_SYCL_AOT= -DSTRATA_SYCL_XE2_JIT=ON -DSTRATA_SYCL_PARITY=OFF ^
+      -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx ^
+      -DSTRATA_ESIMD_DIR=<ESIMD_DIR> -DSTRATA_ESIMD_FORK=<LLAMA_PR>/ggml
 cmake --build build-win --target strata
 ```
 
-An empty `STRATA_SYCL_AOT` means the GPU driver compiles the device code at first use. Do not use the oneAPI 2026.0
-AOT build with int8 KV (wrong answers). On driver 32.0.101.8976 the engine was ready in under a minute. Put the oneAPI
-runtime DLLs next to `strata.exe` or on `PATH`.
+(In a `.cmd` file write `%%C` instead of `%C`.)
 
-**2. Model files.** The config points at four things besides the GGUF: a pack, the MTP draft layer, a draft
-vocabulary and an expert profile. Download ISTA-DASLab's `Qwen3.8-Flash-Next-GSQ-RCO-GGUF` IQ3_S, both shards, into one
-folder (check them against the sha256 sums on the model page). Then, from the Strata checkout, in its Python venv:
+- **`-DSTRATA_SYCL_AOT=` (empty) is the important part.** It makes a JIT build: the GPU driver compiles the device
+  code at first use. The oneAPI 2026.0 AOT build (`-DSTRATA_SYCL_AOT=bmg-g31`) miscompiles the batched int8 decode
+  attention and gives wrong answers at a speed that looks fine. See [the int8 KV bug](#the-int8-kv-bug-an-aot-miscompile-solved).
+- Without the two `STRATA_ESIMD_*` variables the build still works, but `STRATA_NIGHT_PREFILL_ESIMD` does nothing
+  and the grouped prompt experts run on Strata's own `joint_matrix` kernel, which is slower.
+- If CMake does not find Level Zero, pass `-DSTRATA_ZE_INCLUDE=<SDK>/include -DSTRATA_ZE_LOADER=<SDK>/lib/ze_loader.lib`.
 
-```
+**Runtime folder.** Copy `build-win\strata.exe` to `<STRATA_RUNTIME_DIR>` with the oneAPI DLLs it loads. The live
+folder holds: `sycl9.dll`, `ur_loader.dll`, `ur_adapter_level_zero.dll`, `ur_adapter_level_zero_v2.dll`,
+`ur_adapter_opencl.dll`, `ur_win_proxy_loader.dll`, `umf.dll`, `tcm.dll`, `libhwloc-15.dll`, `mkl_core.3.dll`,
+`mkl_sycl_blas.6.dll`, `mkl_tbb_thread.3.dll`, `tbb12.dll`, `dnnl.dll`, `libmmd.dll`, `libiomp5md.dll`,
+`svml_dispmd.dll` (from the oneAPI `compiler`, `mkl`, `tbb`, `dnnl` and `umf` folders). The config's `lib_dirs`
+points at this folder.
+
+### 5. Model files
+
+The config points at four things besides the GGUF: a pack, the MTP draft layer, a draft vocabulary and an expert
+profile. Download ISTA-DASLab's `Qwen3.8-Flash-Next-GSQ-RCO-GGUF` **IQ3_S**, both shards (84 GB), into one folder,
+and check them against the sha256 sums on the model page. Then, from the Strata checkout, in its Python venv:
+
+```bat
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
 set STRATA_GGUF_PY=<STRATA_SOURCE_DIR>\build-win\_deps\strata_llamacpp-src\gguf-py
 set PYTHONUTF8=1
 
 rem pack (the dense weights, the tokenizer folder the config names, the expert index)
-python tools\iq_pack.py --gguf <MODELS_DIR>\...\IQ3_S\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf ^
+.venv\Scripts\python tools\iq_pack.py --gguf <MODELS_DIR>\ISTA-DASLab\Qwen3.8-Flash-Next-GSQ-RCO-GGUF\IQ3_S\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf ^
        --out <STRATA_DATA_DIR>\packs\iq3_s
 
 rem MTP draft layer: fetch (~5 GB; the fetch can drop, so re-run it until it succeeds), verify, pack, runtime layer
-python tools\mtp_fetch.py fetch --out <STRATA_DATA_DIR>\mtp
-python tools\mtp_fetch.py verify --out <STRATA_DATA_DIR>\mtp
-python tools\mtp_pack.py --src <STRATA_DATA_DIR>\mtp --experts q2_0 --out <STRATA_DATA_DIR>\mtp\mtp-q2_0.gguf
-python tools\mtp_rt.py --gguf <STRATA_DATA_DIR>\mtp\mtp-q2_0.gguf --out <STRATA_DATA_DIR>\mtp\rt
+.venv\Scripts\python tools\mtp_fetch.py fetch --out <STRATA_DATA_DIR>\mtp
+.venv\Scripts\python tools\mtp_fetch.py verify --out <STRATA_DATA_DIR>\mtp
+.venv\Scripts\python tools\mtp_pack.py --src <STRATA_DATA_DIR>\mtp --experts q2_0 --out <STRATA_DATA_DIR>\mtp\mtp-q2_0.gguf
+.venv\Scripts\python tools\mtp_rt.py --gguf <STRATA_DATA_DIR>\mtp\mtp-q2_0.gguf --out <STRATA_DATA_DIR>\mtp\rt
 ```
 
-`gguf-py` exists after the step 1 build has fetched Strata's pinned llama.cpp. `iq_pack.py` needs shard 2 in the same
+`gguf-py` exists after the step 4 build has fetched Strata's pinned llama.cpp. `iq_pack.py` needs shard 2 in the same
 folder as shard 1. The draft vocabulary (`data\draft_vocab_en.bin`) and the expert profile
-(`data\expert-profile-sycl.bin`) ship in the Strata checkout; nothing to build. The config's `--mtp` is the `rt`
-folder, `tokenizer` is the pack's `tokenizer` folder.
+(`data\expert-profile-sycl.bin`) ship in the Strata checkout. The config's `--mtp` is the `rt` folder, and
+`tokenizer` is the pack's `tokenizer` folder.
 
-**3. Engine config essentials** (full file: `configs/strata-iq3s-200k1-pf8k.json`):
+Note the model is a quant mix, not pure IQ3_S: across the 48 MoE layers, gate/up are IQ2_S, IQ3_XXS, IQ3_S and one
+IQ4_XS layer, and down is IQ4_NL plus nine Q2_0 layers. That is why the grouped prompt path needed a per-layer type
+check (`esimd-prefill/0001`).
+
+### 6. Engine config
+
+Use [`configs/strata-iq3s-200k1-pf8k.json`](configs/strata-iq3s-200k1-pf8k.json) as it is, with the placeholders
+filled in. It is the live config. The settings that matter:
 
 | Setting | Value | Why |
 |---|---|---|
-| `--max-context` / slots | `200000`, 1 slot (`"parallel": 1`) | 2 x 200k does not fit IQ3_S on two 32 GB cards |
+| `--max-context`, `"parallel"` | `200000`, `1` | 2 x 200k does not fit IQ3_S on two 32 GB cards; 2 x 112k does but reads prompts 37% slower |
 | `--kv` | `int8` | needs the JIT build |
-| `--prefill` | `8192` | prompt chunk; 10240 sits at card 1's memory limit and runs ~3x slower |
-| `--ple-io` | `mmap` | `direct` reads the 27 GB PLE table from the SSD every token; needs ~27 GB free RAM |
-| `--spec` / `--spec-min-p` | `4` / `0` (upstream defaults) | other values were equal or worse |
-| `--expert-parallel-device` | `1` | the second card |
-| `STRATA_NIGHT_PREFILL_GROUPED` / `_MAX` / `STRATA_NIGHT_PREFILL_ESIMD` | `1` / `1024` / `1` | needs the [esimd-prefill/](esimd-prefill/) patch and build; without it, `GROUPED` must be `0` for IQ3_S |
+| `--prefill` | `8192` | prompt chunk; 10240 sits at card 1's memory limit and runs ~3x slower, 12288 does not fit |
+| `--ple-io` | `mmap` | `direct` reads the 27 GB PLE table from the SSD every token and drifts to ~70 tok/s |
+| `--spec`, `--spec-min-p`, `--mtp-max-t` | `4`, `0`, `4` | MTP draft depth; other values were equal or worse |
+| `--expert-parallel-device` | `1` | the second card holds 320 of the 512 experts per layer, card 0 the other 192 |
+| `"gpu"` | `[0, 1]` | indexes into the devices that `ONEAPI_DEVICE_SELECTOR` leaves visible |
+| `STRATA_NIGHT_PREFILL_GROUPED`, `_MAX`, `STRATA_NIGHT_PREFILL_ESIMD` | `1`, `1024`, `1` | the +31% prompt read; without the `esimd-prefill` patch `GROUPED` must be `0` for IQ3_S |
+| `STRATA_NIGHT_EP_PSUM`, `STRATA_EP_PREFILL_REDUCE` | `1`, `1` | the expert-parallel paths the two VRAM fixes are about |
 | `STRATA_VERIFY_DEVICE_PLAN`, `STRATA_VERIFY_NO_HOST` | `1`, `1` | without them verify waits on a host doorbell and hangs |
-| `ONEAPI_DEVICE_SELECTOR` | e.g. `level_zero:2,3` | the two cards to use |
+| `STRATA_WIN_TIMER_MS` | `0` | patch 0004's timer request, off (no effect measured) |
+| `SYCL_CACHE_PERSISTENT` | `0` | the first request after a load JIT-compiles the kernels (see gotchas) |
 
-**4. Vision (optional, CPU encoder).** `strata-vision.exe`, built from llama.cpp's `mtmd` tool at the llama.cpp
-commit the engine pins, with ISTA-DASLab's BF16 mmproj. Config section:
+The other ~80 `STRATA_*` switches are the `b70-night-20261016` branch's tuned set, unchanged. One of them,
+`STRATA_BATCH_MTP_PAIR_SKIP_PROB`, is not read by this build.
+
+Optional vision (CPU image encoder): the config's `vision` section runs `strata-vision.exe`, built from llama.cpp's
+`mtmd` tool at the llama.cpp commit the engine pins, with ISTA-DASLab's BF16 mmproj. Leave the section out if you do
+not need images. More in [Vision](#vision-optional-cpu-encoder).
+
+### 7. Serve
+
+Strata's OpenAI-compatible server reads the engine config. Pick the two cards with `ONEAPI_DEVICE_SELECTOR`
+(Level Zero device numbers; on a box with only the two B70s that is `level_zero:0,1`):
+
+```bat
+set ONEAPI_DEVICE_SELECTOR=level_zero:2,3
+set PYTHONUTF8=1
+.venv\Scripts\python sycl\serve\server_intel.py --engine strata --config <CONFIG.json> --host 127.0.0.1 --port <PORT>
+```
+
+The engine is ready when `/health` answers. Cold loads took 42-287 s here, depending on how much of the model was
+already in the file cache. The engine log should show `peer alias path on (T_max 8192)` and one `night ESIMD` line
+per expert type pair.
+
+A generic llama-swap entry (Windows):
+
+```yaml
+models:
+  qwen3.8-flash-next-strata:
+    cmd: >
+      <STRATA_SOURCE_DIR>\.venv\Scripts\python.exe <STRATA_SOURCE_DIR>\sycl\serve\server_intel.py
+      --engine strata --config <CONFIG.json> --host 127.0.0.1 --port ${PORT}
+    env:
+      - ONEAPI_DEVICE_SELECTOR=level_zero:2,3
+      - PYTHONUTF8=1
+    checkEndpoint: /health
+    cmdStop: taskkill /T /F /PID ${PID}
+    ttl: 0
+```
+
+`cmdStop` with `/T` ends the Python server and the `strata.exe` engine under it. If clients reach the server by a
+host name other than `localhost`, add that name to `STRATA_ALLOWED_HOSTS` (the server's DNS-rebinding check) or
+set an API key.
+
+### 8. Check, then measure
+
+1. **Answers first.** `python bench\squal.py http://127.0.0.1:<PORT> <MODEL>` asks four questions with checkable
+   answers (JSON extraction, arithmetic, five capitals, count to 30). A broken build can look fast: the AOT build's
+   garbage output was easy for the MTP draft to predict and showed 96.6 tok/s.
+2. **Warm up once.** With `SYCL_CACHE_PERSISTENT=0` the first request after a load compiles kernels. An 11.8k first
+   read ran at 903 tok/s. Throw that request away.
+3. **Decode.** `python bench\sbench.py http://127.0.0.1:<PORT> <MODEL> --n 512 --rounds 2`: seven prompts (code
+   explain, code write, summary, fiction, JSON extraction, continuity edit, arithmetic), streamed, temperature 0,
+   thinking off. Round 1 is warm-up and is left out of the mean.
+4. **Prompt read.** Add `--long 32000 --doc <a long text file>`: one long prompt, prompt tok/s = prompt tokens /
+   time to first token, plus decode right after it.
+
+What the numbers mean:
+- **Decode tok/s** = (completion tokens - 1) / (time of the last token - time of the first token). The prompt read is
+  not in it.
+- **It depends on the text.** MTP drafts 4 tokens ahead and the main model checks them, so tok/s follows how often the
+  draft is right. In one start on 2026-11-06: code 122 tok/s, math 121, a story 68. A mean over a mixed set (the 7
+  prompts) is the number to compare, and only against the same prompts.
+- **Thinking off** in the bench. With thinking on, the tokens are different text and the speed moves with it.
+- **Prompt read through the HTTP server** (1,500-1,650 tok/s on real requests) is lower than the engine bench at 32k
+  (2,194). The engine bench sends token ids straight to `strata.exe --serve` on stdin, one prompt, warm.
+
+Interleave A/B runs and use several fresh starts. Before the slow-start fix, speed was set per engine start, and 3
+starts per arm were not enough to see a difference; 8 were.
+
+### 9. Gotchas
+
+- **AOT build + int8 KV = wrong answers** (oneAPI 2026.0). Use the JIT build. AOT with oneAPI 2026.1 was not tested.
+- **`STRATA_VERIFY_DEVICE_PLAN=1` and `STRATA_VERIFY_NO_HOST=1`** are required, or the engine hangs on its first verify.
+- **`STRATA_NIGHT_PREFILL_GROUPED=1` without the `esimd-prefill` patch** stops the engine with "card 0 gate/up type
+  23" on IQ3_S (the one IQ4_XS layer), then a restart.
+- **Memory headroom.** `--prefill 10240` "fits" with card 1 at its limit and runs ~3x slower than 8192. 2 x 200k
+  slots do not fit.
+- **`--ple-io mmap` needs ~27 GB of free RAM.** Under memory pressure the PLE reads fall back to the disk and decode
+  drops. Alternating two 50+ GB models in one A/B churns the file cache the same way.
+- **Line endings.** Clone with `core.autocrlf=false`, or the patches do not apply.
+- **`STRATA_PREFILL_TIMING=1` distorts two-card speeds** (the host waits on the peer queue every layer). Use it to see
+  where time goes, not for tok/s.
+- **Slow starts** (~45 instead of ~100 tok/s, fixed per start) mean `slow-starts/0002` or `0003` is missing. Both
+  matter only where the exchange regions are host memory, which is the case on Windows.
+- **VTune `gpu-offload`** hangs at load under `--serve` on this two-card path.
+
+### Vision (optional, CPU encoder)
+
+`strata-vision.exe`, built from llama.cpp's `mtmd` tool at the llama.cpp commit the engine pins, with ISTA-DASLab's
+BF16 mmproj. Config section (also in the published config):
 
 ```json
 "vision": {
@@ -113,31 +299,6 @@ same two questions, temperature 0:
 
 The CPU encode was about 4.4 s per new image at 300 tokens (24 threads).
 
-**5. Serve.** Strata's OpenAI-compatible server reads the engine config:
-
-```
-python sycl\serve\server_intel.py --engine strata --config <CONFIG.json> --host 127.0.0.1 --port <PORT>
-```
-
-A generic llama-swap entry (Windows):
-
-```yaml
-models:
-  qwen3.8-flash-next-strata:
-    cmd: >
-      <STRATA_SOURCE_DIR>\.venv\Scripts\python.exe <STRATA_SOURCE_DIR>\sycl\serve\server_intel.py
-      --engine strata --config <CONFIG.json> --host 127.0.0.1 --port ${PORT}
-    env:
-      - ONEAPI_DEVICE_SELECTOR=level_zero:2,3
-      - PYTHONUTF8=1
-    checkEndpoint: /health
-    cmdStop: taskkill /T /F /PID ${PID}
-    ttl: 0
-```
-
-`cmdStop` with `/T` ends the Python server and the `strata.exe` engine under it. One model swap logged
-`stop signal failed: exit status 255` although both processes did end; check the process list after a swap if in doubt.
-
 **Abliterated variant (2026-11-06).** The same recipe runs an abliterated IQ3_S: SC117's
 `Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_S` shard 1 with ISTA-DASLab's shard 2 (the per-layer embedding table,
 unchanged by abliteration). Build its own pack with `iq_pack.py` from the abliterated shard 1, and keep the stock MTP
@@ -157,6 +318,56 @@ Same 4 prompts, temperature 0, one start each:
 | Abliterated | 115 tok/s | 116 | 69 | 90, answers | 195 s |
 
 Speeds are within start-to-start noise, and both got the math right.
+
+## What each patch does
+
+Patches prepared with AI assistance. Strata is MIT (notice in [../LICENSES/Strata-LICENSE](../LICENSES/Strata-LICENSE)),
+llama.cpp is MIT ([../LICENSES/llama.cpp-LICENSE](../LICENSES/llama.cpp-LICENSE)). The order to apply them is in
+[step 3](#3-apply-the-patches).
+
+| Patch | What |
+|---|---|
+| `patches/0001` native Windows build (icx) | CMake: `/fp:precise`, `/Qmkl:sequential`, C-safe warning flags; Level Zero SDK lookup; positioned reads with `ReadFile`; drop a CUDA-only shared-memory query; undo `<windows.h>` macros (`small`, `IN`, `OUT`, `near`, `far`) that clash with engine names; `memmem` fallback |
+| `patches/0002` two-card expert parallel through host memory | every GPU shares one `sycl::context`; the shared expert-parallel regions are host USM in that context (one address for both cards). `STRATA_WIN_SHARED_CONTEXT=0` restores one context per device |
+| `patches/0003` JIT build option for Xe2 | `STRATA_SYCL_XE2_JIT=ON` makes a JIT build define `STRATA_XMX_SG16` like the bmg AOT build does; `STRATA_SYCL_AOT_OPTIONS` passes extra ocloc options to an AOT build; `setenv` shim for two parity tests |
+| `patches/0004` optional timer-resolution request | `STRATA_WIN_TIMER_MS=N` calls `timeBeginPeriod(N)` at engine start (default 1, 0 = off). Measured: no effect on decode (72 vs 72 tok/s); the configs set it to 0 |
+| `slow-starts/0002` card 0's own expert rows in VRAM | with `STRATA_NIGHT_EP_PSUM=1` card 0 no longer aliases its row buffer to the host-memory exchange region; `STRATA_EP_PARTS_HOST=1` restores the old path. Sent upstream as [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1). Details in [slow-starts/](slow-starts/) |
+| `slow-starts/0003` card 1's prompt rows buffer private | with `STRATA_EP_PREFILL_REDUCE=1` card 1's rows buffer is a private VRAM allocation (`ep_region_alloc_private`); `STRATA_EP_PREFILL_ROWS_HOST=1` restores the shared region. Rebased 2026-11-21 so it applies on top of `0002` (the old file was cut against upstream's `ep_mem.hpp`) |
+| `esimd-prefill/0001` grouped prompt experts | per-layer type check, the expert-parallel card on the grouped path, the ESIMD GEMM through a C shim. Details in [esimd-prefill/](esimd-prefill/) |
+| `patches/0005` `batch_poll` copy-stream check | `DPCT_CHECK_ERROR(copy_->ext_oneapi_empty())` is always 0, so the poll could report a window done while the copy stream still had work; now `empty() ? 0 : 1` like the compute-queue check above it. A/B served: speeds and draft counts identical. Live since 2026-11-17 |
+
+`configs/` has the engine configs, with paths replaced by placeholders. `strata-iq3s-200k1-pf8k.json` is the live one.
+The others are earlier setups: `strata-ep2-jit.json` (IQ3_XXS, int8, 2 x 200k), `strata-ep2-int8-32k.json`,
+`strata-ep2-fp16-96k.json`.
+
+## History
+
+How the setup got here, oldest first. The sections after this one are the original write-ups, kept as they were;
+numbers in them are from the build of their date.
+
+- Base: `hotschmoe/Strata` branch `b70-night-20261016` @ `1c360526` (from SergiioB/b70-launcher PR #4).
+- Model: ISTA-DASLab GSQ-RCO quants of Qwen3.8-Flash-Next, **IQ3_S** (84 GB, current) and IQ3_XXS (76 GB, earlier),
+  sha256 checked; packs + MTP built on the same machine. Cards: two B70s (`level_zero:2,3`).
+- Status (2026-10-17): **best setup = IQ3_S, 1 slot x 200k context, int8 KV, prompt chunk 8192, JIT build,
+  `--ple-io mmap`**: decode ~99 tok/s, prompt read ~1,420 tok/s at 33.6k, answers correct, vision working, 2-hour
+  soak through llama-swap clean. The AOT build with oneAPI 2026.0 miscompiles the int8 attention (see below).
+  Not done: AOT with oneAPI 2026.1.
+- Start-to-start speed lottery on the served build (78-89 vs 32-45 tok/s per start), fixed 2026-11-07: with EP psum,
+  card 0's own expert rows went through the host-memory exchange region. Keeping them in VRAM gives ~106 tok/s on
+  every start (8 of 8), output identical. Patch and details in [slow-starts/](slow-starts/); sent upstream as
+  [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1). The 2026-11-01 file-cache guard is retired.
+  The prompt read had the same kind of leak (card 1's rows buffer): ~1,550 tok/s at 37k on every start, was 775-1,552.
+- Upstream Strata (Niko1221/Strata) v0.2.12 does not include this two-card expert parallel mode. Built on Windows, its
+  helper-card mode (`--expert-cache-device1 auto`) decoded 32 tok/s because of an adaptive-tier check that ignores the
+  helper's cache; fixed to 61 tok/s in Niko1221/Strata#5540 (2026-11-07).
+- Prompt read +31%, live 2026-11-17: the grouped expert path now runs on IQ3_S (per-layer type check), on both cards
+  (a `T_max == 12288` pin kept the second card off it), and on the llama.cpp fork's ESIMD grouped GEMM. 32k read
+  1,680 -> 2,194 tok/s, decode unchanged. Patch, shim and numbers in [esimd-prefill/](esimd-prefill/).
+- `batch_poll` copy-stream check (`patches/0005`), live 2026-11-17: a correctness cleanup found by reading the code;
+  served A/B showed identical speeds and draft counts.
+- 2026-11-21: this README rewritten as a recipe, checked against the live machine. `slow-starts/0003` rebased so the
+  chain applies in order, the ESIMD kernel files added under `esimd-prefill/esimd/`, and the published config
+  replaced with the live one (adds `STRATA_WIN_TIMER_MS=0` and the vision section).
 
 ## Results
 

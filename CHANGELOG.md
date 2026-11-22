@@ -3,6 +3,10 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-21
+- **Strata Windows port README is now a step-by-step recipe for the live Flash-Next setup.** Hardware, driver, toolchain versions, sources at pinned commits, the patch order, the JIT build with the ESIMD GEMM, model pack, the live engine config, serving, how the numbers are measured and what to expect, and gotchas. Checked against the live machine: the patch chain applied to a clean `1c360526` checkout matches the live build's sources except comments and one log line. [strata-windows-port](strata-windows-port/#how-to-run-it).
+- **Fixes found while checking:** `slow-starts/0003` did not apply on top of `slow-starts/0002` (it was cut against upstream's `ep_mem.hpp`), now rebased. The live `batch_poll` copy-stream fix (2026-11-17) was missing from the repo, now `patches/0005`. The ESIMD kernel files the build needs are now in `esimd-prefill/esimd/` instead of only coming out of the GLM recipe. The published engine config is now the live one (adds `STRATA_WIN_TIMER_MS=0` and the vision section).
+
 ## 2026-11-19
 - **DeepSeek's round-4 decode levers tried on GLM and Flash-Next: one small exact win, live.** On GLM the aligned Q6_K mat-vec on 16-lane sub-groups (`STRATA_GLM_MV_AL16=1`) gains +0.5-0.7% over two rounds, with the 768-token output identical; live since the same evening. 256 registers for the spilling expert gate/up kernel cost 3%, and dropping `use_root_sync` from every launch is noise. [GLM lessons](glm-5.3/sycl-port/experiments/2026-11-19-decode-lessons/).
 - **Flash-Next decode on Strata has nothing to port from DeepSeek.** Its dense kernels already run on 16-lane sub-groups and one decode kernel spills (~1.3% of kernel time). VTune `gpu-offload` does not see kernels inside replayed SYCL graphs, so the spill table came from an eager run; the serve-mode stage profile puts cross-card waits at 0.8% of a window and hyper-connection reads at 22%. [Decode profile](strata-windows-port/decode-profile-2026-11-19/).
