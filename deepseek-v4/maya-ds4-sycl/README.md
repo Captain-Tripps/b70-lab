@@ -421,6 +421,67 @@ A VTune capture of the whole process showed memory copies as 21% of the GPU time
 the model load: about 110 GB of experts uploaded to VRAM. A near-empty profiled run shows the same ~16k copies. Profile
 a run long enough that the load is a small share, or subtract a load-only run.
 
+## Decode rounds 5-7 (2026-11-22 / 23): drafter and switches
+
+Nothing from these rounds went live. The short version: the drafter is not where the remaining decode time is.
+Stock DSpark at the live floors (`--dspark-conf 0.15`, CUM 0.4) beat or matched every alternative tried, and the
+remaining lever is the routed expert kernels in the verify window.
+
+### A multi-prompt yardstick
+
+One prompt's tok/s is not a yardstick for drafted decode. The same build drafts 39.4-51.7 tok/s across four prompts
+(1.52-2.08 tokens a round), and a different text path explained an earlier "43.7". Each prompt repeats its own tokens
+and speed within ~1%, so the bench is four prompts (a 34-token story start, a list, a 2k document question, a
+484-token passage) at 256 tokens, reported as tok/s plus tokens a round and ms a round per prompt. A fifth prompt, a
+code edit (rewrite a 1,200-token Python file with one rename), was added in round 7.
+
+### Where a drafted round's time goes
+
+| Part | ms |
+|---|---:|
+| Draft (3 drafter blocks) | 4.5-5.5 |
+| Verify window, ~2.4 tokens | ~36 |
+| One plain token, for comparison | 27.6 |
+| Sample + rollback + drafter seed | ~1 |
+
+Each extra verified token costs ~8 ms, and two-thirds of that is routed experts: the extra rows bring their own
+experts, and the expert kernels run below the read ceiling. Draft and verify cannot overlap: each draft needs the
+previous verify's token and its layer 37-39 taps.
+
+### Drafter options
+
+| Option | Result |
+|---|---|
+| Markov head as Q8_0 (`DS4_MARKOV_Q8=1`, half its bytes) | On the bench args (12k, chunk 512) +2-11% drafted, but from VRAM: the last card then held all 4,224 of its experts instead of 4,216, and the verify window fell 35.9 -> 33.6 ms. The draft step got slower. At the served args (128k, chunk 1024) the card holds 4,180-4,185 either way and Q8 is slower on every prompt, -3% to -44% |
+| D1 refit drafter, all tensors (delta onto the pack's drafter) | -2.3% to +2.3% on 5 prompts |
+| D1 heads and norms only | -2 to -6%: the refit only works as a set |
+| Native MXFP4 drafter experts (in place of IQ2_XXS) | tokens a round +18% / +3% / +1% on 3 prompts, -13% on 2; +3.7 GB the drafter's card does not have |
+| `DS4_DSPARK_MAX=3` | neutral; it does not cap the long copy drafts on the code-edit prompt |
+| `--dspark-conf` 0.10 / 0.25, CUM 0.3 / 0.5 | identical / identical / flat / -3 to -5% |
+| Prompt / n-gram lookup | already in the engine, on in front of DSpark, and adds nothing: switched off, the accepted drafts were identical on 4 prompts (2026-11-20). An offline replay gives 1.02-1.35 tokens a round on the four prompts, and DSpark already drafts 9-13 tokens a round at ~100% acceptance on the code edit (85-94 tok/s) |
+| DFlash | no DFlash2 drafter for V4.1 (2026-11-23); RedHatAI's DFlash v1 targets V4 Flash and needs vLLM. At ~8 ms a verified token on this pipeline it would land near ~48 tok/s at best, before the model mismatch |
+
+D1 ([ursuciprian/DeepSeek-V4.1-Flash-1017-DSpark-D1](https://huggingface.co/ursuciprian/DeepSeek-V4.1-Flash-1017-DSpark-D1)) is a self-distilled refit of the checkpoint's drafter, published as an EXL3 overlay. To use it
+here the EXL3 tensors were decoded in numpy (trellis states, the codebook, the tensor-core tile order, a 128-point
+Hadamard on each side with the sign vectors; correlation 0.9997 against the pack's own Q8_0 copy), and only D1 minus
+the stock EXL3 drafter was added to the pack's drafter, so EXL3's rounding cancels. The stock drafter tensors (477 MB)
+came out of the 8.3 GB shards with HTTP range requests. D1's attention change turned out to be about the size of
+EXL3's own rounding, so it is partly noise; its heads changed 17-22%.
+
+### Existing switches and two small kernels
+
+| Switch | Result |
+|---|---|
+| `DS4_DRAFT_COST=1` | +1.7% four-prompt mean (-1.5 to +3.9%), one prompt's tokens flipped |
+| `DS4_DECODE_TRIM=7` / `=15` | equal / -2 to -4% |
+| `DS4_DSPARK_LAZY=0` | -1 to -4% |
+| `DS4_IQ_AHEAD=1` | -3 to -22% |
+| `DS4_IQ_PERSIST=1` | equal |
+| `DS4_IQ_NE_CAP=8` | -20% on the long prompt |
+| `DS4_LIGHT_XMX=1` | +2% / -1%, tokens changed |
+| Expert row shapes (fx45, `DS4_DN_VAR`, `DS4_GU_VAR`) | plain +0.6-0.9% at best; drafted +1.0% best arm (exact), inside spread |
+| Router top-k in one sub-group (fx46), `DS4_ROUTE_FUSE=1/2` | equal; the router is not on the critical path |
+
 ## What made the difference
 
 1. **Cross-card flags: wait on the host, then launch (M1, decode 0.03 -> 19.9 tok/s).** Maya hands data between cards
@@ -539,9 +600,21 @@ cross-card pipeline uses.
 | `--reserve-mib` 2048 / 3500 (VRAM paging check) | 780 / 772 vs 780: not paging |
 | Prompt chunk 256 on the round-4 build | 8k 774, 120k 770 vs 812 / 867 |
 | Two queues, or one out-of-order queue, on one card | at most +6%: the driver serializes them |
+| Markov head as Q8_0 (`DS4_MARKOV_Q8=1`) | the bench gain was the last card fitting all its experts; at the served args -3% to -44% |
+| D1 refit drafter, all / heads and norms only | -2.3% to +2.3% / -2 to -6% |
+| Native MXFP4 drafter experts | mixed tokens a round, +3.7 GB VRAM |
+| More prompt / n-gram lookup | the engine's lookup is already on and adds nothing; DSpark already copies (9-13 tokens a round on a code edit) |
+| `DS4_DSPARK_MAX=3`, `--dspark-conf` 0.10 / 0.25, CUM 0.3 / 0.5 | neutral / identical / flat / -3 to -5% |
+| Expert row shapes (fx45), one-sub-group router top-k (fx46), `DS4_ROUTE_FUSE` | +0.5-1%, inside spread |
 
 ## Measurement notes
 
+- **Bench at the served args before calling a decode win.** The bench's 12k context and chunk 512 sit on a different
+  VRAM boundary from the served 128k / chunk 1024: the last card left 8 experts out at the bench args and 39-44 at the
+  served ones, and a change that freed a few MB looked like +4% on the bench and was a loss when served.
+- Drafted greedy output is not bit-stable across draft patterns: a verify window of another size can flip a near
+  tie, so a drafter change can change the text, and with it tokens a round. Compare tokens a round on prompts whose
+  output stayed the same.
 - Prompt reads need `--window 65536` (or any window of at least one chunk) on the `ds4` CLI.
 - `DS4_KT=1` per-kernel timing costs about 1% at 8k (276.7 vs ~280 tok/s). It does not time `xfer_put_kernel`, which
   is why the per-kernel table above has no hand-off copy in it.
