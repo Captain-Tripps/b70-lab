@@ -458,7 +458,7 @@ previous verify's token and its layer 37-39 taps.
 | Native MXFP4 drafter experts (in place of IQ2_XXS) | tokens a round +18% / +3% / +1% on 3 prompts, -13% on 2; +3.7 GB the drafter's card does not have |
 | `DS4_DSPARK_MAX=3` | neutral; it does not cap the long copy drafts on the code-edit prompt |
 | `--dspark-conf` 0.10 / 0.25, CUM 0.3 / 0.5 | identical / identical / flat / -3 to -5% |
-| Prompt / n-gram lookup | not built: replayed offline at 1.02-1.35 tokens a round on the four prompts, and DSpark already drafts 9-13 tokens a round at ~100% acceptance on the code edit (85-94 tok/s) |
+| Prompt / n-gram lookup | already in the engine, on in front of DSpark, and adds nothing: switched off, the accepted drafts were identical on 4 prompts (2026-11-20). An offline replay gives 1.02-1.35 tokens a round on the four prompts, and DSpark already drafts 9-13 tokens a round at ~100% acceptance on the code edit (85-94 tok/s) |
 | DFlash | no DFlash2 drafter for V4.1 (2026-11-23); RedHatAI's DFlash v1 targets V4 Flash and needs vLLM. At ~8 ms a verified token on this pipeline it would land near ~48 tok/s at best, before the model mismatch |
 
 D1 ([ursuciprian/DeepSeek-V4.1-Flash-1017-DSpark-D1](https://huggingface.co/ursuciprian/DeepSeek-V4.1-Flash-1017-DSpark-D1)) is a self-distilled refit of the checkpoint's drafter, published as an EXL3 overlay. To use it
@@ -603,7 +603,7 @@ cross-card pipeline uses.
 | Markov head as Q8_0 (`DS4_MARKOV_Q8=1`) | the bench gain was the last card fitting all its experts; at the served args -3% to -44% |
 | D1 refit drafter, all / heads and norms only | -2.3% to +2.3% / -2 to -6% |
 | Native MXFP4 drafter experts | mixed tokens a round, +3.7 GB VRAM |
-| Prompt / n-gram lookup drafter | DSpark already copies (9-13 tokens a round on a code edit); lookup lower everywhere else |
+| More prompt / n-gram lookup | the engine's lookup is already on and adds nothing; DSpark already copies (9-13 tokens a round on a code edit) |
 | `DS4_DSPARK_MAX=3`, `--dspark-conf` 0.10 / 0.25, CUM 0.3 / 0.5 | neutral / identical / flat / -3 to -5% |
 | Expert row shapes (fx45), one-sub-group router top-k (fx46), `DS4_ROUTE_FUSE` | +0.5-1%, inside spread |
 
