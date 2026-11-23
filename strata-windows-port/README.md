@@ -13,7 +13,7 @@ slot with 200k context, int8 KV.
 | Decode per fresh engine start, 4-prompt set | **104-108 tok/s**, 8 of 8 starts | [`slow-starts/start_ab.py`](slow-starts/), median per start (2026-11-07) |
 | Decode on code / explain / summary requests through llama-swap | 111-133 tok/s | single requests (2026-11-07) |
 | Decode on real traffic, 234 requests of 256+ tokens (2026-11-18 to 11-21) | median 117, middle 80% 106-131 tok/s | the engine's own log |
-| Prompt read, 32k tokens, engine bench | **2,194 tok/s** (2,260-2,267 in a second window) | stdin serve protocol, warm, timing off |
+| Prompt read, 32k tokens, engine bench | **2,407 tok/s** with `patches/0006` (2,260 without; 2,194 on 2026-11-17) | stdin serve protocol, warm, timing off |
 | Prompt read, 32k-65k tokens, real traffic | median 1,594, middle 80% 1,518-1,605 tok/s (25 reads) | the engine's own log |
 | Prompt read, 37k tokens, before the ESIMD work (2026-11-07) | 1,476-1,570 tok/s | 4 fresh starts |
 | Decode right after a 32k prompt | 106-108 tok/s | engine bench, 256 tokens |
@@ -74,9 +74,11 @@ git apply %P%\slow-starts\0002-ep-psum-own-rows-in-vram.patch
 git apply %P%\slow-starts\0003-ep-prefill-rows-private.patch
 git apply %P%\esimd-prefill\0001-prefill-grouped-iq3s-both-cards-esimd.patch
 git apply %P%\patches\0005-sycl-verify-batch_poll-copy-stream-empty-check.patch
+git apply %P%\patches\0006-sycl-prefill-B70-GDN-prompt-path-kernels-from-PR-6566.patch
 ```
 
-`git status` should then show 20 modified files under `sycl/` and one new one (`sycl/include/strata_win_undefs.h`).
+`git status` should then show 21 modified files under `sycl/` and two new ones (`sycl/include/strata_win_undefs.h`,
+`sycl/src/prefill/b70_gdn_residual.hpp`).
 The live build's sources match this tree except for comment wording in three files and one extra stderr line
 ("EP psum: this card's own expert rows in VRAM").
 
@@ -90,6 +92,7 @@ The live build's sources match this tree except for comment wording in three fil
 | `slow-starts/0003` | card 1's prompt-chunk rows buffer stays in VRAM: same fix for the prompt read |
 | `esimd-prefill/0001` | grouped prompt experts on IQ3_S, on both cards, on the ESIMD GEMM: +31% prompt read |
 | `patches/0005` | `batch_poll` checked the copy stream's error code instead of its empty flag (correctness, no speed change) |
+| `patches/0006` | B70 GDN prompt kernels from Strata PR #6566, opt-in; the config turns on the paired recurrence: +6.5% prompt read |
 
 ### 4. Build (JIT, not AOT)
 
@@ -186,6 +189,7 @@ filled in. It is the live config. The settings that matter:
 | `STRATA_NIGHT_EP_PSUM`, `STRATA_EP_PREFILL_REDUCE` | `1`, `1` | the expert-parallel paths the two VRAM fixes are about |
 | `STRATA_VERIFY_DEVICE_PLAN`, `STRATA_VERIFY_NO_HOST` | `1`, `1` | without them verify waits on a host doorbell and hangs |
 | `STRATA_WIN_TIMER_MS` | `0` | patch 0004's timer request, off (no effect measured) |
+| `STRATA_B70_GDN_PAIR` | `1` | patch 0006's paired GDN recurrence: +6.5% prompt read, same tokens. `_CONV` and `_RESID` stay off (noise) |
 | `SYCL_CACHE_PERSISTENT` | `0` | the first request after a load JIT-compiles the kernels (see gotchas) |
 
 The other ~80 `STRATA_*` switches are the `b70-night-20261016` branch's tuned set, unchanged. One of them,
@@ -251,7 +255,8 @@ What the numbers mean:
   prompts) is the number to compare, and only against the same prompts.
 - **Thinking off** in the bench. With thinking on, the tokens are different text and the speed moves with it.
 - **Prompt read through the HTTP server** (1,500-1,650 tok/s on real requests) is lower than the engine bench at 32k
-  (2,194). The engine bench sends token ids straight to `strata.exe --serve` on stdin, one prompt, warm.
+  (2,407 with `patches/0006`). The engine bench sends token ids straight to `strata.exe --serve` on stdin, one
+  prompt, warm.
 
 Interleave A/B runs and use several fresh starts. Before the slow-start fix, speed was set per engine start, and 3
 starts per arm were not enough to see a difference; 8 were.
@@ -334,6 +339,7 @@ llama.cpp is MIT ([../LICENSES/llama.cpp-LICENSE](../LICENSES/llama.cpp-LICENSE)
 | `slow-starts/0002` card 0's own expert rows in VRAM | with `STRATA_NIGHT_EP_PSUM=1` card 0 no longer aliases its row buffer to the host-memory exchange region; `STRATA_EP_PARTS_HOST=1` restores the old path. Sent upstream as [hotschmoe/Strata#1](https://github.com/hotschmoe/Strata/pull/1). Details in [slow-starts/](slow-starts/) |
 | `slow-starts/0003` card 1's prompt rows buffer private | with `STRATA_EP_PREFILL_REDUCE=1` card 1's rows buffer is a private VRAM allocation (`ep_region_alloc_private`); `STRATA_EP_PREFILL_ROWS_HOST=1` restores the shared region. Rebased 2026-11-21 so it applies on top of `0002` (the old file was cut against upstream's `ep_mem.hpp`) |
 | `esimd-prefill/0001` grouped prompt experts | per-layer type check, the expert-parallel card on the grouped path, the ESIMD GEMM through a C shim. Details in [esimd-prefill/](esimd-prefill/) |
+| `patches/0006` B70 GDN prompt kernels from [Strata PR #6566](https://github.com/Niko1221/Strata/pull/6566) | three opt-in switches, off = the old path. `STRATA_B70_GDN_PAIR=1`: the GDN recurrence with q / k in registers and two tokens' inputs loaded before the first's update (T >= 128). `STRATA_B70_GDN_CONV=1`: conv + silu + q / k L2 in one sub-group per head (T >= 512). `STRATA_B70_GDN_RESID=1`: the GDN layers' residual write + next norm, 2 channels a work-item (T >= 512). Each keeps the old kernels' sum order. Live since 2026-11-23 with `PAIR` only. [Details](#paired-gdn-recurrence-from-strata-pr-6566-2026-11-23) |
 | `patches/0005` `batch_poll` copy-stream check | `DPCT_CHECK_ERROR(copy_->ext_oneapi_empty())` is always 0, so the poll could report a window done while the copy stream still had work; now `empty() ? 0 : 1` like the compute-queue check above it. A/B served: speeds and draft counts identical. Live since 2026-11-17 |
 
 `configs/` has the engine configs, with paths replaced by placeholders. `strata-iq3s-200k1-pf8k.json` is the live one.
@@ -365,9 +371,39 @@ numbers in them are from the build of their date.
   1,680 -> 2,194 tok/s, decode unchanged. Patch, shim and numbers in [esimd-prefill/](esimd-prefill/).
 - `batch_poll` copy-stream check (`patches/0005`), live 2026-11-17: a correctness cleanup found by reading the code;
   served A/B showed identical speeds and draft counts.
+- Prompt read +6.5% / +7.7%, live 2026-11-23: the paired GDN recurrence from Strata PR #6566 (`patches/0006`,
+  `STRATA_B70_GDN_PAIR=1`). 32k read 2,260 -> 2,407 tok/s on IQ3_S, 2,245 -> 2,419 on the abliterated IQ3_S, same
+  tokens. [Details](#paired-gdn-recurrence-from-strata-pr-6566-2026-11-23).
 - 2026-11-21: this README rewritten as a recipe, checked against the live machine. `slow-starts/0003` rebased so the
   chain applies in order, the ESIMD kernel files added under `esimd-prefill/esimd/`, and the published config
   replaced with the live one (adds `STRATA_WIN_TIMER_MS=0` and the vision section).
+
+## Paired GDN recurrence from Strata PR #6566 (2026-11-23)
+
+Upstream Strata's v0.2.19 / v0.2.20 releases carry [PR #6566](https://github.com/Niko1221/Strata/pull/6566), a set of
+B70 kernels for the GDN (gated delta net) layers' prompt path. This tree has the older prefill layout, so the pieces
+were ported by hand into `patches/0006`, each behind its own switch and each keeping the existing kernels' sum order.
+Left out: the BF16 projection tile (this tree has no deterministic GEMM there) and the SWAR sign trick (0-3% at best
+upstream).
+
+Engine bench: the served config's arguments on 2 cards, a 32,768-token prompt, then 16 greedy tokens; persistent JIT
+cache so no arm pays a compile in its timed request; warm-ups dropped; 3 runs an arm.
+
+| Build | IQ3_S, tok/s | Abliterated IQ3_S, tok/s |
+|---|---:|---:|
+| before (live build) | 2,243 / 2,272 / 2,266 = **2,260** | 2,239 / 2,257 / 2,240 = **2,245** |
+| patch 0006, all three switches on | 2,347 / 2,438 / 2,435 = **2,407 (+6.5%)** | 2,438 / 2,409 / 2,409 = **2,419 (+7.7%)** |
+| patch 0006, all off | 2,252 | - |
+| `STRATA_B70_GDN_CONV=1` only | 2,272 | - |
+| `STRATA_B70_GDN_PAIR=1` only | **2,411** | - |
+| `STRATA_B70_GDN_RESID=1` only | 2,273 | - |
+
+- The output tokens were identical in every arm, on both models. That is a 16-token greedy check after the 32k read,
+  not a full logit compare.
+- All of the gain is the paired recurrence; conv and resid are noise and stay off.
+- Decode is not affected by construction (the switches fire at T >= 128 or 512) and was not measured beyond a smoke
+  test: through the HTTP server a 20.7k read then 256 tokens decoded at 111.3 / 104.5 tok/s (IQ3_S / abliterated),
+  the normal range. The first read after a load is slow (JIT compile with `SYCL_CACHE_PERSISTENT=0`).
 
 ## Results
 
