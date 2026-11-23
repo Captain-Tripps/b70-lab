@@ -402,16 +402,16 @@ at 3 columns than the engine's own VTune times (unexplained). Only the engine A/
 | Prompt chunk | 8k, tok/s | 120k, tok/s | Output vs 512 |
 |---|---:|---:|---|
 | 256 | 774 | 770 | same |
-| **512 (live)** | **808-817** (6 runs) | **867** | - |
-| 1024 | 824 | **955** | 8k same; **120k differs from the 4th token** |
+| 512 (live until 2026-11-20) | 808-817 (6 runs) | 867 | - |
+| **1024 (live since 2026-11-20)** | **824** | **955** | 8k same; 120k differs from the 4th token (prefill noise, see [serving 11-20](#serving-changes-2026-11-20-sampling-drafts-chunk-1024-conversation-slots)) |
 
 - The prompt runs as four 10-layer stages, one card each; there is no tensor-parallel all-reduce in it.
 - The cards are busy ~74% of an 8k read: 16 chunks through a 4-stage pipeline leave a fill / drain bubble of about
   3 / (16 + 3). At 120k (235 chunks) the bubble is ~1%, which is why 120k reads faster than 8k.
 - The prompt kernels do not spill (the worst is 1,600 bytes in a kernel at 0.8% of the time), so per-kernel registers
   have nothing left to give there. Time split: routed experts ~58%, sparse attention ~24%.
-- Chunk 1024 is +10% at 120k but changes the output there. It stays off until a correctness check (repeat run,
-  log-prob compare, 2048 probe); on the GLM port 2048 was not deterministic and 3072+ was wrong.
+- Chunk 1024 is +10% at 120k. It went live on 2026-11-20 after the check in [serving 11-20](#serving-changes-2026-11-20-sampling-drafts-chunk-1024-conversation-slots): the
+  120k difference is run-to-run prefill noise, and no information leaks inside a chunk.
 - In 1 of 6 runs of the 8k read the first two generated tokens differed and the next 14 matched. It looks like a
   near-tie after a long prompt; being watched.
 
@@ -420,6 +420,86 @@ at 3 columns than the engine's own VTune times (unexplained). Only the engine A/
 A VTune capture of the whole process showed memory copies as 21% of the GPU time (109.5 GB device-to-host). They are
 the model load: about 110 GB of experts uploaded to VRAM. A near-empty profiled run shows the same ~16k copies. Profile
 a run long enough that the load is a small share, or subtract a load-only run.
+
+## Serving changes (2026-11-20): sampling, drafts, chunk 1024, conversation slots
+
+All four went live the same night, each with its own rollback copy of the engine config. The served numbers below
+are at temperature 1.0 through the HTTP server (4 prompts: code, math, prose, thinking; 400 tokens; seeds fixed).
+
+### Sampling defaults
+
+The engine config had an empty `"sampling": {}` block, left over from benching. An empty block skips the model's
+defaults, so a request that sends no temperature ran greedy, and greedy thinking loops: one request spent 16,384
+tokens (232 s) repeating a 1,651-token block. The config now sets temperature 1.0 and top_p 1.0 (the model card's
+values) and a thinking budget of 8,192 tokens. A hard math prompt then answered in 7,987 tokens at 58.4 tok/s. Served
+A/B runs must now send `temperature: 0` to stay deterministic; the CLI is unaffected.
+
+### Sampled drafts (`DS4_DSPARK_SAMPLE=1`, `DS4_DSPARK_QTEMP=0.7`)
+
+By default the drafter proposes its argmax, and verify treats each draft as a point. With `DS4_DSPARK_SAMPLE=1` the
+drafter draws each draft from its own distribution at `QTEMP` x the request temperature, and verify accepts against
+that distribution, which keeps speculative sampling exact for any `QTEMP`. Draft and accept use separate random
+streams. Greedy requests and requests with penalties keep argmax drafts.
+
+| Drafts (48 requests a config) | tok/s |
+|---|---:|
+| argmax (before) | 62.24 |
+| argmax, repeat | 61.99 |
+| sampled, QTEMP 0.6 | 63.39 |
+| **sampled, QTEMP 0.7** | **63.46 / 63.68** |
+| sampled, QTEMP 0.85 | 63.51 |
+
+Every sampled run beat both argmax runs: +2.0-2.6%, about +2.3% at 0.7. Acceptance per offered draft rises and fewer
+drafts are wasted. The engine's `--sampler-test 400` (on an open-ended list prompt, so the next token has 64 choices)
+reports "the same distribution" on all 4 chains at 0.7 and 1.0. A prompt whose next token is certain makes that test
+useless.
+
+### Prompt chunk 1024
+
+| Prompt | Chunk 512 | Chunk 1024 |
+|---|---:|---:|
+| 108k needle (5 words at 10-90% depth), CLI, A B B A | 873.5 / 873.4 | **959.7 / 958.8** (+9.8%) |
+| 31k, CLI | 925 | 1,010 / 1,009 |
+| 108k needle, served | - | 995 |
+
+All four needle runs found 5 of 5 with identical text. 1536 and 2048 read 1,035 / 1,024 at 31k, not worth the extra
+VRAM. The 2026-11-19 worry (the 120k output differed from the 4th token) was not a chunk bug:
+
+- Long-prompt prefill is not bit-exact run to run at any chunk: 9 fresh runs of one 31k prompt gave 5 different greedy
+  openings, all coherent summaries. 8k has been repeatable for days. It is not `DS4_HX_SYNC`, not the copy-engine
+  hand-off (`DS4_XFER_MEMCPY=0`) and not the prompt path choice. Token hashes past ~8k are not an A/B check.
+- Chunks are split equally (1,200 tokens at chunk 512 run as 3 x 400), and inside a chunk an earlier row's logits move
+  when a later row of the same chunk changes. An information test (90 random words, then later in the same chunk
+  either a copy of them or other random words) found 22 of 110 hits with the copy against 20 of 110 without: no
+  information reaches earlier rows. The coupling is numerical (batch-shaped rounding), not attention seeing the future.
+- On this low-bit model a single kernel switch moves perplexity by a few percent (one 1,200-token sequence: 61.81,
+  59.12 with `DS4_ATTN_XMX=0`, 58.92 with `DS4_HEAVY_XMX=3`), so perplexity across kernel shapes is noise, not a
+  quality gate.
+
+### Conversation slots (`MAYA_DS4_SLOT_KEEP=1`, `MAYA_DS4_SLOT_CAP=8`, `MAYA_DS4_SLOT_RAM_GB=12`)
+
+The engine already had GLM-style conversation slots, but they were off. Without them, any other conversation between
+two turns of one (another session, a side request) made the next turn read its whole prompt again: 26k ~30 s, 86k
+~100 s. With them the engine logs "took back a 5934-token conversation ... from RAM (0.0 s)"; a state is ~0.02 GB a
+6k conversation (the KV is compressed). Interleaved 26k + 19k conversations: the follow-up turn read 111 new tokens
+in 17.9 s, against 17.7 s with no other conversation in between.
+
+### Checked and left alone
+
+- Drafter floors at temperature 1.0: 7 conf / CUM pairs all sat inside the base-vs-repeat spread (59.6 / 61.0 tok/s).
+  The greedy-tuned floors hold. Per prompt: code ~73-74, math ~62-65, thinking ~59-61, prose ~47-48; the drafter is
+  +55% over plain at temperature 1.0.
+- The engine's prompt lookup (on in front of DSpark): off vs on, the accepted drafts were identical on every prompt.
+- Sampling cost: top-k 64 over 129,280 logits is 143 us a row against 20.8 for greedy, +0.12 ms a verify step;
+  plain decode at 8k 33.2 vs 32.8 tok/s.
+- Long-context decode is fine: plain 33.2 / 31.5 / 29.4-30.1 / 30.7 tok/s at 8k / 31k / 63k / 120k. One 63k run gave
+  18.3, the intermittent slowdown also seen on 2026-11-18; not reproduced in 3 reruns.
+- Seeded sampling is deterministic for a fixed draft config, but another draft config consumes the random stream
+  differently and gives other tokens, so seeded hashes only compare runs with the same drafting.
+- `DS4_SYNC=1` (a debug switch) produces garbage after the first token; do not use it as a diagnostic.
+  `DS4_HEAVY_XMX=0` crashes right after warm-up.
+- Open: served greedy (`temperature: 0`) cold answers differ run to run even at 6k, with or without slots; the CLI at
+  a fixed chunk is bit-identical. Not yet traced (chunk 1024 vs 512, or the server's restore points).
 
 ## Decode rounds 5-7 (2026-11-22 / 23): drafter and switches
 
@@ -637,7 +717,7 @@ cross-card pipeline uses.
 
 After round 4 (2026-11-19): the prompt target is met; decode needs ~15% more on the benchmark prompt.
 
-- **Prompt chunk 1024** (+10% at 120k): needs the correctness check above before it can go live.
+- ~~Prompt chunk 1024~~: live since 2026-11-20 ([serving 11-20](#serving-changes-2026-11-20-sampling-drafts-chunk-1024-conversation-slots)).
 - **Routed experts in the verify window** are the part of a drafted token that grows with width. The exact 16-lane form
   did nothing for the down kernel, so the next try is a different load pattern, not a narrower sub-group.
 - **SYCL graph replay** costs 0.56 us against ~7.8 us a launch. Device time already equals wall time at batch 1, so

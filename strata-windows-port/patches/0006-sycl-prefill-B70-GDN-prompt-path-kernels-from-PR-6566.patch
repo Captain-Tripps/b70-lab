@@ -1,0 +1,295 @@
+From: Captain-Tripps
+Subject: [PATCH] sycl prefill: B70 GDN prompt-path kernels from Strata PR #6566 (opt-in)
+
+A port of the B70 GDN prompt-path pieces of Strata PR #6566
+(https://github.com/Niko1221/Strata/pull/6566) into this tree's older prefill
+layout. Three switches, all off by default; off is the old code path:
+
+  STRATA_B70_GDN_PAIR=1   GDN recurrence with q / k held in registers and two
+                          tokens' inputs loaded before the first one's update
+                          (16-lane sub-group, T >= 128, Xe devices only).
+  STRATA_B70_GDN_CONV=1   conv + silu + q / k L2 norm, one sub-group per head,
+                          8 tokens a group (T >= 512).
+  STRATA_B70_GDN_RESID=1  GDN layers' attention-half residual write + the next
+                          norm, 2 channels a work-item (T >= 512).
+
+Each keeps the existing kernels' per-column sum order, so the output should
+not change. Measured with the engine bench (32,768-token prompt, 16 greedy
+tokens after it, 2 cards, 3 warm runs an arm): stock IQ3_S read 2,260 ->
+2,407 tok/s (+6.5%), abliterated 2,245 -> 2,419 (+7.7%), output tokens
+identical in every arm. All of the gain is STRATA_B70_GDN_PAIR; CONV and RESID
+alone are within noise (2,272 / 2,273 vs 2,260). Decode is not affected: the
+switches fire only at T >= 128.
+
+Not ported: the BF16 projection tile (this tree has no deterministic GEMM
+there) and the SWAR sign trick (0-3% at best upstream).
+
+---
+diff --git a/sycl/src/prefill/b70_gdn_residual.hpp b/sycl/src/prefill/b70_gdn_residual.hpp
+new file mode 100644
+index 0000000..4cb4697
+--- /dev/null
++++ b/sycl/src/prefill/b70_gdn_residual.hpp
+@@ -0,0 +1,72 @@
++#pragma once
++// SYCL port (STRATA_B70_GDN_RESID, from Strata PR #6566 bmg_gdn_residual.hpp): gr_write_norm_rs_kernel with two
++// channels a work-item (128 work-items, sub-group 16). Thread i holds original threads 2i and 2i + 1: the same
++// per-thread squares, the xor steps 16..2 then the pair add (= the old xor 1), the 8 warp sums over xor 4, 2, 1.
++#include <sycl/sycl.hpp>
++#include <cstdint>
++namespace strata::prefill::b70_gdn_residual {
++constexpr int N = 2560, HC = 4;
++inline uint16_t bf(float v) {
++    auto u = sycl::bit_cast<uint32_t>(v);
++    return (uint16_t) ((u + 0x7fffu + ((u >> 16) & 1u)) >> 16);
++}
++inline void write_norm(sycl::queue& q, float* r, const float* bo, const float* inj, int stride, const float* weight,
++                       float eps, float* rs, uint16_t* hi, uint16_t* lo, int rows, int image_stride) {
++    constexpr int F = 2, SG = 16, threads = 256 / F;
++    q.submit([&](sycl::handler& cgh) {
++        sycl::local_accessor<float, 1> sums(8, cgh);
++        cgh.parallel_for(sycl::nd_range<1>{size_t(rows) * HC * threads, threads},
++                         [=](sycl::nd_item<1> it) [[sycl::reqd_sub_group_size(SG)]] {
++            const int row = int(it.get_group(0)), t = row / HC, c = row % HC, id = int(it.get_local_id(0));
++            auto sg = it.get_sub_group();
++            const float sc = 2.0f * (1.0f / (1.0f + sycl::native::exp(-(inj[t * stride + c] / (float) HC))));
++            using Vec = sycl::vec<float, F>;
++            Vec v[10];
++            float ss[F] = {0.0f, 0.0f};
++#pragma unroll
++            for (int k = 0; k < 10; ++k) {
++                const int d = 256 * k + id * F;
++                const Vec b = *reinterpret_cast<const Vec*>(bo + size_t(t) * N + d);
++                Vec* dest = reinterpret_cast<Vec*>(r + size_t(row) * N + d);
++                const Vec old = *dest;
++                Vec x;
++#pragma unroll
++                for (int j = 0; j < F; ++j) {
++                    x[j] = sycl::fma(b[j], sc, old[j]);
++                    ss[j] += x[j] * x[j];
++                }
++                *dest = x;
++                v[k] = x;
++            }
++#pragma unroll
++            for (int off = 16 / F; off; off /= 2)
++#pragma unroll
++                for (int j = 0; j < F; ++j) ss[j] += sycl::permute_group_by_xor(sg, ss[j], off);
++            ss[0] += ss[1];
++            if ((id * F) % 32 == 0) sums[id * F / 32] = ss[0];
++            it.barrier(sycl::access::fence_space::local_space);
++            const int lane = int(sg.get_local_linear_id());
++            float part = lane < 8 ? sums[lane] : 0.0f;
++#pragma unroll
++            for (int off = 4; off; off /= 2) part += sycl::permute_group_by_xor(sg, part, off);
++            const float inv = sycl::rsqrt(sycl::group_broadcast(sg, part, 0) / (float) N + eps);
++            if (id == 0) rs[row] = inv;
++#pragma unroll
++            for (int k = 0; k < 10; ++k) {
++                const int d = k * 256 + id * F;
++                const Vec wv = *reinterpret_cast<const Vec*>(weight + c * N + d);
++                sycl::vec<uint16_t, F> upper, lower;
++#pragma unroll
++                for (int j = 0; j < F; ++j) {
++                    const float x = v[k][j] * inv * wv[j];
++                    upper[j] = bf(x);
++                    lower[j] = bf(x - sycl::bit_cast<float>(uint32_t(upper[j]) << 16));
++                }
++                const size_t o = size_t(t) * image_stride + c * N + d;
++                *reinterpret_cast<sycl::vec<uint16_t, F>*>(hi + o) = upper;
++                if (lo) *reinterpret_cast<sycl::vec<uint16_t, F>*>(lo + o) = lower;
++            }
++        });
++    });
++}
++}  // namespace strata::prefill::b70_gdn_residual
+diff --git a/sycl/src/prefill/kernels.dp.cpp b/sycl/src/prefill/kernels.dp.cpp
+index 938f9e5..31a9cf6 100644
+--- a/sycl/src/prefill/kernels.dp.cpp
++++ b/sycl/src/prefill/kernels.dp.cpp
+@@ -991,6 +991,61 @@ __dpct_inline__ void gdn_rec_cols_pipe_kernel(float *__restrict__ state,
+ #pragma unroll
+     for (int r = 0; r < RPG; ++r) base[r * rs] = s[r];
+ }
++// SYCL port (STRATA_B70_GDN_PAIR, from Strata PR #6566): gdn_rec_cols_pipe_kernel with q / k held in registers
++// (lane l of a 16-lane sub-group: rows rg * RPG + l and + 16, shared by sub-group broadcast) and the inputs of two
++// tokens loaded before the first's update. Per column the same sums in the same order: the fma chain over r, red[0] +
++// red[1] + red[2] + red[3], fma(g, s, k * delta), * rsqrt(S).
++inline void b70_gdn_pair(sycl::nd_item<1> it, const sycl::local_accessor<float, 1>& partial, float* state,
++                         const float* h, const float* gate, const float* beta, float* out, int64_t T) {
++    const auto sg = it.get_sub_group();
++    const int tid = int(it.get_local_linear_id()), group = int(it.get_group_linear_id());
++    const int rg = tid / CB, c = tid % CB, lane = c % 16;
++    const int head = group / NCB, col = (group % NCB) * CB + c;
++    const size_t stride = size_t(HV) * S;
++    float* column = state + (size_t(rg * RPG) * HV + head) * S + col;
++    float st[RPG];
++#pragma unroll
++    for (int r = 0; r < RPG; ++r) st[r] = column[r * stride];
++    struct In { float q[2], k[2], v, g, b; };
++    auto fetch = [&](int64_t t) {
++        const float* row = h + t * C;
++        const float* q = row + (head % HK) * S + rg * RPG + lane;
++        const float* k = q + HK * S;
++        return In{{q[0], q[16]}, {k[0], k[16]}, row[2 * HK * S + head * S + col], gate[t * HV + head],
++                  beta[t * HV + head]};
++    };
++    auto step = [&](int64_t t, const In& in) {
++        const float g = sycl::native::exp(in.g);
++        float kv = 0.0f;
++#pragma unroll
++        for (int r = 0; r < RPG; ++r) kv = sycl::fma(st[r], sycl::group_broadcast(sg, in.k[r / 16], r % 16), kv);
++        partial[tid] = kv;
++        it.barrier(sycl::access::fence_space::local_space);
++        const float kv_col = partial[c] + partial[CB + c] + partial[2 * CB + c] + partial[3 * CB + c];
++        const float delta = (in.v - g * kv_col) * in.b;
++        float o = 0.0f;
++#pragma unroll
++        for (int r = 0; r < RPG; ++r) {
++            st[r] = sycl::fma(g, st[r], sycl::group_broadcast(sg, in.k[r / 16], r % 16) * delta);
++            o = sycl::fma(st[r], sycl::group_broadcast(sg, in.q[r / 16], r % 16), o);
++        }
++        partial[RG * CB + tid] = o;
++        it.barrier(sycl::access::fence_space::local_space);
++        if (rg == 0)
++            out[t * HV * S + head * S + col] =
++                (partial[4 * CB + c] + partial[5 * CB + c] + partial[6 * CB + c] + partial[7 * CB + c]) *
++                sycl::rsqrt((float) S);
++    };
++    int64_t t = 0;
++    for (; t + 1 < T; t += 2) {
++        const In a = fetch(t), b = fetch(t + 1);
++        step(t, a);
++        step(t + 1, b);
++    }
++    if (t < T) step(t, fetch(t));
++#pragma unroll
++    for (int r = 0; r < RPG; ++r) column[r * stride] = st[r];
++}
+ #if !defined(__HIPCC__)
+ // The recurrence with one thread for the three value heads that share a key head (head % HK): column c of heads
+ // qh, qh + 16 and qh + 32, row group rg.  gdn_rec_cols_pipe_kernel spends its time in shared memory, not in
+@@ -2499,7 +2554,78 @@ void gdn_gates(const float* ab, const float* dt, const float* ssm_a, float* gate
+     }
+     check("gdn_gates");
+ }
++static bool b70_env(const char* name) {   // SYCL port (PR #6566 pieces): opt-in switches, read once per name
++    const char* v = std::getenv(name);
++    return v && std::atoi(v) != 0;
++}
++// SYCL port (STRATA_B70_GDN_CONV, from Strata PR #6566): one sub-group of 32 owns a head's 128 channels for 8
++// tokens - four 32-channel partials in registers. The conv expression is gdn_conv_tiled_kernel's; the q/k norm is
++// gdn_conv_l2_kernel's (fma on the first xor step, plain adds after, part0 + part1 + part2 + part3, v * rsqrt).
++static void b70_conv_normalize(sycl::queue& q, const float* hist, const float* qkv, const float* w, float* h,
++                               int64_t T, float eps) {
++    constexpr int Tile = 8, heads = C / 128, subgroups = 4;
++    const size_t work = size_t((T + Tile - 1) / Tile) * heads;
++    const size_t groups = (work + subgroups - 1) / subgroups;
++    q.parallel_for(sycl::nd_range<1>(groups * subgroups * 32, subgroups * 32),
++                   [=](sycl::nd_item<1> it) [[sycl::reqd_sub_group_size(32)]] {
++        const auto sg = it.get_sub_group();
++        const size_t unit = it.get_group(0) * subgroups + sg.get_group_linear_id();
++        if (unit >= work) return;
++        const int head = int(unit % heads), lane = int(sg.get_local_linear_id());
++        const int64_t first = int64_t(unit / heads) * Tile;
++        float prev[4][3], wt[4][4];
++#pragma unroll
++        for (int i = 0; i < 4; ++i) {
++            const int c = head * 128 + i * 32 + lane;
++#pragma unroll
++            for (int j = 0; j < 3; ++j) {
++                const int64_t t = first - 3 + j;
++                prev[i][j] = t >= 0 ? qkv[t * C + c] : hist[c * 3 + (int) (t + 3)];
++            }
++#pragma unroll
++            for (int j = 0; j < 4; ++j) wt[i][j] = w[c * 4 + j];
++        }
++        const int64_t last = first + Tile < T ? first + Tile : T;
++        for (int64_t t = first; t < last; ++t) {
++            float val[4];
++#pragma unroll
++            for (int i = 0; i < 4; ++i) {
++                const int c = head * 128 + i * 32 + lane;
++                const float x = qkv[t * C + c];
++                const float z = prev[i][0] * wt[i][0] + prev[i][1] * wt[i][1] + prev[i][2] * wt[i][2] + x * wt[i][3];
++                val[i] = z / (1.0f + sycl::native::exp(-z));
++                prev[i][0] = prev[i][1]; prev[i][1] = prev[i][2]; prev[i][2] = x;
++            }
++            if (head < 2 * HK) {
++                float part[4];
++#pragma unroll
++                for (int i = 0; i < 4; ++i) {
++                    const float v = val[i];
++                    float sq = sycl::fma(v, v, sycl::permute_group_by_xor(sg, v * v, 16));
++#pragma unroll
++                    for (int o = 8; o > 0; o >>= 1) sq = sq + sycl::permute_group_by_xor(sg, sq, o);
++                    part[i] = sycl::group_broadcast(sg, sq, 0);
++                }
++                const float ss = part[0] + part[1] + part[2] + part[3];
++                const float inv = sycl::rsqrt(ss + eps);
++#pragma unroll
++                for (int i = 0; i < 4; ++i) val[i] = val[i] * inv;
++            }
++#pragma unroll
++            for (int i = 0; i < 4; ++i) h[t * C + head * 128 + i * 32 + lane] = val[i];
++        }
++    });
++}
+ void gdn_conv(float* history, const float* qkv, const float* conv_w, float* h, int64_t T, float eps, void* stream) {
++    static const bool b70conv = b70_env("STRATA_B70_GDN_CONV");
++    if (b70conv && T >= 512 && std::getenv("STRATA_GDN_CONV_SERIAL") == nullptr) {
++        b70_conv_normalize(*strata::q_of(stream), history, qkv, conv_w, h, T, eps);
++        strata::q_of(stream)->parallel_for(
++            sycl::nd_range<3>(sycl::range(1, 1, C / 128) * sycl::range(1, 1, 128), sycl::range(1, 1, 128)),
++            [=](sycl::nd_item<3>) { gdn_conv_hist_kernel(history, qkv, T); });
++        check("gdn_conv (b70)");
++        return;
++    }
+     static const bool serial = std::getenv("STRATA_GDN_CONV_SERIAL") != nullptr;   // the old walk (A/B)
+     if (serial || T <= CONV_TILE) {
+         auto exp_props = sycl::ext::oneapi::experimental::properties{
+@@ -2713,6 +2839,15 @@ void gdn_recurrence_variant(int variant, float* state, const float* h, const flo
+                     });
+         } else
+ #endif
++            if (pipe && T >= 128 && b70_env("STRATA_B70_GDN_PAIR") && gdn_xe_device(stream)) {
++            strata::q_of(stream)->submit([&](sycl::handler& cgh) {
++                sycl::local_accessor<float, 1> partial(2 * RG * CB, cgh);
++                cgh.parallel_for(sycl::nd_range<1>(HV * S * RG, RG * CB),
++                                 [=](sycl::nd_item<1> it) [[sycl::reqd_sub_group_size(16)]] {
++                                     b70_gdn_pair(it, partial, state, h, gate, beta, y, T);
++                                 });
++            });
++        } else
+             if (pipe) // the software-pipelined loads (same bits)
+         {
+             auto exp_props = sycl::ext::oneapi::experimental::properties{
+diff --git a/sycl/src/prefill/prefill.cpp b/sycl/src/prefill/prefill.cpp
+index 1265b3d..dbf601a 100644
+--- a/sycl/src/prefill/prefill.cpp
++++ b/sycl/src/prefill/prefill.cpp
+@@ -44,6 +44,7 @@
+ #include "strata/kernels/ep_kernels.hpp"
+ #include "strata/kernels/night_grouped.hpp"
+ #include "strata/prefill/kernels.hpp"
++#include "b70_gdn_residual.hpp"   // SYCL port: STRATA_B70_GDN_RESID
+ 
+ #include <algorithm>
+ #include <chrono>
+@@ -5349,6 +5350,16 @@ bool Prefill::run_impl(const int64_t *tokens, int64_t n, int64_t pos0,
+                                           T, m.cs, m.xn16_lo, ldx);
+                     normed = true;
+                 } else if (wnn) {
++                    static const bool b70res = [] { const char* v = std::getenv("STRATA_B70_GDN_RESID"); return v && std::atoi(v) != 0; }();
++                    const int64_t row_stride = ldx > 0 ? ldx : D;
++                    if (b70res && half == 0 && !core::is_qsa_layer(g, l) && !m.f16_io && T >= 512 && N == 2560 &&
++                        HC == 4 && row_stride % 2 == 0 &&
++                        ((reinterpret_cast<uintptr_t>(m.R) | reinterpret_cast<uintptr_t>(m.bo) |
++                          reinterpret_cast<uintptr_t>(wnn->data)) & 7u) == 0 &&
++                        ((reinterpret_cast<uintptr_t>(m.xn16) | reinterpret_cast<uintptr_t>(m.xn16_lo)) & 3u) == 0) {
++                        strata::prefill::b70_gdn_residual::write_norm(*m.cs, m.R, m.bo, m.inj, HC, (const float*) wnn->data, EPS,
++                                                     m.grs, m.xn16, m.xn16_lo, int(T), int(row_stride));
++                    } else
+                     gr_write_norm_rs(m.R, m.bo, m.inj, HC, (const float*) wnn->data, EPS, m.grs, m.xn16, T, m.cs,
+                                      m.xn16_lo, ldx);
+                     normed = true;
