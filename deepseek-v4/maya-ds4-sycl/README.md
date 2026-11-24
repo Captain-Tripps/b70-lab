@@ -666,11 +666,40 @@ Output: TP 2 sums the two halves in a different order, so its tokens differ from
 - **Spin waits fenced in place instead of wait kernels (`DS4_DEVWAIT=0 DS4_HOSTWAIT=0`):** no hang, same speed. Simpler
   code, but no reason to switch the live config.
 
+### Long context and the slower prompt read (investigated, shelved)
+
+Served at ~119k context: decode 54.3 tok/s, prompt read 778 tok/s (the pipeline reads ~955 at 120k), answer correct.
+The CLI bench's 108k decode drop (14.8 tok/s) came from its windows-of-16 prompt path. The server has no
+long-context decode cliff.
+
+Why prompt reads are ~20% slower on a 31k read (CLI, chunk 1024: pipeline 31.2 s, TP 2 37.6 s):
+
+| Check | Result |
+|---|---|
+| Host-timed kernel sums (all cards) | TP 2 77.3 s against 97.6 s for the pipeline. The chunk all-reduce is 12.1 s: 2,720 calls at 4.45 ms. |
+| Indexer block | 6.0% pipeline, 5.9% TP 2. Not the cause. |
+| All-reduce through host rows, zero-copy, or staged on the copy engine | 37.5-37.9 s each. The cost is waiting, not transfer. |
+| Per-card chunk timeline | Layers 0-18 take ~1.1-1.2 s every chunk. Layers 19-39 take ~50 ms a chunk until the last three. |
+| Sync wait by split side | The card with 4 of the 9 blocks waits 5.75 ms a sync, the card with 5 waits 3.40 ms. |
+
+- **The long-prompt skip.** Layers from the YOCO source on only write their KV for every chunk before the cut, so for
+  most of a long read only layers 0-18 do full work. They sit on the first two cards in both layouts, and the other two
+  idle ~90% of the read either way. The pipeline runs the first two cards as two overlapped stages; TP 2 runs them as
+  one pair, with a sync every layer of every chunk.
+- **The sync floor.** Even the card that never waits on its partner pays ~3.4 ms a sync (FP16 rows to host, CPU sum,
+  each card reads the sum back): ~6% of the read.
+- **The split.** Each expert's 2304-wide FFN is cut in nine 256-value blocks (the down weights' quant block), so every
+  layer goes 5 + 4, the wide card alternating by layer. The imbalance costs only ~1.2 ms a layer-chunk on the critical
+  path, ~2% of the read. An exact split needs part of the odd block's weights on both cards (no VRAM) or an extra
+  exchange inside every FFN (costs decode more than it gains).
+- Not possible here: pipeline for prompts and TP 2 for decode (the weights are placed differently; no room for both).
+  Moving layers 0-18 onto the idle cards would be worth ~5% a layer, but each needs ~1.4 GB a card and those cards have
+  1.0-1.4 GB free.
+
+Shelved: prompt reads stay ~20% slower in exchange for the decode gain.
+
 ### Open
 
-- **The CLI bench at 108k showed TP 2 decode at 14.8 tok/s against 60.2 for the pipeline** (58 tokens after a 108k
-  needle prompt read in windows of 16, 50 ms a token waiting on the head card). The served path at 99k does not show
-  it (61.0 vs 46.5). Not explained yet.
 - The indexer and its top-k run in full on both cards of a group (`attn_sel` does not use the member index), and each
   card now holds twice the layers. That context-linear cost is the first thing to look at if long-context decode drops.
 - The CPU-lane expert path hangs under TP; it only matters if experts stop fitting in VRAM.
