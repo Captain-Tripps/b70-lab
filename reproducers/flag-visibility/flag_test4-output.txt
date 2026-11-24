@@ -1,0 +1,8 @@
+host write  load volatile          : NOT SEEN after 2000000 loads,   0 of 256 data words stale; reader done    3.43 ms after write
+host write  load SYCL acquire+vol  : SEEN     after   45056 loads,   0 of 256 data words stale; reader done    0.02 ms after write
+host write  load SYCL seq_cst+vol  : SEEN     after   45077 loads,   0 of 256 data words stale; reader done    0.02 ms after write
+host write  load ESIMD inval (ctl) : SEEN     after   49453 loads,   0 of 256 data words stale; reader done    0.04 ms after write
+dev0 write  load volatile          : NOT SEEN after 2000000 loads, 256 of 256 data words stale; reader done  615.57 ms after write
+dev0 write  load SYCL acquire+vol  : SEEN     after   45351 loads,   0 of 256 data words stale; reader done    0.34 ms after write
+dev0 write  load SYCL seq_cst+vol  : SEEN     after   45061 loads,   0 of 256 data words stale; reader done    0.28 ms after write
+dev0 write  load ESIMD inval (ctl) : SEEN     after   40556 loads,   0 of 256 data words stale; reader done    0.27 ms after write

@@ -1,4 +1,4 @@
-# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 19)
+# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 23)
 
 **Three days into the port: decode 43.7 tok/s with the drafter (36.2 plain) on the benchmark prompt, prompts read at
 812 tok/s at 8k and 867 at 120k.** Served decode depends on how well the drafter guesses the text: 47-50 tok/s on warm
@@ -8,13 +8,18 @@ met and decode is at 87% on the benchmark prompt ([round 4](#decode-round-4-2026
 Since 2026-11-18 the engine has a llama-swap entry (owner's OK) that swaps with the GLM entry on demand, behind Maya's
 OpenAI-compatible server.
 
+**2026-11-23: tensor parallel 2 runs on Windows and is live.** Served decode is 30-48% faster (code 57 -> 84 tok/s,
+99k context 46.5 -> 61.0), prompt reads ~25% slower. The fix was a device-side wait: a running kernel *can* see a
+host-USM write if it fences each turn of its loop, which corrects the M1 finding below.
+[Tensor parallel 2 on Windows](#tensor-parallel-2-on-windows-2026-11-23-device-side-waits).
+
 Setup: Windows 11, four Arc Pro B70s (32 GB each), EPYC 7402P (Zen 2, AVX2 only), driver 32.0.101.9175, oneAPI DPC++
 2026.0, JIT build, persistent kernel cache (`SYCL_CACHE_PERSISTENT=1`). Model: the Maya-XS IQ1_S pack of
 DeepSeek-V4.1-Flash-1017 (116.8 GB model + 161.3 GB Q6_K Engram tables read from SSD + 4.25 GB DSpark drafter).
 Engine: Project Maya's in-tree `src/ds4/`, run through `dpct` and then fixed by hand, the same route as the
 [GLM-5.3 port](../../glm-5.3/sycl-port/). This is option A' of the [engine decision](../engine-decision-2026-11-16/ENGINE-DECISION.md).
 
-Layout: tensor parallel falls back 2 -> 1 (an expert's n_ff 2304 is 9 blocks of 256 values, which do not split in two;
+Layout before 2026-11-23 (see the top note for the TP 2 layout): tensor parallel falls back 2 -> 1 (an expert's n_ff 2304 is 9 blocks of 256 values, which do not split in two;
 the uneven split is tested [below](#tensor-parallel-2-with-the-uneven-split-2026-11-19)), so the four cards run a
 layer pipeline of about 10 layers each. All 15,360 routed experts fit in VRAM with `--reserve-mib 1024` at 12k context;
 the served 128k entry needs `--reserve-mib 768` for the same (2026-11-18, below).
@@ -283,6 +288,8 @@ Drafted output identical (`f70da23b`) with the same acceptance per position. Liv
 The draft cut is already near its best; the settings stay. The drafter keeps 53-55% of its first-position drafts.
 
 ### Tensor parallel 2 with the uneven split (2026-11-19)
+
+Solved on 2026-11-23, see [Tensor parallel 2 on Windows](#tensor-parallel-2-on-windows-2026-11-23-device-side-waits).
 
 `DS4_TP_GGUF_UNEVEN=1` splits each expert's 9 blocks 5 / 4 (1280 / 1024 values) between two cards. It loads: cards 0+1
 run layers 0-18, cards 2+3 layers 19-39 and the head, no expert on the CPU lane, 1.5-4.2 GB free a card. **But it
@@ -562,6 +569,114 @@ EXL3's own rounding, so it is partly noise; its heads changed 17-22%.
 | Expert row shapes (fx45, `DS4_DN_VAR`, `DS4_GU_VAR`) | plain +0.6-0.9% at best; drafted +1.0% best arm (exact), inside spread |
 | Router top-k in one sub-group (fx46), `DS4_ROUTE_FUSE=1/2` | equal; the router is not on the critical path |
 
+## Tensor parallel 2 on Windows (2026-11-23): device-side waits
+
+**Live since 2026-11-23: served decode +30-48% over the 4-stage pipeline, prompt reads ~25% slower.** Two groups of
+two cards, each layer's heads and expert columns split between the two cards of a group (`--tp 2` with the uneven 5 / 4
+expert split), with no peer-to-peer access between the cards. Every exchange still goes through host USM. What changed
+is how a card waits for the other card's half.
+
+Setup as above (four B70s, driver 32.0.101.9175, oneAPI 2026.0, v2 adapter), 128k context, `--reserve-mib 768`, DSpark
+drafter. Live settings: `DS4_TP_GGUF_UNEVEN=1 DS4_TP_HOST_FREE=1 DS4_DEVWAIT=7 DS4_MK_SPLIT=0 DS4_DRAFT_DEV=0,1,1`.
+
+### A running kernel can see a host-USM write after all
+
+[M1](#what-made-the-difference) concluded that a kernel already spinning on a host-USM flag never sees a later write,
+so every cross-card wait became a host wait followed by a launch. That was too broad. The 2026-11-17 test only tried
+plain loads and atomic loads. A fence inside the loop is enough:
+
+| Writer | Reader's loop | Flag seen | Data written before the flag, stale after it | Seen after the write |
+|---|---|---|---:|---:|
+| host | volatile load | no (2M loads) | 0 of 256 | - |
+| host | `atomic_fence(acquire, system)` + volatile load | yes | 0 of 256 | 0.02 ms |
+| host | ESIMD `fence<global, invalidate, system>` + load | yes | 0 of 256 | 0.04 ms |
+| other card | volatile load | no (2M loads) | **256 of 256** | - |
+| other card | `atomic_fence(acquire, system)` + volatile load | yes | 0 of 256 | 0.34 ms |
+| other card | ESIMD `fence<global, invalidate, system>` + load | yes | 0 of 256 | 0.27 ms |
+
+The other card writes 256 data words, a system fence, then the flag. LSC uncached-hint loads and LSC atomic loads
+without a fence did not see a host write either. Reproducer: [`reproducers/flag-visibility`](../../reproducers/#flag-visibility-can-a-running-kernel-see-a-host-usm-write).
+
+### Why TP 2 was slow: host waits that end in sleeps
+
+TP 2 needs two all-reduces a layer (attention output and expert output), about 80 a token. As host waits they cost
+2.3 ms each on average, most of it a Windows sleep after the spin gave up: 10.6 tok/s plain. Spinning longer on the
+host (`DS4_HOSTWAIT_SPIN_US=200000`) reached 29.0, still below the pipeline's ~33.
+
+`DS4_DEVWAIT` replaces the host wait with a one-work-item wait kernel on the reading card's queue: an ESIMD loop of
+invalidate fence + flag load, then the consumer is enqueued behind it with no host round trip. The bitmask picks the
+sites: 1 all-reduce, 2 layer hand-off (`xfer_get`), 4 flag waits; 7 is all three. Later the in-place spin waits
+(`wait_at_least`, the drafter's Markov pick) got the plain SYCL fence too, which also works (no hang in two served
+runs, speed within noise), but the live config uses the wait kernels.
+
+### Three things that hung it, and the fixes
+
+1. **The drafter's Markov pick spins with no host wait.** Found by a code audit of every cross-card spin. Off with
+   `DS4_MK_SPLIT=0` (the pick runs on one card).
+2. **Draft blocks on one card push experts onto the CPU lane, and the CPU-lane path hangs under TP.** With all three
+   drafter blocks on card 0, that card ran short of VRAM. `DS4_DRAFT_DEV=0,1,1` spreads them, and every expert fits:
+   cards 0+1 hold layers 0-18 plus the drafter, cards 2+3 layers 19-39 and the head, 1.0-2.4 GB free a card at 128k,
+   0 experts on the CPU lane. The CPU-lane path under TP is still broken.
+3. **A queue-lock deadlock with the background GEMM warm-up, short prompts only.** Stacks from `cdb` on a hung run:
+   the oneMKL warm-up thread submits to the same queues during the first decode, the SYCL runtime waits on an event
+   inside `submit` while it holds the queue's lock, and that event sits behind a device wait. The decode thread's next
+   submit then blocks forever. Long prompts never hit it because the chunked prompt path waits for the warm-up first.
+   Fix: with device waits on, the decode path waits for the warm-up once before its first launch.
+
+An earlier bisection by wait site "found" the culprit twice; both times it was luck, because the hang was
+intermittent. The stacks settled it.
+
+### Results
+
+CLI bench, drafted, 256 tokens, 30 alternating runs, all clean (no hang):
+
+| Prompt | 4-stage pipeline, tok/s | TP 2, tok/s | Change |
+|---|---:|---:|---:|
+| code edit | 84.7 | 127.8 | +51% |
+| story start | 50.6 | 62.5 | +24% |
+| 2k document question | 42.0 | 54.7 | +30% |
+| 484-token passage | 37.3 | 49.8 | +34% |
+| list | 40.3 | 47.8 | +19% |
+
+Plain decode: +4-10% (2k document 33.2 -> 36.6).
+
+Served through Maya's OpenAI server, temperature 0, one request per prompt per arm, fresh server per arm. Two
+separate sessions; TP 2's three arms in the second agree within ~4% on short prompts:
+
+| Prompt | Context | Pipeline decode, tok/s | TP 2 decode, tok/s | Pipeline read | TP 2 read |
+|---|---:|---:|---:|---:|---:|
+| code (LRU cache class) | 66 | 57.0 / 57.4 | 82.6 / 84.1 | | |
+| math | 51 | 64.1 / 64.6 | 85.0 / 85.1 | | |
+| thinking over a 2.5k passage | ~700 | 58.4 | 79.2 | | |
+| prose | 61 | 41.9 | 55.1 | | |
+| code edit, 4k characters | ~1.2k | 75.8 | 85.5 | 3.06 s | 2.83 s |
+| document summary | 31.4k | 46.9 / 46.5 | 59.3 / 56.8 | 31.0 / 30.9 s | 38.1 / 38.3 s |
+| document summary | 99k (68k read new, 31k from the prefix cache) | 46.5 | 61.0 | 70.0 s | 89.6 s |
+
+The live entry, through llama-swap at temperature 1.0: 65.0 tok/s on code, 53.2 on short prose, 84.6 on a follow-up
+turn that recalled a code word across a switch to another conversation.
+
+Output: TP 2 sums the two halves in a different order, so its tokens differ from the pipeline's. Answers checked: the
+110k needle test 5 of 5 (five different code words), and the served answers read correctly.
+
+### Tried and rejected on top of it
+
+- **Pipelined chunk all-reduce for prompts (`DS4_AR2=2`):** 31k read 38.3 -> 46.5 s, 99k 89.6 -> 94.4 s; decode the same
+  (code 82.5 vs 84.1, 99k 61.2 vs 61.0). Off.
+- **Spin waits fenced in place instead of wait kernels (`DS4_DEVWAIT=0 DS4_HOSTWAIT=0`):** no hang, same speed. Simpler
+  code, but no reason to switch the live config.
+
+### Open
+
+- **The CLI bench at 108k showed TP 2 decode at 14.8 tok/s against 60.2 for the pipeline** (58 tokens after a 108k
+  needle prompt read in windows of 16, 50 ms a token waiting on the head card). The served path at 99k does not show
+  it (61.0 vs 46.5). Not explained yet.
+- The indexer and its top-k run in full on both cards of a group (`attn_sel` does not use the member index), and each
+  card now holds twice the layers. That context-linear cost is the first thing to look at if long-context decode drops.
+- The CPU-lane expert path hangs under TP; it only matters if experts stop fitting in VRAM.
+- Kept conversations are saved per layout: the live TP 2 entry uses its own slot folder, so saves from the pipeline
+  layout are not loaded into it.
+
 ## What made the difference
 
 1. **Cross-card flags: wait on the host, then launch (M1, decode 0.03 -> 19.9 tok/s).** Maya hands data between cards
@@ -572,6 +687,9 @@ EXL3's own rounding, so it is partly noise; its heads changed 17-22%.
    launch the consumer. It touches four sites: the layer hand-off, the flag waits, a token's CPU-lane answer, and a window's. The
    fix also makes the Windows put submit at once with `ext_oneapi_prod()`. Before it, every card-to-card hand-off cost about 15 s.
    A 3,000-round ping-pong test of 256 KiB payloads found 0 stale words.
+   **Correction (2026-11-23):** "never sees a later write" holds for plain and atomic loads only. A system-scope fence
+   before each load (SYCL `atomic_fence(acquire, system)` or ESIMD `fence<global, invalidate, system>`) makes the
+   write and the data before it visible within ~0.3 ms. That is what made tensor parallel 2 work.
 2. **Cross-device event waits fail on Windows Level Zero, even in one shared context.** `ext_oneapi_submit_barrier`
    on another card's event reports `OUT_OF_RESOURCES` / `OUT_OF_DEVICE_MEMORY` with 3 GB free. All 25 such barriers
    are host `wait()`s now, as in the GLM port.
@@ -601,6 +719,8 @@ EXL3's own rounding, so it is partly noise; its heads changed 17-22%.
 12. **16-lane sub-groups for the dense mat-vec (fx43, plain +3.3%).** Exact, by doing the 32-lane kernel's two lanes
     per lane and folding the xor-16 step in-lane.
 13. **The v2 adapter's deadlock has an off switch** (`UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1`).
+14. **Tensor parallel 2 with device-side waits (2026-11-23, served decode +30-48%).** A wait kernel that fences each
+    turn replaces ~80 host waits a token (2.3 ms each, mostly Windows sleeps), plus three hang fixes.
 
 ## Bugs found on the way
 
@@ -695,6 +815,11 @@ cross-card pipeline uses.
 - Drafted greedy output is not bit-stable across draft patterns: a verify window of another size can flip a near
   tie, so a drafter change can change the text, and with it tokens a round. Compare tokens a round on prompts whose
   output stayed the same.
+- **The CLI bench's prompt path is not the server's.** The bench feeds a prompt in windows of 16; the server reads it in
+  chunks of 1024. On TP 2 the bench showed a 2x faster prompt read that the server does not have (the server reads
+  ~25% slower), and a 108k decode drop the server does not show at 99k. Prompt and long-context claims come from served runs.
+- **A served `prompt_n` counts only the tokens read new.** A prompt that shares a prefix with the previous request
+  reports the rest: a "68k" read was a 99k context after a 31k prefix hit. Count the prompt with the tokenizer.
 - Prompt reads need `--window 65536` (or any window of at least one chunk) on the `ds4` CLI.
 - `DS4_KT=1` per-kernel timing costs about 1% at 8k (276.7 vs ~280 tok/s). It does not time `xfer_put_kernel`, which
   is why the per-kernel table above has no hand-off copy in it.
@@ -722,7 +847,7 @@ After round 4 (2026-11-19): the prompt target is met; decode needs ~15% more on 
   did nothing for the down kernel, so the next try is a different load pattern, not a narrower sub-group.
 - **SYCL graph replay** costs 0.56 us against ~7.8 us a launch. Device time already equals wall time at batch 1, so
   this matters only where the host is on the critical path (verify windows, the drafter).
-- **Tensor parallel** stays parked: no peer-to-peer on Windows, ~45-50 us a host-staged hop.
+- ~~**Tensor parallel** stays parked~~: live since 2026-11-23 with device-side waits ([details](#tensor-parallel-2-on-windows-2026-11-23-device-side-waits)).
 
 The older list, ranked by expected gain toward 600 tok/s prompt and ~50 decode (items 1, 2 and 7 since partly done):
 
@@ -743,5 +868,5 @@ The older list, ranked by expected gain toward 600 tok/s prompt and ~50 decode (
    warm-up thread, prompt-prefix reuse, the drafter's shapes on first use, the Engram row cache.
 6. **Exit code 116**, the serve-mode watchdog false alarm, and a 256k context test.
 7. **Whole-tensor Q6_K SoA repack** for the remaining dense shapes (wo_b, k 8192), bench -7%.
-8. **Tensor parallel through threads mode**: find why the first cross-card flag of `--tp 2` is never raised. Only
+8. ~~**Tensor parallel through threads mode**~~ (solved 2026-11-23): find why the first cross-card flag of `--tp 2` is never raised. Only
    worth it if group exchanges get much cheaper than ~0.3 ms.
