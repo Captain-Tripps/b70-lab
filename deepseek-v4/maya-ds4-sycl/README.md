@@ -1,4 +1,4 @@
-# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 23)
+# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 24)
 
 **Three days into the port: decode 43.7 tok/s with the drafter (36.2 plain) on the benchmark prompt, prompts read at
 812 tok/s at 8k and 867 at 120k.** Served decode depends on how well the drafter guesses the text: 47-50 tok/s on warm
@@ -12,6 +12,11 @@ OpenAI-compatible server.
 99k context 46.5 -> 61.0), prompt reads ~25% slower. The fix was a device-side wait: a running kernel *can* see a
 host-USM write if it fences each turn of its loop, which corrects the M1 finding below.
 [Tensor parallel 2 on Windows](#tensor-parallel-2-on-windows-2026-11-23-device-side-waits).
+
+**2026-11-24: decode queues without profiling, live.** `dpct` turns profiling on for every queue, and on the v2
+adapter that adds ~1.3 us of GPU time to each of a token's ~1,440 dependent kernels. Turning it off on the decode
+queues: CLI decode +4-10%, served about +6%, prompts unchanged. The next move is replaying the decode as fixed graphs
+(0.55 us a kernel in the micro-benchmark). [Decode launch cost](#decode-launch-cost-2026-11-24-queues-without-profiling).
 
 Setup: Windows 11, four Arc Pro B70s (32 GB each), EPYC 7402P (Zen 2, AVX2 only), driver 32.0.101.9175, oneAPI DPC++
 2026.0, JIT build, persistent kernel cache (`SYCL_CACHE_PERSISTENT=1`). Model: the Maya-XS IQ1_S pack of
@@ -666,16 +671,143 @@ Output: TP 2 sums the two halves in a different order, so its tokens differ from
 - **Spin waits fenced in place instead of wait kernels (`DS4_DEVWAIT=0 DS4_HOSTWAIT=0`):** no hang, same speed. Simpler
   code, but no reason to switch the live config.
 
+### Long context and the slower prompt read (investigated, shelved)
+
+Served at ~119k context: decode 54.3 tok/s, prompt read 778 tok/s (the pipeline reads ~955 at 120k), answer correct.
+The CLI bench's 108k decode drop (14.8 tok/s) came from its windows-of-16 prompt path. The server has no
+long-context decode cliff.
+
+Why prompt reads are ~20% slower on a 31k read (CLI, chunk 1024: pipeline 31.2 s, TP 2 37.6 s):
+
+| Check | Result |
+|---|---|
+| Host-timed kernel sums (all cards) | TP 2 77.3 s against 97.6 s for the pipeline. The chunk all-reduce is 12.1 s: 2,720 calls at 4.45 ms. |
+| Indexer block | 6.0% pipeline, 5.9% TP 2. Not the cause. |
+| All-reduce through host rows, zero-copy, or staged on the copy engine | 37.5-37.9 s each. The cost is waiting, not transfer. |
+| Per-card chunk timeline | Layers 0-18 take ~1.1-1.2 s every chunk. Layers 19-39 take ~50 ms a chunk until the last three. |
+| Sync wait by split side | The card with 4 of the 9 blocks waits 5.75 ms a sync, the card with 5 waits 3.40 ms. |
+
+- **The long-prompt skip.** Layers from the YOCO source on only write their KV for every chunk before the cut, so for
+  most of a long read only layers 0-18 do full work. They sit on the first two cards in both layouts, and the other two
+  idle ~90% of the read either way. The pipeline runs the first two cards as two overlapped stages; TP 2 runs them as
+  one pair, with a sync every layer of every chunk.
+- **The sync floor.** Even the card that never waits on its partner pays ~3.4 ms a sync (FP16 rows to host, CPU sum,
+  each card reads the sum back): ~6% of the read.
+- **The split.** Each expert's 2304-wide FFN is cut in nine 256-value blocks (the down weights' quant block), so every
+  layer goes 5 + 4, the wide card alternating by layer. The imbalance costs only ~1.2 ms a layer-chunk on the critical
+  path, ~2% of the read. An exact split needs part of the odd block's weights on both cards (no VRAM) or an extra
+  exchange inside every FFN (costs decode more than it gains).
+- Not possible here: pipeline for prompts and TP 2 for decode (the weights are placed differently; no room for both).
+  Moving layers 0-18 onto the idle cards would be worth ~5% a layer, but each needs ~1.4 GB a card and those cards have
+  1.0-1.4 GB free.
+
+Shelved: prompt reads stay ~20% slower in exchange for the decode gain.
+
 ### Open
 
-- **The CLI bench at 108k showed TP 2 decode at 14.8 tok/s against 60.2 for the pipeline** (58 tokens after a 108k
-  needle prompt read in windows of 16, 50 ms a token waiting on the head card). The served path at 99k does not show
-  it (61.0 vs 46.5). Not explained yet.
 - The indexer and its top-k run in full on both cards of a group (`attn_sel` does not use the member index), and each
   card now holds twice the layers. That context-linear cost is the first thing to look at if long-context decode drops.
 - The CPU-lane expert path hangs under TP; it only matters if experts stop fitting in VRAM.
 - Kept conversations are saved per layout: the live TP 2 entry uses its own slot folder, so saves from the pipeline
   layout are not loaded into it.
+
+## Decode launch cost (2026-11-24): queues without profiling
+
+**Live since 2026-11-24: decode +4-10% on the CLI bench, about +6% served, prompt reads unchanged.** `dpct` creates
+every queue with profiling on (`DPCT_PROFILING_ENABLED` adds `enable_profiling`). On the v2 adapter a dependent kernel
+on a profiling queue costs ~7.1 us of GPU time, against ~5.8 us on a queue without it (empty-kernel chain, one card).
+A TP 2 token puts about 1,440 dependent kernels on its critical path, so profiling cost ~1.9 ms a token. fx63 builds
+the two decode queues without profiling. `DS4_QPROF=1`, or any `DS4_PROF` run, brings the profiling queues back, so one
+build serves for the A/B and the rollback. The one tuning step that timed kernels by their events now times them on
+the host.
+
+This corrects the [2026-11-18 launch benchmark](#host-launch-cost-is-not-the-limit): on v1 profiling made no difference,
+on v2 it does (7.80 vs 6.45 us in the [v2 check](#the-v2-adapter-back-on)), and the cost sits on the GPU between
+dependent kernels, not in the host's launch rate.
+
+### Results
+
+CLI bench, same build, `DS4_QPROF=1` (old) against the default (fx63), one run each after a smoke run and repeat;
+tokens identical on every pair:
+
+| Prompt | Mode | Old, tok/s | fx63, tok/s | Change |
+|---|---|---:|---:|---:|
+| 484-token passage | drafted | 48.18 | 51.61 | +7.1% |
+| 2k document question | drafted | 54.90 | 58.68 | +6.9% |
+| story start | drafted | 63.85 | 66.39 | +4.0% |
+| code edit | drafted | 125.65 | 127.31 | +1.3% |
+| 2k document question | plain | 35.82 | 39.55 | +10.4% |
+| story start | plain | 38.42 | 41.56 | +8.2% |
+
+Prompt read unchanged (2k document 156.6 vs 157.3 tok/s).
+
+Served through Maya's OpenAI server, temperature 0, a fresh server per arm, order old / fx63 / old / fx63. Only the
+prompts whose tokens matched in all four loads are counted:
+
+| Prompt | Old, tok/s | fx63, tok/s | Change |
+|---|---:|---:|---:|
+| short warm-up prompt | 55.1 / 55.0 | 57.8 / 58.8 | +6.0% |
+| prose | 54.7 / 55.0 | 57.8 / 57.9 | +5.5% |
+| math | 83.0 / 84.7 | 86.9 / 87.8 | +4.2% |
+| code (LRU cache class) | 82.3 / 82.6 | 83.9 / 83.7 | +1.7% |
+
+The 31k document read ran at 828 tok/s in all four loads. The thinking, code edit and long-context prompts gave
+different tokens between two loads of the *same* build (served greedy output does not repeat at length on this
+engine, an open issue), so their speeds are not compared. The live entry was checked through llama-swap after the
+switch: two identical temperature-0 replies.
+
+### Where a TP 2 token's GPU time goes
+
+Plain decode, GPU ms a token summed over the four cards (profiling marks, so a little inflated):
+
+| Part | ms |
+|---|---:|
+| start to compressor (hyper-connections, norms, q / kv projections) | 13.0 |
+| routing + shared expert | 10.1 |
+| MoE sum across the pair | 8.6 |
+| attention sum across the pair | 7.9 |
+| output projections | 7.5 |
+| routed experts, gate / up | 5.3 |
+| routed experts, down + rest | 4.9 |
+| sparse attention | 4.8 |
+| indexer | 2.2 |
+| hc_post | 1.9 |
+| post | 1.8 |
+| **total** | **68.0** |
+
+The two sums are ~24% of it, but most of that is a card spinning until its partner arrives; an outside review put
+the exposed cost at 5-20 us a sum. The indexer is not a lever at this context.
+
+### Tried and rejected in the same round
+
+- **Fused put + wait + sum for decode (`DS4_AR2_DECODE=1`):** output differs every run (stale reads). An all-lane
+  acquire fence did not fix it, and a release / acquire handshake (`DS4_AR2_DECODE=2`) hangs on the first sum. Parked;
+  the split put / wait / sum stays.
+- **The routing-answer wait on the GPU (fx64, `DS4_DEVWAIT` bit 8):** tokens exact, no gain (41.53 / 40.83 tok/s
+  plain). Fewer than 4,096 of ~10k checks ever blocked: the answer is almost always there before the host looks.
+- **Queue drains around the verify window:** equal or slower once warm. The first "faster" run was a cold start.
+- **Re-record and `exec.update` a graph every token** (micro-benchmark, 1,440 kernels with per-token arguments):
+  re-record 1.59 + update 3.34 + replay 0.64 us a kernel, against 6.09 eager. The update costs the host nearly what
+  launching does, so this shortcut is worth ~7% at best.
+- **Eventless launches:** ~0.6 us a kernel (~3-4%), but ~140 launch sites plus two kernel libraries. Not done.
+- **The remaining profiling queues:** the chunk and all-reduce queues only run on the prompt path, and prompt reads
+  did not move with fx63.
+
+### Next move: replay the decode as fixed graphs
+
+The same micro-benchmark replays a static 1,440-kernel graph at **0.55 us a kernel, against ~6 us eager.** The GLM
+and Flash-Next ports already decode this way. Graphs can't take per-token arguments without the costly update above,
+so the port is:
+
+1. Move the per-token values (position, sequence numbers, slot and flag targets) into device memory, written once a
+   token, so every kernel's arguments stay fixed.
+2. Record one graph per layer and shape (plain decode and each verify width), the way the GLM port keys its layer
+   graphs.
+3. Keep every wait inside the graph on the device. The device-side waits from TP 2 and fx64 already do that; any host
+   wait left on the decode path has to go.
+
+This is a multi-day port. How much of the ~5.5 us a kernel a real token gets back is not measured yet; the first step
+is a launch timeline of one token to bound it.
 
 ## What made the difference
 
@@ -781,7 +913,7 @@ cross-card pipeline uses.
 | Host waits around every heavy launch (fx27, `DS4_HX_SYNC`) | did not stop the hang. Off is +1.5% on the v1 adapter (8k 281 -> 286 / 283), so the served config runs `DS4_HX_SYNC=0` |
 | Engram reads as the hang cause | wrong; the stacks put it in the driver |
 | Prompt chunk 256 | hung at 8k before fx31; finishes on the fx31 build (752 tok/s, one run), slower than 512 |
-| Fewer host launches as the decode lever (launch benchmark) | ~7.5 us a launch however launched; the host already runs ahead of the cards inside a layer |
+| Fewer host launches as the decode lever (launch benchmark) | ~7.5 us a launch however launched; the host already runs ahead of the cards inside a layer. On v2 the profiling queues were part of the cost: see [decode launch cost](#decode-launch-cost-2026-11-24-queues-without-profiling) |
 | `UR_L0_USE_IMMEDIATE_COMMANDLISTS=0` | 7.5 -> 5.1 us a launch, but decode hung in 3 of 4 runs |
 | Dense Q6_K with 4 output rows a work-item (`DS4_Q6T_MC=2`) | about 2x slower than exact width at every verify size |
 | Cost-based draft cut (`DS4_DRAFT_COST=1`) | -4%, same tokens |
@@ -845,8 +977,9 @@ After round 4 (2026-11-19): the prompt target is met; decode needs ~15% more on 
 - ~~Prompt chunk 1024~~: live since 2026-11-20 ([serving 11-20](#serving-changes-2026-11-20-sampling-drafts-chunk-1024-conversation-slots)).
 - **Routed experts in the verify window** are the part of a drafted token that grows with width. The exact 16-lane form
   did nothing for the down kernel, so the next try is a different load pattern, not a narrower sub-group.
-- **SYCL graph replay** costs 0.56 us against ~7.8 us a launch. Device time already equals wall time at batch 1, so
-  this matters only where the host is on the critical path (verify windows, the drafter).
+- **SYCL graph replay of the whole decode** is the next move (2026-11-24): 0.55 us a kernel against ~6 us eager, and
+  the cost it removes sits on the GPU between dependent kernels, so it applies at batch 1 too. The earlier note that it
+  only helps where the host is on the critical path was wrong. [Plan](#next-move-replay-the-decode-as-fixed-graphs).
 - ~~**Tensor parallel** stays parked~~: live since 2026-11-23 with device-side waits ([details](#tensor-parallel-2-on-windows-2026-11-23-device-side-waits)).
 
 The older list, ranked by expected gain toward 600 tok/s prompt and ~50 decode (items 1, 2 and 7 since partly done):
