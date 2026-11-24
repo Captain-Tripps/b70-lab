@@ -1,6 +1,6 @@
 # Reproducers
 
-Small standalone programs for driver / runtime behaviour found while tuning. Both are my own code (MIT, see
+Small standalone programs for driver / runtime behaviour found while tuning. All are my own code (MIT, see
 [../LICENSE](../LICENSE)).
 
 ## l0-deadlock: Level Zero hang with several submitting threads + oneMKL
@@ -135,3 +135,30 @@ ep_probe.exe
 
 Result on two B70s (driver 8976): 1 fails (`zeMemGetIpcHandle` 0x78000003), 2 fails (peer access 0; touching the
 other card's memory = `DEVICE_LOST`), **3 works**. See [../strata-windows-port/](../strata-windows-port/).
+
+## flag-visibility: can a running kernel see a host-USM write?
+
+`flag-visibility/flag_test4.cpp` starts a one-work-item kernel on card 1 that spins on a flag in host USM, then has
+either the host or a kernel on card 0 write 256 data words and the flag. It reports whether the spinning kernel saw the
+flag and how many of the data words it read were still stale. Each loop variant: a plain volatile load, a SYCL
+`atomic_fence(acquire, system)` or `(seq_cst, system)` before the volatile load, and an ESIMD
+`fence<global, invalidate, system>` before the load (the control). The reader touches the data first, so stale lines are
+in its caches.
+
+```
+icpx -fsycl -O2 flag_test4.cpp -o flag_test4.exe
+set ONEAPI_DEVICE_SELECTOR=level_zero:0,1
+flag_test4.exe
+```
+
+Result on two B70s (Windows 11, driver 32.0.101.9175, oneAPI 2026.0), `flag_test4-output.txt`:
+
+| Writer | Plain volatile load | Fence + load (any of the three) |
+|---|---|---|
+| host | flag never seen (2M loads) | seen 0.02-0.04 ms after the write, 0 of 256 words stale |
+| card 0 | flag never seen, **256 of 256 words stale** | seen 0.27-0.34 ms after the write, 0 of 256 words stale |
+
+Without a fence a spinning kernel keeps reading its cached copy. With a system-scope fence each turn it sees both the
+flag and the data written before it. LSC uncached-hint loads and LSC atomic loads without a fence did not see a host
+write in an earlier variant of the test. This is what let the DeepSeek `ds4` port wait for the other card on the
+device instead of the host ([tensor parallel 2 on Windows](../deepseek-v4/maya-ds4-sycl/#tensor-parallel-2-on-windows-2026-11-23-device-side-waits)).
