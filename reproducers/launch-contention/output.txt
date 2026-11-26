@@ -1,0 +1,33 @@
+4x Arc Pro B70, EPYC 7402P, Windows 11, driver 32.0.101.9175, oneAPI DPC++ 2026.0, Level Zero v2 adapter (default).
+One run per line, 2026-11-26.
+
+== threads in one process, one shared context (lballoc T 20000 0 0 0 0)
+threads 1 : 6.36 us/launch
+threads 2 : 8.70 us/launch
+threads 4 : 12.96 us/launch      (14.35 in a second session)
+
+== threads in one process, a context each (lballoc T 20000 0 0 0 1)
+threads 1 : 6.32 us/launch
+threads 2 : 6.33 us/launch
+threads 4 : 7.81 us/launch
+4 threads all on GPU 0, a context each : 7.09 us/launch
+
+== 4 processes at once, 1 thread each
+own GPU each : 6.38 / 6.31 / 6.25 / 6.34 us/launch
+all on GPU 0 : 6.24 / 6.31 / 6.30 / 6.21 us/launch
+
+== live device allocations (64 KiB each), 1 thread, shared context
+0     : 6.64 us/launch
+100   : 6.52
+1000  : 6.60
+4000  : 6.52
+4 threads, 0 / 4000 allocations each : 12.38 / 13.89
+1 thread, 1000 host allocations : 6.81 ; 4 threads : 13.04
+
+== ctxx: a kernel on card 1 in a context of its own, using memory from the default (all-card) context
+default-ctx device mem, same card    : ok (0 bad)
+default-ctx host mem                 : ok (0 bad)
+default-ctx device mem, peer card    : EXCEPTION level_zero backend failed with error: 20 (UR_RESULT_ERROR_DEVICE_LOST)
+
+Note: one run of "lballoc 4 3000 1000 0" (4 threads each making 1000 allocations, shared context) hung with no CPU use
+for 10 minutes and was killed. Not looked into.

@@ -162,3 +162,52 @@ Without a fence a spinning kernel keeps reading its cached copy. With a system-s
 flag and the data written before it. LSC uncached-hint loads and LSC atomic loads without a fence did not see a host
 write in an earlier variant of the test. This is what let the DeepSeek `ds4` port wait for the other card on the
 device instead of the host ([tensor parallel 2 on Windows](../deepseek-v4/maya-ds4-sycl/#tensor-parallel-2-on-windows-2026-11-23-device-side-waits)).
+
+## launch-contention: threads launching into one SYCL context slow each other down
+
+`launch-contention/lballoc.cpp` times the host side of a small kernel launch (32 B of arguments, `parallel_for` with an
+event) from several threads, each thread on its own card and its own in-order queue. The last argument puts each
+thread's queue in a `sycl::context` of its own instead of the platform's default context, which all cards share.
+`run.cmd` runs every case below; `output.txt` has the numbers.
+
+| Case | us a launch |
+|---|---:|
+| 1 thread | 6.3 |
+| 2 threads, one process, shared context | 8.7 |
+| 4 threads, one process, shared context | 13.0-14.4 |
+| 4 processes at once, 1 thread each (own card, or all on card 0) | 6.2-6.4 each |
+| 2 threads, a context each | 6.3 |
+| 4 threads, a context each | 7.8 (7.1 all on card 0) |
+| 1 thread, 0 / 100 / 1,000 / 4,000 live device allocations | 6.5-6.6 |
+
+Four separate processes don't slow each other at all, so the cost is a lock inside one process, not the driver's kernel
+side or the GPU. Most of it goes away when each thread's queue has its own context. The number of live allocations
+does nothing.
+
+`launch-contention/ctxx.cpp` checks what a kernel in a per-card context may still use when the memory was allocated in
+the default context: that card's device memory works, host USM works, **another card's device memory gives
+`UR_RESULT_ERROR_DEVICE_LOST`**. So a multi-card engine can move its launch queues into per-card contexts as long as no
+kernel reads a peer card's device memory directly.
+
+System: 4x Arc Pro B70, EPYC 7402P, Windows 11, driver 32.0.101.9175, oneAPI DPC++ 2026.0, Level Zero v2 adapter.
+This is what took the DeepSeek `ds4` port's mean launch from 18.8 to 11.3 us
+([per-card contexts](../deepseek-v4/maya-ds4-sycl/#decode-launch-cost-part-2-2026-11-25--26-a-context-per-card)).
+
+## spin-blocks-queue: a spinning kernel blocks every other queue on the card
+
+`spin-blocks-queue/q2spin.cpp` starts a one-work-item ESIMD kernel on one in-order queue that spins on a host-USM
+flag (with the invalidate fence from flag-visibility), then launches an ordinary `parallel_for` on a second in-order
+queue on the same card, and checks whether it finishes while the first kernel still spins.
+
+```
+icpx -fsycl -O2 -std=c++20 q2spin.cpp -o q2spin.exe
+q2spin.exe 0 0
+```
+
+Modes: 0 plain second queue, 1 the spinning queue at low priority, 2 the work queue at high priority.
+
+Result on a B70 (driver 32.0.101.9175): in all three modes the second queue's kernel is **still blocked after 5 s**,
+and both finish as soon as the flag is set. A spinning kernel holds the card, whatever the queue priorities. So a gate
+kernel that waits on the host can't share a card with work that has to keep running; a SYCL `host_task` as the gate
+leaves the other queue free, but the kernels queued behind it ran slower after it opened (800 small kernels: 8.6-9.0 ms
+to finish, against 5.3 ms launched fresh).
