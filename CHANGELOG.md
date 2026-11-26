@@ -3,6 +3,9 @@
 Dated entries, newest first. Results go into [STATUS.md](STATUS.md) and the topic folder; this file records what
 changed and when.
 
+## 2026-11-26
+- **New model folder: [inkling-2-mini/](inkling-2-mini/).** Inkling 2 Mini on one B70 with steveseguin's `inkling2` engine (base `1d3a7d04`, updated to `e27bcf89`), ported to Windows and wrapped in a C API so a Python chat server runs on it. Served at 26-40k prompts: writing 63.3 -> ~74 tok/s and prompt read 816 -> ~1,189 tok/s against the plain port, 262k context on one card. Most of the read gain is XMX v3 expert kernels (gate_up 1.83x, down 1.49x in the kernel bench), which are not bit-exact; the engine's author has since shipped exact XMX experts (`f7cd9b47`), not in this port. Quality checks, context limits and known bugs are in the folder.
+
 ## 2026-11-24
 - **DeepSeek V4.1 Flash 1017 `ds4`: decode queues without profiling, live. CLI decode +4-10%, served about +6%.** `dpct` creates every queue with profiling on, and on the v2 adapter that costs ~1.3 us of GPU time per dependent kernel, ~1,440 of them a token. fx63 drops it on the two decode queues; `DS4_QPROF=1` restores the old queues. Tokens identical on every CLI pair, prompt reads unchanged. Corrects the 2026-11-18 note that launch cost was not a decode lever. [Decode launch cost](deepseek-v4/maya-ds4-sycl/#decode-launch-cost-2026-11-24-queues-without-profiling).
 - **Also tried, not kept:** a fused decode sum (stale reads, then a hang), the MoE routing wait on the GPU (exact, no gain), re-recording and updating a graph every token (~7% at best), eventless launches (~3-4%, ~140 sites, not done).
