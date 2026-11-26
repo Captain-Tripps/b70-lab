@@ -1,4 +1,4 @@
-# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 24)
+# DeepSeek V4.1 Flash 1017 on Project Maya's `ds4` engine, ported to SYCL (2026-11-17 / 26)
 
 **Three days into the port: decode 43.7 tok/s with the drafter (36.2 plain) on the benchmark prompt, prompts read at
 812 tok/s at 8k and 867 at 120k.** Served decode depends on how well the drafter guesses the text: 47-50 tok/s on warm
@@ -17,6 +17,11 @@ host-USM write if it fences each turn of its loop, which corrects the M1 finding
 adapter that adds ~1.3 us of GPU time to each of a token's ~1,440 dependent kernels. Turning it off on the decode
 queues: CLI decode +4-10%, served about +6%, prompts unchanged. The next move is replaying the decode as fixed graphs
 (0.55 us a kernel in the micro-benchmark). [Decode launch cost](#decode-launch-cost-2026-11-24-queues-without-profiling).
+
+**2026-11-26: a SYCL context per card for the decode queues, live.** The four card threads were launching into one
+shared context and waiting on a lock inside it (18.8 us a launch against ~6 us bare). Per-card contexts: 11.3 us a
+launch, CLI plain -14% a round, drafted -6.5%, served +5-12%, tokens identical, prompts unchanged.
+[Decode launch cost, part 2](#decode-launch-cost-part-2-2026-11-25--26-a-context-per-card).
 
 Setup: Windows 11, four Arc Pro B70s (32 GB each), EPYC 7402P (Zen 2, AVX2 only), driver 32.0.101.9175, oneAPI DPC++
 2026.0, JIT build, persistent kernel cache (`SYCL_CACHE_PERSISTENT=1`). Model: the Maya-XS IQ1_S pack of
@@ -809,6 +814,85 @@ so the port is:
 This is a multi-day port. How much of the ~5.5 us a kernel a real token gets back is not measured yet; the first step
 is a launch timeline of one token to bound it.
 
+## Decode launch cost, part 2 (2026-11-25 / 26): a context per card
+
+**Live since 2026-11-26: CLI decode -14% a round plain and -6.5% drafted, served +5-12% on the prompts that repeat,
+prompt reads unchanged, tokens identical.** Each of the four card threads spent 14-16 ms of a token queueing about 800
+kernels, ~17-19 us a launch, while a bare launch on this machine costs ~6 us. The cause is that all four threads
+launch into one SYCL context: `dpct` builds every queue in the platform's default context, which spans all four cards,
+and a lock inside it makes the threads wait for each other. fx78a creates the decode queues in a context of their own
+card instead (`DS4_QCTX=1`; unset, the queues are the old ones). Mean host time a launch: 18.8 -> 11.3 us.
+
+### Finding it
+
+- **The launch path, not the engine (VTune, 11-25).** Every launch is `submit_kernel_direct_with_event_impl` ->
+  `urEnqueueKernelLaunchWithArgsExp` -> the v2 adapter -> `zeCommandListAppendLaunchKernel`. About half of it is the
+  driver's append and most of the rest is SYCL's per-launch event. The engine's own host functions barely register.
+- **Not the argument size (fx77a / fx77c, host time around each launch, `DS4_ARGSTAT=2`).** A plain 2k-prompt run makes
+  595,857 launches with 148 B of arguments on average. Mean 18.8 us a launch: 18.2 us at up to 64 B, 19.0 at up to
+  256 B and 512 B, 29.6 at up to 1 KB (4,458 launches). A 32 B kernel costs 17.7 us.
+- **Not the number of live allocations,** and not the driver: [launch-contention](../../reproducers/#launch-contention-threads-launching-into-one-sycl-context-slow-each-other-down)
+  shows 6.3 us with one thread, 13-14 us with four threads in one process, 6.2-6.4 us each with four processes at once,
+  and 7.8 us with four threads that each have their own context.
+
+### Results
+
+CLI bench, 2k-document prompt, the same build with the switch off and on, interleaved, 2 runs each. Tokens identical in
+every run (the switched-off build also matches the previous live build: 24.36 / 24.27 plain, 36.30 drafted):
+
+| Mode | Off, ms a round | `DS4_QCTX=1`, ms a round | Change | tok/s off -> on |
+|---|---:|---:|---:|---:|
+| plain | 24.25 / 24.68 | 20.89 / 20.85 | -14% | 40.9 -> 47.9 |
+| drafted | 36.26 / 36.47 | 33.89 / 34.32 | -6.5% | 57.6 -> 61.4 |
+
+Mean host time a launch with the switch on: 11.3 us plain, 12.5 drafted (was 18.8).
+
+Served through Maya's OpenAI server, temperature 0, a fresh server per arm, order old / new / old / new. Tokens were
+identical in all four loads on the first five prompts:
+
+| Prompt | Old, tok/s | New, tok/s | Change |
+|---|---:|---:|---:|
+| short warm-up prompt | 52.8 / 54.4 | 58.3 / 59.6 | +10% |
+| second warm-up (prose, 128 tokens) | 58.3 / 59.7 | 66.3 / 65.9 | +12% |
+| prose | 57.9 / 59.7 | 65.5 / 65.4 | +11% |
+| math | 88.0 / 89.3 | 93.6 / 93.7 | +6% |
+| code (LRU cache class) | 83.8 / 87.1 | 89.6 / 89.5 | +5% |
+| thinking (tokens differ between loads) | 86.0 / 83.4 | 90.0 / 90.3 | +6% |
+
+The code edit, 31k and 68k-new-token prompts gave different tokens between two loads of the *same* build (the known
+served-greedy repeat issue), and their speeds moved by about as much as the noise, so they are not counted. Prompt reads
+didn't move: 31k at 827 / 828 tok/s, 68k at 757 / 758. No errors in the engine logs, the long reads included. The live
+entry was checked through llama-swap after the switch: running the new build, code-word recall across a conversation
+switch correct.
+
+### Why a context per card is safe here
+
+A kernel in a card's own context can use that card's device memory and host USM allocated in the default context, but
+**reading another card's device memory from it is a `DEVICE_LOST`** ([ctxx](../../reproducers/#launch-contention-threads-launching-into-one-sycl-context-slow-each-other-down)).
+This engine never does that on the decode path: card-to-card hand-offs go through pinned host memory and the
+cross-card waits are flags in host USM. Only the decode queues move. Weights, loads and the prompt-path queues stay in
+the default context, and the peer all-reduce that does read a partner's memory is HIP-only and not in the SYCL build.
+
+### Tried on the way, not live
+
+- **Eventless launches through the `dpct` wrappers (fx73, 82 sites):** exact, no gain (plain 25.74 / 26.50 -> 25.74 /
+  25.62 ms a round). The 11-24 micro-benchmark's ~3-4% didn't show up in the engine.
+- **Pre-queueing plain decode (fx74, `DS4_PREQ=2`):** the first two cards queue token n+1's layers behind a GPU wait on
+  a host-USM gate while token n finishes, and the host opens the gate once the token and its Engram rows are known.
+  Plain +16% (37.4-40.0 -> 44.3-46.2 tok/s), tokens identical in 10 of 10 runs, measured before fx78a. Staged, not live:
+  the served mode is drafted, and a pending window needs a watchdog first.
+- **A verify window's size and position on the device (fx75):** the routers, KV ring writes, compressor groups, RoPE
+  finishes and decode attention windows read T and p0 from a small device struct, so a window can be queued before
+  they're known. Exact, including a test that feeds the host path wrong values. A window launched wider than it is costs
+  ~0.7 ms a padded row up to 7 rows, then a step of ~8 ms at 8.
+- **Pre-queueing a drafted verify window (fx76a):** exact, but +1.3% over padding alone and -6% against no padding.
+  The gate opens 2.4 ms after the window is prepared, while its 13.3 ms of launches are still being queued.
+- **Queueing it earlier on a second queue (fx76c):** hangs. A kernel spinning on a host flag blocks every other queue on
+  the card, whatever the priorities ([spin-blocks-queue](../../reproducers/#spin-blocks-queue-a-spinning-kernel-blocks-every-other-queue-on-the-card)).
+
+Launches still cost ~11 us against ~6-8 us bare, and the drafted round is still mostly launch-bound. The graph replay
+[plan](#next-move-replay-the-decode-as-fixed-graphs) still stands; fx75's device-side window values are its first step.
+
 ## What made the difference
 
 1. **Cross-card flags: wait on the host, then launch (M1, decode 0.03 -> 19.9 tok/s).** Maya hands data between cards
@@ -853,6 +937,8 @@ is a launch timeline of one token to bound it.
 13. **The v2 adapter's deadlock has an off switch** (`UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1`).
 14. **Tensor parallel 2 with device-side waits (2026-11-23, served decode +30-48%).** A wait kernel that fences each
     turn replaces ~80 host waits a token (2.3 ms each, mostly Windows sleeps), plus three hang fixes.
+15. **Decode queues without profiling (2026-11-24, +4-10%) and in a context of their own card (2026-11-26, plain -14% a
+    round, drafted -6.5%).** Four threads launching into one shared SYCL context wait on each other inside it.
 
 ## Bugs found on the way
 
