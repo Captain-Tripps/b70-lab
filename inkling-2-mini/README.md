@@ -51,6 +51,8 @@ D read all six prompts faster, wrote five replies faster and one slower (72.6 vs
 
 **Decision:** our rule going in was to keep v3 if D wrote slower than it, beyond the spread, with the drafter on. The 3K case missed that by about 1%. We switched anyway on the served results.
 
+**localmaxxing, verified** (`reasoning-v1` prompt, 512 output tokens, 3 timed runs, 2026-11-26): **79.4 tok/s writing** (79.3-79.5), time to first token 356 ms, prompt reading 820 tok/s, estimated from TTFT. This run had the **drafter off**, on a temporary server with the live DLL and settings, so it isn't the live writing speed. With the drafter on, against the live endpoint, the same benchmark measured 103.2 tok/s (99.7-120.8, dry run only, not submitted): the site's drafter check assumes a fixed number of guesses per round and ours varies up to 3, so that run doesn't verify. [Run page](https://www.localmaxxing.com/en/runs/cmwybkdd2000dp601258a50uv).
+
 **Port changes for `f7cd9b47`:** `cache_file.hpp` and the serve-mode stdin loop in `ink_run.cpp` use new `wincompat.hpp` wrappers, and `wincompat.hpp` has to `#undef OUT` after `windows.h` (it collides with `Vision::OUT`). `device.hpp` and `gguf.hpp` merged cleanly. Our `engine.hpp` hook and `moe_xmx*.hpp` are gone. Upstream has moved on past `f7cd9b47` since (including matrix-engine attention); none of that is tested here.
 
 ## Run conditions
