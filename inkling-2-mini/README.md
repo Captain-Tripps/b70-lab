@@ -1,8 +1,57 @@
 # Inkling 2 Mini on one Arc Pro B70: a Windows port of steveseguin's inkling2 engine, plus matrix-engine expert kernels
 
-**Short version:** Steve's `inkling2` engine (from `steveseguin/b70-optimization-lab`, `experiments/own-xpu-runtime/inkling2`) ported to Windows on one Arc Pro B70, then given a C API so an existing Python chat server could run on it. The server got speculative sampling with the drafter, and the MoE experts got matrix-engine (XMX) kernels. Served on 26-40k-token prompts, writing went from 63.3 to ~74 tok/s and prompt reading from 816 to ~1,189 tok/s compared with the plain port. The XMX kernels are not bit-exact. Steve has since shipped his own exact XMX experts, which this port does not include.
+**Short version:** Steve's `inkling2` engine (from `steveseguin/b70-optimization-lab`, `experiments/own-xpu-runtime/inkling2`) ported to Windows on one Arc Pro B70, given a C API so an existing Python chat server could run on it, plus speculative sampling with the drafter in that server. **Since 2026-11-26 the live build is upstream `f7cd9b47` with Steve's exact matrix-engine (XMX) experts,** which replaced our own XMX v3 kernels after an [A/B](#steves-exact-experts-vs-xmx-v3-2026-11-26-now-live). Served on 26-40k-token requests, the new build read prompts 2.7% faster and wrote 1.6% faster than v3 and used 0.7 GiB less card memory.
 
-All the engine work is Steve's. Our part is the Windows port, the C API, the server-side speculative sampling and the XMX kernels described below.
+All the engine work is Steve's. Our part is the Windows port, the C API, the server-side speculative sampling and the earlier XMX v3 kernels. The sections from [Upstream commits](#upstream-commits) to [Quality checks](#quality-checks) describe the 2026-11-25 build.
+
+## Steve's exact experts vs XMX v3 (2026-11-26, now live)
+
+One B70, same card for every run, same model and drafter files.
+
+| Arm | Engine | `INK_XMX` |
+|---|---|---|
+| A | 2026-11-25 tree (`e27bcf89` base) | 0 |
+| B | 2026-11-25 tree, our XMX v3 (live until this test) | 1 |
+| C | `f7cd9b47`, Windows port | 0 |
+| D | `f7cd9b47`, Windows port, Steve's exact experts | 1 |
+
+**Correctness** (3,033 and 29,034-token prompts, 200 greedy tokens, `ink_run`):
+
+- A and C: identical token ids, last-prompt-token logits and generated logits. The port and the upstream changes between the two trees kept the values with XMX off.
+- C and D, each against itself: identical on a repeat run, at prompt step sizes 512 and 4096, and with the drafter.
+- D against C: KL 3.1e-3 and 5.9e-3 on the last prompt token; first different token at 170 and 9. "Exact" means the same output at every step size, not the same bits as `INK_XMX=0`.
+- B against A: KL 2.3e-2 and 1.5e-3. Two prompts don't show which XMX version is closer to XMX off.
+
+**CLI speed** (`ink_run`, greedy, 200 tokens, median of 3 rounds, tok/s; the prompts are public engine notes and source):
+
+| Prompt | Drafter | A read | B read | C read | D read | A write | B write | C write | D write |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 3,033 | off | 1092.9 | 1400.1 | 1091.6 | 1455.8 | 81.0 | 81.0 | 80.6 | 79.1 |
+| 3,033 | on | 1091.6 | 1394.1 | 1091.0 | 1454.4 | 111.8 | 113.5 | 116.9 | 112.3 |
+| 29,034 | off | 969.3 | 1206.1 | 967.4 | 1248.6 | 71.5 | 71.7 | 71.2 | 69.8 |
+| 29,034 | on | 965.6 | 1200.8 | 964.7 | 1243.7 | 76.9 | 87.5 | 79.7 | 88.0 |
+| 100,034 | off | 742.1 | 871.2 | 740.8 | 888.1 | 51.7 | 51.8 | 51.4 | 50.8 |
+| 100,034 | on | 740.0 | 869.0 | 740.0 | 886.8 | 61.1 | 59.1 | 63.0 | 61.1 |
+
+Spread across rounds was at most 3.3 tok/s on reading and 0.37 on writing. D reads 1.9-4.0% faster than B. D writes 1.8-2.6% slower without the drafter; with it, 1.1% slower at 3K, 0.6% faster at 29K, 3.3% faster at 100K (drafted speed depends on the text each arm writes). The 100K prompt was timed but not part of the correctness check.
+
+**Served** (Python server + DLL, 262k, `--chunk 2048`, drafter, six long requests, same seed, 3 rounds):
+
+| | B (v3) | D (exact) |
+|---|---:|---:|
+| Prompt read | 1,115.6 tok/s | 1,145.8 tok/s |
+| Writing | 71.25 tok/s | 72.42 tok/s |
+| Six requests, wall time | 225.6 s | 222.8 s |
+| Tokens generated (different text) | 6,742 | 6,895 |
+| Card memory with drafter | 28.11 GiB | 27.42 GiB |
+
+D read all six prompts faster, wrote five replies faster and one slower (72.6 vs 83.9 tok/s). Output quality wasn't scored.
+
+**262k at `--chunk 4096`:** B doesn't load (short 288 MiB). D loads at 30.10 GiB and answered one request.
+
+**Decision:** our rule going in was to keep v3 if D wrote slower than it, beyond the spread, with the drafter on. The 3K case missed that by about 1%. We switched anyway on the served results.
+
+**Port changes for `f7cd9b47`:** `cache_file.hpp` and the serve-mode stdin loop in `ink_run.cpp` use new `wincompat.hpp` wrappers, and `wincompat.hpp` has to `#undef OUT` after `windows.h` (it collides with `Vision::OUT`). `device.hpp` and `gguf.hpp` merged cleanly. Our `engine.hpp` hook and `moe_xmx*.hpp` are gone. Upstream has moved on past `f7cd9b47` since (including matrix-engine attention); none of that is tested here.
 
 ## Run conditions
 
@@ -12,7 +61,7 @@ All the engine work is Steve's. Our part is the Windows port, the C API, the ser
 - **Builds referred to below:**
   - `bench_xmx`: a standalone kernel benchmark (our `tools/bench_xmx.cpp`) that times only the expert kernels on real layer weights.
   - `ink_run` CLI: Steve's command-line runner, greedy, built from our tree.
-  - served `steve6`: our C API DLL with XMX v3, behind the Python server. This is what's live.
+  - served `steve6`: our C API DLL with XMX v3, behind the Python server. Live until 2026-11-26.
   - Earlier served DLLs: `steve4` (first DLL with ring snapshots) and `steve5` (pulled the newer upstream commits).
 - **Run counts:** every number is tagged with how many runs it comes from. Most are single runs. Where I don't have a run count on record, I say so rather than guess.
 
@@ -33,7 +82,7 @@ All the engine work is Steve's. Our part is the Windows port, the C API, the ser
 
 **Not pulled** (`4ac839fe` onward): the drafter head over a built-in list, 530K context, his serving/LAN server, sampling, 480K recall, pictures, several conversations, and the thinking budget.
 
-The most important ones we don't have are Steve's own matrix-engine experts: `3fceff9b` (NVFP4 experts on the matrix engines with exact products), `3cfebbc2` (small steps) and `f7cd9b47` (2026-11-26 00:36 UTC, exact matrix-engine experts on by default, +15-34% prompts by his numbers). His version is exact and ours isn't. Anyone starting fresh should take his.
+The most important ones that build didn't have were Steve's own matrix-engine experts: `3fceff9b` (NVFP4 experts on the matrix engines with exact products), `3cfebbc2` (small steps) and `f7cd9b47` (2026-11-26 00:36 UTC, exact matrix-engine experts on by default, +15-34% prompts by Steve's numbers). Steve's version is exact and ours isn't. Anyone starting fresh should take it. It's [live here since 2026-11-26](#steves-exact-experts-vs-xmx-v3-2026-11-26-now-live).
 
 ## What we changed, and why
 
@@ -63,7 +112,7 @@ The diff against `e27bcf89`: `attn_flash`, `fused`, `ops` and `ink_run` are unch
 | v2 (TB4 NSG8) | 33.8 ms (0.83x) | 11.4 ms (1.27x) | gate_up error 1.91 max, 1.15e-2 RMS |
 | v2, TB8 variants | 32.3-32.5 ms | 13.5-14.6 ms | |
 | v3, first version | 16.8 ms (1.66x) | 9.4 ms (1.54x) | |
-| v3, final (gate_up KC32 TB4 NSG16, down KC64) | 15.3 ms (1.83x) | 9.7 ms (1.49x) | This is what's in `steve6` |
+| v3, final (gate_up KC32 TB4 NSG16, down KC64) | 15.3 ms (1.83x) | 9.7 ms (1.49x) | This is what was in `steve6` |
 
 **What changed in each version:**
 - **v1:** one work group looped over several experts, decoded weights byte by byte, and staged inputs in shared memory.
@@ -96,7 +145,7 @@ The one B70, the served Python server, sampled output, 26-40k-token prompts. Eac
 | Steve's engine, plain (DLL) | 63.3 | 816 |
 | + speculative sampling and server fixes | 71.3 | 863 |
 | + newer upstream (`steve5`) | ~71 | ~957 |
-| + XMX v3 (`steve6`, live) | ~74 | ~1,189 |
+| + XMX v3 (`steve6`) | ~74 | ~1,189 |
 
 **CLI, greedy** (`ink_run`, 29k-token prompt, 1 run each): 71.7 tok/s plain, 77.5 tok/s with the drafter (+8%), prompt 922 tok/s. The drafter gains less on prose than on code: Steve reports about +38% on code.
 
@@ -151,7 +200,7 @@ The one B70, `steve6` served, with the drafter loaded, 1 load each:
 
 ## Known bugs and limits
 
-- **XMX experts aren't bit-exact** against Steve's kernels (above).
+- **XMX v3 (retired) wasn't bit-exact** against Steve's kernels (above).
 - **Checkpoints silently turn off** when the checkpoint interval isn't a multiple of the prompt step. No error is shown.
 - **An exact repeat of a prompt after a conversation switch re-reads it cold.** Snapshots don't store logits. The previous engine does the same.
 - **Pinned host memory (`malloc_host`) fails** on this setup, so snapshots go through a device buffer.
@@ -161,13 +210,13 @@ The one B70, `steve6` served, with the drafter loaded, 1 load each:
 
 ## What's live now
 
-- One B70, behind a model-swap proxy that unloads it when the larger multi-card models load. Cold load is ~14 s.
-- A frozen runtime: the Python server with speculative sampling, plus the `steve6` DLL (XMX v3).
-- Settings: `n_ctx` 262144, `--chunk 2048`, `INK_XMX=1`, checkpoint interval 4096, `spec-k 3` with the Old_Support drafter.
+- One B70, behind a model-swap proxy that unloads it when the larger multi-card models load.
+- A frozen runtime: the Python server with speculative sampling, plus a DLL built from `f7cd9b47` with the Windows port.
+- Settings: `n_ctx` 262144, `--chunk 2048`, `INK_XMX=1` (Steve's exact experts), checkpoint interval 4096, `spec-k 3` with the Old_Support drafter. Card memory 27.42 GiB.
 - Used as a one-card backup and a fast long-context model. Not the main prose writer.
 
 ## Next steps
 
-- Move to Steve's exact XMX experts (`3fceff9b` .. `f7cd9b47`) and rerun the KL and speed checks against v3.
+- Test upstream's newer commits, starting with matrix-engine attention.
 - Report draft-token counts from the server.
-- Repeat the single-run numbers above (CLI engine A/B, served 39-prompt pass, recall, context fits) before quoting them as more than one run.
+- The recall, audit and replay checks above ran on the 2026-11-25 build; they haven't been repeated on the new one.
