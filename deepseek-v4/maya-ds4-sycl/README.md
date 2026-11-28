@@ -814,6 +814,9 @@ so the port is:
 This is a multi-day port. How much of the ~5.5 us a kernel a real token gets back is not measured yet; the first step
 is a launch timeline of one token to bound it.
 
+**Update 2026-11-27:** measured, and much smaller than this: replay only helps kernels shorter than a launch. See
+[part 3](#graph-replay-works-but-not-for-kernels-this-size).
+
 ## Decode launch cost, part 2 (2026-11-25 / 26): a context per card
 
 **Live since 2026-11-26: CLI decode -14% a round plain and -6.5% drafted, served +5-12% on the prompts that repeat,
@@ -891,7 +894,113 @@ the default context, and the peer all-reduce that does read a partner's memory i
   the card, whatever the priorities ([spin-blocks-queue](../../reproducers/#spin-blocks-queue-a-spinning-kernel-blocks-every-other-queue-on-the-card)).
 
 Launches still cost ~11 us against ~6-8 us bare, and the drafted round is still mostly launch-bound. The graph replay
-[plan](#next-move-replay-the-decode-as-fixed-graphs) still stands; fx75's device-side window values are its first step.
+[plan](#next-move-replay-the-decode-as-fixed-graphs) still stood then; [part 3](#graph-replay-works-but-not-for-kernels-this-size) measured it smaller.
+
+## Decode, part 3 (2026-11-27): a small live bundle, then a plateau
+
+**Live since 2026-11-27: CLI drafted about -3% a round over 11-26 (33.89 / 34.32 -> 33.09 / 33.21 ms) in two steps, served +0-1.5%, tokens identical.**
+After that, every remaining lever inside the engine measured small or negative. Below: where the round's time goes and
+why the kernel work stopped paying.
+
+### What went live
+
+All on a 2k-document prompt, drafted unless marked, tokens identical in every run:
+
+| Change | Switch | CLI, ms a round | Served |
+|---|---|---|---|
+| Drafter block hand-offs through each card's host-mapped rows and a flag, no runtime copy or host wait (an existing switch, untested on SYCL until now) | `DS4_DECODE_TRIM=8` | 34.13-34.23 -> 33.66-33.74 (-1.2%) | +0.0-0.6% |
+| Rollback restores launch with a pointer to a per-card device copy of the batch, uploaded only when it changes (fx82) | `DS4_RB_TAB=1` | within noise | - |
+| The dense Q6_K GEMV path reuses the int8 rows its producer already wrote instead of rounding x again (fx88); also turns on the two producer sites that write them | `DS4_PREQ_GG=1`, `DS4_DECODE_TRIM=11` | 33.41 -> 33.16 (-0.75%), plain 21.61 -> 21.31 (-1.4%) | bundled below |
+| Each card's submit thread pinned to its own core (fx87) | `DS4_WORKER_CPUS=4:6:8:10` | 33.50 -> 33.23 (-0.8%) | bundled below |
+
+The last two went live together: CLI 33.43 / 33.34 -> 33.09 / 33.21 ms a round. Served on six fresh loads, on the
+prompts whose tokens repeat in every load: warm-up 67.5 -> 68.5 tok/s, second warm-up 66.5 -> 66.5, code 90.7 -> 90.6,
+prose 65.7 -> 66.2, math 94.3 -> 94.4.
+
+fx88's cause is worth knowing. The GEMV for the quantized-GGUF format always rounded x to int8 itself and ignored the
+rounded rows a fused producer had already written. That is why the earlier "round in the producer" switches were exact
+but slower: extra rounding work and no launch cut. Each launch cut saved ~3 us of round time, not the ~11 us a launch
+costs on the host, because stage A (the first two cards, launched by the host) is only partly launch-bound.
+
+### Graph replay: works, but not for kernels this size
+
+A stand-alone model of the decode (4 threads, a context per card, stage A on cards 0 and 1, stage B on cards 2 and 3
+behind an ESIMD spin on stage A's host-USM flags, a per-card round counter so the graph stays static) shows:
+
+- A recorded graph that holds the spin hand-offs replays correctly in per-card contexts, and resubmitting a graph that
+  is still running is allowed (the submit waits for the previous replay). Recording takes 7 ms and finalizing 63 ms for
+  4 x 803 kernels, once.
+- Tiny kernels (~1.9 us): eager 7.21 ms a round, graph **3.05**. Host submit drops to 0.08-0.24 us a kernel.
+- Engine-sized kernels (~10.8 us): eager 17.29 ms, graph 17.30, either one pre-queued 17.06. Larger ones: all equal.
+  **Once kernels outlast a launch, replay saves nothing.** The gap between queued kernels is the same either way.
+
+In the engine, since fx78a, a card thread's enqueue time is about equal to its stage's GPU time (plain 8.8-10.6 vs
+~9.4-10.2 ms a token, drafted 13.2-14.6 vs ~13.5). So replay can only take the stalls where runs of tiny kernels get
+ahead of the host: about 5% plain and 3-5% drafted. A drafted window also changes shape every round, so it needs one
+graph per window width on the device-side window path. This corrects the 11-24 estimate above (0.55 vs ~6 us a
+kernel), which came from tiny kernels.
+
+### Gates and wake-ups: closed
+
+- **Stage A queued early behind a Level Zero event (not a spinning kernel):** the other queue on the card still can't
+  finish until the gate opens, with one context or two. The B70 has a single compute engine, and any device-side wait
+  holds it ([details](../../reproducers/#follow-up-2026-11-27-a-level-zero-event-gate-blocks-the-other-queue-too-and-the-b70-has-one-compute-engine)).
+- **Rollback launches cost 150-370 us each** (against ~11 us normally), ~2.1 ms in a rejected window. A launch onto an
+  idle card is slow ([idle-wakeup](../../reproducers/#idle-wakeup-the-first-launch-onto-a-card-that-has-been-idle-is-slow)),
+  but a keep-alive thread that puts a no-op on every card every 0.5-1 ms made decode slower (drafted 34.45-34.92 vs
+  34.02-34.21 ms a round; it competes with the submit threads) and left rollback launches slow. So the wake-up is not
+  the cause. A rarely used kernel is not it either (6.1-6.4 us after 800 other launches). The cause is still open;
+  fx82 above halves the cost.
+
+### The dense GEMVs: memory-bound in decode, so faster kernel math does nothing
+
+A device trace (PTI) of drafted rounds, per card: GPU compute is ~13.8 ms of a ~33 ms round. The dense Q6_K GEMV is
+the largest kernel family (29% of GPU time) and reads ~5.9 GB a round. In decode, at the live verify width of 3
+columns, a layer's six dense launches run at ~400-430 GB/s (the small last one ~310), against a single-launch read
+ceiling of ~578 GB/s at 17 MiB ([read-ceiling](../../reproducers/#read-ceiling-how-fast-can-one-kernel-read-a-buffer)).
+
+| Launch (one card's share) | MB | us in decode | GB/s |
+|---|---:|---:|---:|
+| wq_a + wkv (one launch) | 7.5 | 18 | 418 |
+| wq_b | 17.2 | 41 | 420 |
+| wo_a (all groups) | 13.8 | 32 | 430 |
+| wo_b | 17.2 | 40 | 430 |
+| shared w1 + w3 | 8.6-10.8 | 21-28 | ~400 |
+| shared w2 | 4.3-5.4 | 14-17 | ~310 |
+
+Two exact kernel changes, both rejected:
+
+- **Next-chunk prefetch (fx89, `DS4_Q6K_PF=1`):** each sub-group loads chunk n+1's weights before chunk n's math.
+  Drafted 33.13-33.51 -> 33.42-33.53 ms a round, plain 21.09 / 21.75 -> 21.99 / 21.85. The extra registers cost more
+  than the overlap gains.
+- **Two rows per 16-lane sub-group sharing the x loads (fx91, `DS4_Q6K_R2`):** an in-engine bench of the real tensors
+  showed big wins at 4 columns with the weights hot in cache (wq_b 33.7 -> 24.9 us, wo_a 24.0 -> 15.9, w1 + w3
+  23.3 -> 14.3, outputs bit-identical). The engine didn't move: drafted 33.32 / 33.13 -> 33.45 / 33.19 / 33.11 ms a
+  round, plain 21.30 / 21.31 -> 21.41 / 21.43. The decode trace explains it: with fx91 on, the same launches are
+  **~2% slower** (31.3 -> 32.1 us on a stage B card). In decode each weight is read once a round from DRAM, and the
+  hot-cache bench measured an instruction cost that decode never sees.
+
+Lesson: **bench decode GEMVs cold, or check them in a device trace of the real run.** Timing the same weights back to
+back reads them from L2: bench figures came out at 1,050-1,160 GB/s, double the DRAM peak.
+
+### The drafter is GPU-bound too
+
+The drafting step (~5.0 ms of the round) is ~134 kernels with ~4.65 ms of GPU work:
+
+- the DSpark blocks in sequence on cards 0 and 1: ~3 ms, of which the int8 GEMVs are 1.6;
+- the head, split over two cards: 0.5 ms;
+- the Markov bias steps on one card: 5 x 120 us (splitting them over two cards needs a cross-card spin that drafted
+  mode can't use);
+- sampling: 0.18 ms.
+
+A drafter-only graph could save ~0.4-1 ms at most.
+
+### Where that leaves decode
+
+A drafted round is ~33.1 ms: drafting ~5.0, verify ~26.5 (stage A host-paced at about its GPU time; stage B queued
+ahead and GPU-paced), rollback and seed ~1.5. What's left inside this engine is stage A graph replay (multi-day,
+~3-5% CLI; served gains have come in at about half the CLI gain) and ~0.5-1% of fusions. A bigger step needs a
+submission layer below SYCL or a persistent kernel. Parked here.
 
 ## What made the difference
 
@@ -1063,9 +1172,8 @@ After round 4 (2026-11-19): the prompt target is met; decode needs ~15% more on 
 - ~~Prompt chunk 1024~~: live since 2026-11-20 ([serving 11-20](#serving-changes-2026-11-20-sampling-drafts-chunk-1024-conversation-slots)).
 - **Routed experts in the verify window** are the part of a drafted token that grows with width. The exact 16-lane form
   did nothing for the down kernel, so the next try is a different load pattern, not a narrower sub-group.
-- **SYCL graph replay of the whole decode** is the next move (2026-11-24): 0.55 us a kernel against ~6 us eager, and
-  the cost it removes sits on the GPU between dependent kernels, so it applies at batch 1 too. The earlier note that it
-  only helps where the host is on the critical path was wrong. [Plan](#next-move-replay-the-decode-as-fixed-graphs).
+- **SYCL graph replay of the whole decode:** measured 2026-11-27, ~3-5% CLI drafted at best (engine-sized kernels
+  gain nothing from replay), multi-day. Parked with the other in-engine levers: [part 3](#where-that-leaves-decode).
 - ~~**Tensor parallel** stays parked~~: live since 2026-11-23 with device-side waits ([details](#tensor-parallel-2-on-windows-2026-11-23-device-side-waits)).
 
 The older list, ranked by expected gain toward 600 tok/s prompt and ~50 decode (items 1, 2 and 7 since partly done):

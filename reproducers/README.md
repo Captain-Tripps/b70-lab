@@ -211,3 +211,65 @@ and both finish as soon as the flag is set. A spinning kernel holds the card, wh
 kernel that waits on the host can't share a card with work that has to keep running; a SYCL `host_task` as the gate
 leaves the other queue free, but the kernels queued behind it ran slower after it opened (800 small kernels: 8.6-9.0 ms
 to finish, against 5.3 ms launched fresh).
+
+### Follow-up (2026-11-27): a Level Zero event gate blocks the other queue too, and the B70 has one compute engine
+
+`spin-blocks-queue/l0gate.cpp` replaces the spinning kernel with a Level Zero event: queue Q2's command list waits on a
+host-signalled `ze_event_t` with 800 kernels queued behind it, and queue Q1 then gets 200 ordinary kernels. Mode 0 puts
+both queues in one SYCL context, mode 1 gives each queue its own.
+
+```
+icpx -fsycl -O2 -std=c++20 -I <level-zero headers>/include l0gate.cpp -o l0gate.exe
+l0gate.exe 0
+l0gate.exe 1
+```
+
+Result: Q1's 200 kernels enqueue in ~1.2 ms, but `Q1.wait()` does not return until the gate opens, in both modes.
+
+`spin-blocks-queue/l0eng.cpp` lists each GPU's Level Zero command queue groups. A B70 reports **one** compute group
+(ordinal 0: one queue, compute + copy + cooperative) and one copy group. Every SYCL queue on the card lands on that one
+compute engine, so any device-side wait (a spinning kernel or an event wait) holds the whole card. A gate that leaves
+other work on the same card free is not possible on this hardware.
+
+## read-ceiling: how fast can one kernel read a buffer?
+
+`read-ceiling/bwbench.cpp` times single read kernels over buffer sizes from 512 KiB to 64 MiB, at several work-group
+counts and shapes (4- and 8-word vector reads, a copy, and sub-group block loads with `-DBW_SG`), device time from
+profiling events. It is the yardstick for "how far is my GEMV from the memory limit at this size".
+
+```
+icpx -fsycl -O3 -std=c++20 -DBW_SG bwbench.cpp -o bwbench.exe
+bwbench.exe <gpu index> 50 > out.csv
+```
+
+Fill the buffers with random data (the `FillRand` functor, the default for the timed buffers). With `p[i] = i` the reads
+come back at up to 791 GB/s, above the card's DRAM peak: Xe2's memory compression shrinks regular data. Best single
+launch on a B70 with random data:
+
+| Size | Best time | GB/s |
+|---|---|---|
+| 2 MiB | 4.7 us | 447 |
+| 8 MiB | 15.1 us | 555 |
+| 17 MiB | 30.8 us | 578 |
+| 64 MiB | 112 us | 597 |
+
+Small reads cannot reach peak in one launch: below a few MiB, launch ramp-up is a large share of the time.
+
+## idle-wakeup: the first launch onto a card that has been idle is slow
+
+`idle-wakeup/idle.cpp`: four cards, a SYCL context each. Per card, many repetitions of: wait for the queue, stay idle
+for N us (sleeping, or busy-spinning with the third argument 1), then time the first launch and the seven after it.
+
+```
+icpx -fsycl -O2 -std=c++20 idle.cpp -o idle.exe
+idle.exe 200 0
+idle.exe 200 3000
+idle.exe 200 10000 1
+```
+
+Result on B70s (Windows, v2 adapter): the first launch costs ~8 us after 0 ms idle, ~40 us after 3 ms and
+**~160-165 us after 10 ms**, even while the CPU busy-spins; the first kernel also runs ~23 us slower. The launches after
+it cost the usual ~6 us (~10 if the host thread slept). The driver keys `DirectSubmissionControllerTimeout` and
+`EnableDirectSubmissionController=0` changed nothing. Putting a no-op on the card every 0.5-1 ms removes the wake-up in
+this test (160 -> 8.4 us), but in a real engine a keep-alive thread slowed decode (it competes with the threads that
+submit work), so this is a measurement, not a fix.
